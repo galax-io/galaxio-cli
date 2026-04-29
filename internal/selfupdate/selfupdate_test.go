@@ -22,6 +22,9 @@ func TestRunDryRunFindsAvailableUpdate(t *testing.T) {
 		if r.URL.Path != "/repos/galax-io/galaxio-cli/releases/latest" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
+		if got := r.Header.Get("Accept"); got != "application/vnd.github+json" {
+			t.Fatalf("expected GitHub JSON accept header, got %q", got)
+		}
 		fmt.Fprintf(w, `{
 			"tag_name":"v1.2.3",
 			"assets":[
@@ -62,6 +65,29 @@ func TestRunSkipsCurrentVersion(t *testing.T) {
 	result, err := Updater{HTTPClient: server.Client()}.Run(context.Background(), Options{
 		APIBase:        server.URL,
 		CurrentVersion: "1.2.3",
+		DryRun:         true,
+	})
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Updated {
+		t.Fatal("expected no update")
+	}
+	if result.AssetName != "" {
+		t.Fatalf("expected no asset selection, got %q", result.AssetName)
+	}
+}
+
+func TestRunSkipsOlderRelease(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"tag_name":"v1.2.3","assets":[]}`))
+	}))
+	defer server.Close()
+
+	result, err := Updater{HTTPClient: server.Client()}.Run(context.Background(), Options{
+		APIBase:        server.URL,
+		CurrentVersion: "1.2.4-0.20260429122805-b25dd5b9f28b+dirty",
 		DryRun:         true,
 	})
 
@@ -196,6 +222,48 @@ func TestRunUsesRequestedVersionEndpoint(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestIsNewerVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		target  string
+		want    bool
+	}{
+		{name: "newer patch", current: "1.2.3", target: "1.2.4", want: true},
+		{name: "same version", current: "1.2.3", target: "v1.2.3", want: false},
+		{name: "older target", current: "1.2.4", target: "1.2.3", want: false},
+		{name: "build metadata ignored", current: "1.2.3+dirty", target: "1.2.3", want: false},
+		{name: "pseudo version core", current: "1.2.4-0.20260429122805-b25dd5b9f28b+dirty", target: "1.2.3", want: false},
+		{name: "unknown current", current: "dev", target: "1.2.3", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNewerVersion(tt.current, tt.target); got != tt.want {
+				t.Fatalf("expected %v, got %v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestRunExplainsReleaseNotFound(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+
+	_, err := Updater{HTTPClient: server.Client()}.Run(context.Background(), Options{
+		APIBase:        server.URL,
+		CurrentVersion: "1.2.2",
+		DryRun:         true,
+	})
+
+	if err == nil {
+		t.Fatal("expected not found error")
+	}
+	if !strings.Contains(err.Error(), "release was not found or repository is not accessible") {
+		t.Fatalf("expected actionable not found error, got %v", err)
 	}
 }
 

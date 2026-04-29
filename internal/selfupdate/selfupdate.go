@@ -78,7 +78,7 @@ func (u Updater) Run(ctx context.Context, opts Options) (Result, error) {
 		DryRun:         opts.DryRun,
 	}
 
-	if current != "" && current == target {
+	if !isNewerVersion(current, target) {
 		return result, nil
 	}
 
@@ -146,7 +146,7 @@ func (u Updater) fetchRelease(ctx context.Context, opts Options) (release, error
 		endpoint = strings.TrimRight(opts.APIBase, "/") + "/repos/" + opts.Repo + "/releases/tags/v" + cleanVersion(opts.TargetVersion)
 	}
 
-	payload, err := u.download(ctx, endpoint)
+	payload, err := u.downloadJSON(ctx, endpoint)
 	if err != nil {
 		return release{}, fmt.Errorf("fetch release metadata: %w", err)
 	}
@@ -163,6 +163,19 @@ func (u Updater) fetchRelease(ctx context.Context, opts Options) (release, error
 }
 
 func (u Updater) download(ctx context.Context, url string) ([]byte, error) {
+	return u.downloadWithHeaders(ctx, url, map[string]string{
+		"Accept": "application/octet-stream",
+	})
+}
+
+func (u Updater) downloadJSON(ctx context.Context, url string) ([]byte, error) {
+	return u.downloadWithHeaders(ctx, url, map[string]string{
+		"Accept":               "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28",
+	})
+}
+
+func (u Updater) downloadWithHeaders(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
 	client := u.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
@@ -172,8 +185,10 @@ func (u Updater) download(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/octet-stream")
 	req.Header.Set("User-Agent", "galaxio-cli")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -182,6 +197,9 @@ func (u Updater) download(ctx context.Context, url string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("GET %s returned %s; release was not found or repository is not accessible", url, resp.Status)
+		}
 		return nil, fmt.Errorf("GET %s returned %s", url, resp.Status)
 	}
 
@@ -214,6 +232,59 @@ func executableName(goos string) string {
 
 func cleanVersion(version string) string {
 	return strings.TrimPrefix(strings.TrimSpace(version), "v")
+}
+
+func isNewerVersion(current string, target string) bool {
+	if current == "" {
+		return target != ""
+	}
+
+	currentParts, currentOK := versionParts(current)
+	targetParts, targetOK := versionParts(target)
+	if !currentOK || !targetOK {
+		return current != target
+	}
+
+	for i := range targetParts {
+		if targetParts[i] > currentParts[i] {
+			return true
+		}
+		if targetParts[i] < currentParts[i] {
+			return false
+		}
+	}
+
+	return false
+}
+
+func versionParts(version string) ([3]int, bool) {
+	var parts [3]int
+	version = cleanVersion(version)
+	if before, _, ok := strings.Cut(version, "-"); ok {
+		version = before
+	}
+	if before, _, ok := strings.Cut(version, "+"); ok {
+		version = before
+	}
+
+	items := strings.Split(version, ".")
+	if len(items) != 3 {
+		return parts, false
+	}
+
+	for index, item := range items {
+		if item == "" {
+			return parts, false
+		}
+		for _, char := range item {
+			if char < '0' || char > '9' {
+				return parts, false
+			}
+			parts[index] = parts[index]*10 + int(char-'0')
+		}
+	}
+
+	return parts, true
 }
 
 func verifyChecksum(assetName string, payload []byte, checksums string) error {
