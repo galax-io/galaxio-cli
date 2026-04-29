@@ -45,6 +45,7 @@ func newRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "enable verbose diagnostic output")
 	cmd.PersistentFlags().BoolVarP(&opts.quiet, "quiet", "q", false, "suppress non-essential output")
 
+	cmd.AddCommand(newDoctorCommand())
 	cmd.AddCommand(newTemplateCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newVersionCommand())
