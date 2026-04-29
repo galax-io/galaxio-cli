@@ -1,0 +1,6 @@
+apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: gatling
+    source: github:galax-io/templates-gatling
+    description: Gatling performance testing templates
