@@ -37,5 +37,11 @@ jobs:
       - name: Test
         run: go test -race -coverprofile=coverage.out ./...
 
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+
       - name: Build
         run: go build -trimpath -o dist/galaxio ./cmd/galaxio
