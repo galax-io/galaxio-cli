@@ -1,0 +1,61 @@
+version: 2
+
+project_name: galaxio
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: galaxio
+    main: ./cmd/galaxio
+    binary: galaxio
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/galax-io/galaxio-cli/internal/buildinfo.Version={{.Version}} -X github.com/galax-io/galaxio-cli/internal/buildinfo.Commit={{.ShortCommit}} -X github.com/galax-io/galaxio-cli/internal/buildinfo.Date={{.Date}}
+
+archives:
+  - id: galaxio
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^style:"
+  groups:
+    - title: Features
+      regexp: "^feat"
+      order: 0
+    - title: Fixes
+      regexp: "^fix"
+      order: 1
+    - title: Other Changes
+      order: 999
+
+release:
+  github:
+    owner: galax-io
+    name: galaxio-cli
