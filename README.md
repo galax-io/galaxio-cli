@@ -54,6 +54,14 @@ galaxio completion fish
 galaxio completion powershell
 ```
 
+Update `galaxio` from GitHub Releases:
+
+```sh
+galaxio update
+galaxio update --dry-run
+galaxio update --version 0.1.1
+```
+
 ## Exit Codes
 
 `galaxio` keeps exit codes stable for scripts and CI:

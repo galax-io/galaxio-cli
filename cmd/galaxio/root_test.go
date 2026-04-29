@@ -27,10 +27,24 @@ func TestHelpPrintsMinimalUsage(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "version"} {
+	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "update", "version"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected help output to contain %q, got %q", want, stdout)
 		}
+	}
+}
+
+func TestUpdateCommandRejectsArguments(t *testing.T) {
+	code, stdout, stderr := runCLI("update", "unexpected")
+
+	if code != exitUsage {
+		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "unknown command") {
+		t.Fatalf("expected argument validation error, got %q", stderr)
 	}
 }
 
