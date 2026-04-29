@@ -27,10 +27,54 @@ func TestHelpPrintsMinimalUsage(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "update", "version"} {
+	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "template", "update", "version"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected help output to contain %q, got %q", want, stdout)
 		}
+	}
+}
+
+func TestTemplateCommandPrintsHelp(t *testing.T) {
+	code, stdout, stderr := runCLI("template", "--help")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d", exitOK, code)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	for _, want := range []string{"Discover and validate", "init", "list", "validate"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected template help to contain %q, got %q", want, stdout)
+		}
+	}
+}
+
+func TestTemplateInitPrintsComingSoon(t *testing.T) {
+	code, stdout, stderr := runCLI("template", "init", "gatling/scala-sbt")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d", exitOK, code)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	if want := "Template gatling/scala-sbt is coming soon"; !strings.Contains(stdout, want) {
+		t.Fatalf("expected coming soon output %q, got %q", want, stdout)
+	}
+}
+
+func TestTemplateValidateRequiresSource(t *testing.T) {
+	code, stdout, stderr := runCLI("template", "validate")
+
+	if code != exitUsage {
+		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "accepts 1 arg") {
+		t.Fatalf("expected argument validation error, got %q", stderr)
 	}
 }
 
