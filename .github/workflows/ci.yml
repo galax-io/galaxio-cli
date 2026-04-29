@@ -37,6 +37,19 @@ jobs:
       - name: Test
         run: go test -race -coverprofile=coverage.out ./...
 
+      - name: Check coverage threshold
+        env:
+          COVERAGE_THRESHOLD: "30.0"
+        run: |
+          coverage=$(go tool cover -func=coverage.out | awk '/^total:/ { gsub("%", "", $3); print $3 }')
+          awk -v coverage="$coverage" -v threshold="$COVERAGE_THRESHOLD" 'BEGIN {
+            if (coverage + 0 < threshold + 0) {
+              printf "coverage %.1f%% is below required %.1f%%\n", coverage, threshold
+              exit 1
+            }
+            printf "coverage %.1f%% meets required %.1f%%\n", coverage, threshold
+          }'
+
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
