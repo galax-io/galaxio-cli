@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/galax-io/galaxio-cli/internal/templatecatalog"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 func newTemplateCommand() *cobra.Command {
@@ -27,6 +29,7 @@ func newTemplateCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newTemplateListCommand())
+	cmd.AddCommand(newTemplateConfigureCommand())
 	cmd.AddCommand(newTemplateInitCommand())
 	cmd.AddCommand(newTemplateValidateCommand())
 
@@ -51,8 +54,12 @@ func newTemplateListCommand() *cobra.Command {
 			if err := validateOutputFormat(output); err != nil {
 				return err
 			}
+			registrySource, err := resolveTemplateRegistry(registry)
+			if err != nil {
+				return RuntimeError{Err: err}
+			}
 
-			templates, err := (templatecatalog.SourceFetcher{}).ListTemplates(cmd.Context(), registry)
+			templates, err := (templatecatalog.SourceFetcher{}).ListTemplates(cmd.Context(), registrySource)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
@@ -72,8 +79,48 @@ func newTemplateListCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&registry, "registry", templatecatalog.DefaultRegistrySource, "template registry source")
+	cmd.Flags().StringVar(&registry, "registry", "", "template registry source")
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
+
+	return cmd
+}
+
+func newTemplateConfigureCommand() *cobra.Command {
+	var registry string
+	var show bool
+
+	cmd := &cobra.Command{
+		Use:   "configure",
+		Short: "Configure template registry settings.",
+		Long:  "Configure persistent template registry settings for galaxio template commands.",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.NoArgs(cmd, args); err != nil {
+				return UsageError{Err: err}
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if registry != "" {
+				cfg, err := loadConfig()
+				if err != nil {
+					return RuntimeError{Err: fmt.Errorf("load config: %w", err)}
+				}
+				cfg.Template.Registry = registry
+				if err := saveConfig(cfg); err != nil {
+					return RuntimeError{Err: fmt.Errorf("save config: %w", err)}
+				}
+			}
+
+			if show || registry != "" {
+				return printTemplateConfig(cmd, registry)
+			}
+
+			return printTemplateConfig(cmd, "")
+		},
+	}
+
+	cmd.Flags().StringVar(&registry, "registry", "", "template registry source")
+	cmd.Flags().BoolVar(&show, "show", false, "show current template configuration")
 
 	return cmd
 }
@@ -82,6 +129,7 @@ func newTemplateInitCommand() *cobra.Command {
 	var registry string
 	var destination string
 	var output string
+	var valuesFile string
 	var values []string
 
 	cmd := &cobra.Command{
@@ -98,11 +146,23 @@ func newTemplateInitCommand() *cobra.Command {
 			if err := validateOutputFormat(output); err != nil {
 				return err
 			}
-			renderValues, err := parseTemplateValues(values)
+			registrySource, err := resolveTemplateRegistry(registry)
+			if err != nil {
+				return RuntimeError{Err: err}
+			}
+			renderValues, err := loadTemplateValues(valuesFile)
 			if err != nil {
 				return err
 			}
-			template, err := (templatecatalog.SourceFetcher{}).FindTemplate(cmd.Context(), registry, args[0])
+			setValues, err := parseTemplateValues(values)
+			if err != nil {
+				return err
+			}
+			for key, value := range setValues {
+				renderValues[key] = value
+			}
+
+			template, err := (templatecatalog.SourceFetcher{}).FindTemplate(cmd.Context(), registrySource, args[0])
 			if err != nil {
 				if errors.Is(err, templatecatalog.ErrTemplateNotFound) {
 					return UsageError{Err: err}
@@ -111,7 +171,7 @@ func newTemplateInitCommand() *cobra.Command {
 			}
 			if !template.Placeholder {
 				result, err := (templatecatalog.SourceFetcher{}).Render(cmd.Context(), templatecatalog.RenderOptions{
-					RegistrySource: registry,
+					RegistrySource: registrySource,
 					TemplateName:   args[0],
 					Destination:    destination,
 					Values:         renderValues,
@@ -144,9 +204,10 @@ func newTemplateInitCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&registry, "registry", templatecatalog.DefaultRegistrySource, "template registry source")
+	cmd.Flags().StringVar(&registry, "registry", "", "template registry source")
 	cmd.Flags().StringVarP(&destination, "destination", "d", ".", "directory to render the template into")
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
+	cmd.Flags().StringVar(&valuesFile, "values", "", "YAML file with template values")
 	cmd.Flags().StringArrayVar(&values, "set", nil, "template value in Key=Value form")
 
 	return cmd
@@ -214,12 +275,51 @@ type templateValidateOutput struct {
 	Status string `json:"status"`
 }
 
+func printTemplateConfig(cmd *cobra.Command, override string) error {
+	path, err := configPath()
+	if err != nil {
+		return RuntimeError{Err: err}
+	}
+	registry, err := resolveTemplateRegistry(override)
+	if err != nil {
+		return RuntimeError{Err: err}
+	}
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "config: %s\n", path); err != nil {
+		return RuntimeError{Err: err}
+	}
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "registry: %s\n", registry); err != nil {
+		return RuntimeError{Err: err}
+	}
+	return nil
+}
+
 func printTemplateInitResult(cmd *cobra.Command, result templatecatalog.RenderResult, output string) error {
 	if output == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), result)
 	}
 	_, err := fmt.Fprintf(cmd.OutOrStdout(), "Rendered %s to %s (%d files)\n", result.Template, result.Destination, result.Files)
 	return err
+}
+
+func loadTemplateValues(path string) (map[string]string, error) {
+	if path == "" {
+		return map[string]string{}, nil
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return nil, UsageError{Err: fmt.Errorf("read values file %q: %w", path, err)}
+	}
+
+	values := map[string]any{}
+	if err := yaml.Unmarshal(payload, &values); err != nil {
+		return nil, UsageError{Err: fmt.Errorf("decode values file %q: %w", path, err)}
+	}
+
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		result[key] = fmt.Sprint(value)
+	}
+	return result, nil
 }
 
 func parseTemplateValues(values []string) (map[string]string, error) {

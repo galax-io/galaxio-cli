@@ -25,16 +25,20 @@ func newDoctorCommand() *cobra.Command {
 			if err := validateOutputFormat(output); err != nil {
 				return err
 			}
+			registrySource, err := resolveTemplateRegistry(registry)
+			if err != nil {
+				return RuntimeError{Err: err}
+			}
 
 			fetcher := templatecatalog.SourceFetcher{}
-			templates, err := fetcher.ListTemplates(cmd.Context(), registry)
+			templates, err := fetcher.ListTemplates(cmd.Context(), registrySource)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
 
 			if output == outputJSON {
 				if err := writeJSON(cmd.OutOrStdout(), doctorOutput{
-					Registry:        registry,
+					Registry:        registrySource,
 					Status:          "ok",
 					TemplateEntries: len(templates),
 				}); err != nil {
@@ -43,7 +47,7 @@ func newDoctorCommand() *cobra.Command {
 				return nil
 			}
 
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "OK template registry: %s\n", registry)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "OK template registry: %s\n", registrySource)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
@@ -56,7 +60,7 @@ func newDoctorCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&registry, "registry", templatecatalog.DefaultRegistrySource, "template registry source")
+	cmd.Flags().StringVar(&registry, "registry", "", "template registry source")
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
