@@ -68,7 +68,9 @@ func TestTemplateCommandPrintsHelp(t *testing.T) {
 }
 
 func TestTemplateInitPrintsComingSoon(t *testing.T) {
-	code, stdout, stderr := runCLI("template", "init", "gatling/scala-sbt")
+	registryRoot, _ := writeTemplateCatalogFixture(t)
+
+	code, stdout, stderr := runCLI("template", "init", "gatling/scala-sbt", "--registry", "local:"+registryRoot)
 
 	if code != exitOK {
 		t.Fatalf("expected exit code %d, got %d", exitOK, code)
@@ -76,7 +78,7 @@ func TestTemplateInitPrintsComingSoon(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	if want := "Template gatling/scala-sbt is coming soon"; !strings.Contains(stdout, want) {
+	if want := "Template gatling/scala-sbt 0.1.0 is coming soon"; !strings.Contains(stdout, want) {
 		t.Fatalf("expected coming soon output %q, got %q", want, stdout)
 	}
 }

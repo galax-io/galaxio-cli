@@ -22,6 +22,10 @@ const (
 	templateFileName      = "galaxio-template.yaml"
 )
 
+// ErrTemplateNotFound is returned when a registry does not contain a requested
+// template reference.
+var ErrTemplateNotFound = errors.New("template not found")
+
 // Registry is the root index of available template packs.
 type Registry struct {
 	APIVersion string         `yaml:"apiVersion"`
@@ -55,16 +59,16 @@ type PackTemplate struct {
 
 // Template describes one renderable template.
 type Template struct {
-	APIVersion  string                 `yaml:"apiVersion"`
-	Kind        string                 `yaml:"kind"`
-	Name        string                 `yaml:"name"`
-	DisplayName string                 `yaml:"displayName"`
-	Description string                 `yaml:"description"`
-	Engine      string                 `yaml:"engine"`
-	Tags        []string               `yaml:"tags"`
-	Inputs      map[string]interface{} `yaml:"inputs"`
-	Computed    map[string]string      `yaml:"computed"`
-	Files       []TemplateFile         `yaml:"files"`
+	APIVersion  string            `yaml:"apiVersion"`
+	Kind        string            `yaml:"kind"`
+	Name        string            `yaml:"name"`
+	DisplayName string            `yaml:"displayName"`
+	Description string            `yaml:"description"`
+	Engine      string            `yaml:"engine"`
+	Tags        []string          `yaml:"tags"`
+	Inputs      map[string]any    `yaml:"inputs"`
+	Computed    map[string]string `yaml:"computed"`
+	Files       []TemplateFile    `yaml:"files"`
 }
 
 // TemplateFile describes one file mapping in a template.
@@ -165,8 +169,8 @@ func (f SourceFetcher) LoadTemplate(ctx context.Context, packSource string, temp
 	return template, nil
 }
 
-// ListPacks reads the registry and validates referenced packs.
-func (f SourceFetcher) ListPacks(ctx context.Context, registrySource string) ([]TemplateRef, error) {
+// ListTemplates reads the registry and resolves templates from referenced packs.
+func (f SourceFetcher) ListTemplates(ctx context.Context, registrySource string) ([]TemplateRef, error) {
 	registry, err := f.LoadRegistry(ctx, registrySource)
 	if err != nil {
 		return nil, err
@@ -192,6 +196,22 @@ func (f SourceFetcher) ListPacks(ctx context.Context, registrySource string) ([]
 	}
 
 	return result, nil
+}
+
+// FindTemplate resolves a template reference from a registry.
+func (f SourceFetcher) FindTemplate(ctx context.Context, registrySource string, name string) (TemplateRef, error) {
+	templates, err := f.ListTemplates(ctx, registrySource)
+	if err != nil {
+		return TemplateRef{}, err
+	}
+
+	for _, template := range templates {
+		if template.Name == name {
+			return template, nil
+		}
+	}
+
+	return TemplateRef{}, fmt.Errorf("%w: %s", ErrTemplateNotFound, name)
 }
 
 // ValidateSource validates a template pack source and its template manifests.

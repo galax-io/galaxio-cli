@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 
 	"github.com/galax-io/galaxio-cli/internal/templatecatalog"
 	"github.com/spf13/cobra"
@@ -49,32 +51,20 @@ func newTemplateListCommand() *cobra.Command {
 				return err
 			}
 
-			packs, err := (templatecatalog.SourceFetcher{}).ListPacks(cmd.Context(), registry)
+			templates, err := (templatecatalog.SourceFetcher{}).ListTemplates(cmd.Context(), registry)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
 
 			if output == outputJSON {
-				payload, err := encodeJSON(packs)
-				if err != nil {
-					return RuntimeError{Err: err}
-				}
-				_, err = cmd.OutOrStdout().Write(payload)
-				if err != nil {
+				if err := writeJSON(cmd.OutOrStdout(), templates); err != nil {
 					return RuntimeError{Err: err}
 				}
 				return nil
 			}
 
-			for _, pack := range packs {
-				if pack.Description == "" {
-					_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", pack.Name, pack.Version, pack.Source)
-				} else {
-					_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\n", pack.Name, pack.Version, pack.Source, pack.Description)
-				}
-				if err != nil {
-					return RuntimeError{Err: err}
-				}
+			if err := writeTemplateList(cmd.OutOrStdout(), templates); err != nil {
+				return RuntimeError{Err: err}
 			}
 
 			return nil
@@ -88,12 +78,13 @@ func newTemplateListCommand() *cobra.Command {
 }
 
 func newTemplateInitCommand() *cobra.Command {
+	var registry string
 	var output string
 
 	cmd := &cobra.Command{
 		Use:   "init <template>",
 		Short: "Initialize a project from a template.",
-		Long:  "Initialize a project from a template. Rendering support is not available yet.",
+		Long:  "Initialize a project from a template resolved from a Galaxio template registry.",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
 				return UsageError{Err: err}
@@ -104,22 +95,30 @@ func newTemplateInitCommand() *cobra.Command {
 			if err := validateOutputFormat(output); err != nil {
 				return err
 			}
-			if output == outputJSON {
-				payload, err := encodeJSON(map[string]string{
-					"template": args[0],
-					"status":   "coming_soon",
-				})
-				if err != nil {
-					return RuntimeError{Err: err}
+			template, err := (templatecatalog.SourceFetcher{}).FindTemplate(cmd.Context(), registry, args[0])
+			if err != nil {
+				if errors.Is(err, templatecatalog.ErrTemplateNotFound) {
+					return UsageError{Err: err}
 				}
-				_, err = cmd.OutOrStdout().Write(payload)
-				if err != nil {
+				return RuntimeError{Err: err}
+			}
+			if !template.Placeholder {
+				return RuntimeError{Err: fmt.Errorf("template %q is available, but rendering is not implemented yet", template.Name)}
+			}
+
+			if output == outputJSON {
+				if err := writeJSON(cmd.OutOrStdout(), templateInitOutput{
+					Template: template.Name,
+					Version:  template.Version,
+					Source:   template.Source,
+					Status:   templateInitStatusComingSoon,
+				}); err != nil {
 					return RuntimeError{Err: err}
 				}
 				return nil
 			}
 
-			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Template %s is coming soon\n", args[0])
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Template %s %s is coming soon\n", template.Name, template.Version)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
@@ -127,6 +126,7 @@ func newTemplateInitCommand() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&registry, "registry", templatecatalog.DefaultRegistrySource, "template registry source")
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
@@ -156,15 +156,10 @@ func newTemplateValidateCommand() *cobra.Command {
 			}
 
 			if output == outputJSON {
-				payload, err := encodeJSON(map[string]string{
-					"source": source,
-					"status": "valid",
-				})
-				if err != nil {
-					return RuntimeError{Err: err}
-				}
-				_, err = cmd.OutOrStdout().Write(payload)
-				if err != nil {
+				if err := writeJSON(cmd.OutOrStdout(), templateValidateOutput{
+					Source: source,
+					Status: "valid",
+				}); err != nil {
 					return RuntimeError{Err: err}
 				}
 				return nil
@@ -182,4 +177,34 @@ func newTemplateValidateCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
+}
+
+const templateInitStatusComingSoon = "coming_soon"
+
+type templateInitOutput struct {
+	Template string `json:"template"`
+	Version  string `json:"version"`
+	Source   string `json:"source"`
+	Status   string `json:"status"`
+}
+
+type templateValidateOutput struct {
+	Source string `json:"source"`
+	Status string `json:"status"`
+}
+
+func writeTemplateList(writer io.Writer, templates []templatecatalog.TemplateRef) error {
+	for _, template := range templates {
+		if template.Description == "" {
+			if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\n", template.Name, template.Version, template.Source); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", template.Name, template.Version, template.Source, template.Description); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

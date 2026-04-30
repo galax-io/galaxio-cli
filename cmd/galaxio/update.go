@@ -69,12 +69,7 @@ func printUpdateResult(cmd *cobra.Command, result selfupdate.Result, output stri
 		return err
 	}
 	if output == outputJSON {
-		payload, err := encodeJSON(result)
-		if err != nil {
-			return err
-		}
-		_, err = cmd.OutOrStdout().Write(payload)
-		return err
+		return writeJSON(cmd.OutOrStdout(), result)
 	}
 
 	switch {

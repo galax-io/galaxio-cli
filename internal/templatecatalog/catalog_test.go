@@ -2,6 +2,7 @@ package templatecatalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -33,7 +34,7 @@ packs:
 	}
 }
 
-func TestListPacksFromRegistry(t *testing.T) {
+func TestListTemplatesFromRegistry(t *testing.T) {
 	packRoot := t.TempDir()
 	writeGatlingPack(t, packRoot)
 
@@ -45,21 +46,63 @@ packs:
     source: local:%s
 `, packRoot))
 
-	packs, err := SourceFetcher{}.ListPacks(context.Background(), registryRoot)
+	templates, err := SourceFetcher{}.ListTemplates(context.Background(), registryRoot)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(packs) != 1 {
-		t.Fatalf("expected one pack, got %d", len(packs))
+	if len(templates) != 1 {
+		t.Fatalf("expected one template, got %d", len(templates))
 	}
-	if packs[0].Name != "gatling/scala-sbt" {
-		t.Fatalf("expected gatling/scala-sbt, got %q", packs[0].Name)
+	if templates[0].Name != "gatling/scala-sbt" {
+		t.Fatalf("expected gatling/scala-sbt, got %q", templates[0].Name)
 	}
-	if packs[0].Version != "0.1.0" {
-		t.Fatalf("expected version 0.1.0, got %q", packs[0].Version)
+	if templates[0].Version != "0.1.0" {
+		t.Fatalf("expected version 0.1.0, got %q", templates[0].Version)
 	}
-	if !packs[0].Placeholder {
+	if !templates[0].Placeholder {
 		t.Fatal("expected placeholder template")
+	}
+}
+
+func TestFindTemplateFromRegistry(t *testing.T) {
+	packRoot := t.TempDir()
+	writeGatlingPack(t, packRoot)
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: gatling
+    source: local:%s
+`, packRoot))
+
+	template, err := SourceFetcher{}.FindTemplate(context.Background(), registryRoot, "gatling/scala-sbt")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if template.Name != "gatling/scala-sbt" {
+		t.Fatalf("expected gatling/scala-sbt, got %q", template.Name)
+	}
+	if template.Source != "local:"+packRoot {
+		t.Fatalf("expected source local:%s, got %q", packRoot, template.Source)
+	}
+}
+
+func TestFindTemplateReportsMissingTemplate(t *testing.T) {
+	packRoot := t.TempDir()
+	writeGatlingPack(t, packRoot)
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: gatling
+    source: local:%s
+`, packRoot))
+
+	_, err := SourceFetcher{}.FindTemplate(context.Background(), registryRoot, "missing/template")
+	if !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("expected ErrTemplateNotFound, got %v", err)
 	}
 }
 

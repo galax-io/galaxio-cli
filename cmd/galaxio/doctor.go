@@ -27,22 +27,17 @@ func newDoctorCommand() *cobra.Command {
 			}
 
 			fetcher := templatecatalog.SourceFetcher{}
-			templates, err := fetcher.ListPacks(cmd.Context(), registry)
+			templates, err := fetcher.ListTemplates(cmd.Context(), registry)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
 
 			if output == outputJSON {
-				payload, err := encodeJSON(map[string]interface{}{
-					"registry":        registry,
-					"status":          "ok",
-					"templateEntries": len(templates),
-				})
-				if err != nil {
-					return RuntimeError{Err: err}
-				}
-				_, err = cmd.OutOrStdout().Write(payload)
-				if err != nil {
+				if err := writeJSON(cmd.OutOrStdout(), doctorOutput{
+					Registry:        registry,
+					Status:          "ok",
+					TemplateEntries: len(templates),
+				}); err != nil {
 					return RuntimeError{Err: err}
 				}
 				return nil
@@ -65,4 +60,10 @@ func newDoctorCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
+}
+
+type doctorOutput struct {
+	Registry        string `json:"registry"`
+	Status          string `json:"status"`
+	TemplateEntries int    `json:"templateEntries"`
 }

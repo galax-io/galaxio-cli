@@ -27,16 +27,11 @@ func newVersionCommand() *cobra.Command {
 
 			info := versionInfo()
 			if output == outputJSON {
-				payload, err := encodeJSON(versionOutput{
+				if err := writeJSON(cmd.OutOrStdout(), versionOutput{
 					Version: info.CleanVersion(),
 					Commit:  info.Commit,
 					Date:    info.Date,
-				})
-				if err != nil {
-					return RuntimeError{Err: err}
-				}
-				_, err = cmd.OutOrStdout().Write(payload)
-				if err != nil {
+				}); err != nil {
 					return RuntimeError{Err: err}
 				}
 				return nil
