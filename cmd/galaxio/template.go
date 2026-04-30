@@ -108,17 +108,18 @@ func newTemplateInitCommand() *cobra.Command {
 
 			if output == outputJSON {
 				if err := writeJSON(cmd.OutOrStdout(), templateInitOutput{
-					Template: template.Name,
-					Version:  template.Version,
-					Source:   template.Source,
-					Status:   templateInitStatusComingSoon,
+					Template:    template.Name,
+					Version:     template.Version,
+					PackVersion: template.PackVersion,
+					Source:      template.Source,
+					Status:      templateInitStatusComingSoon,
 				}); err != nil {
 					return RuntimeError{Err: err}
 				}
 				return nil
 			}
 
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Template %s %s is coming soon\n", template.Name, template.Version)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Template %s is coming soon\n", template.Name)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
@@ -182,10 +183,11 @@ func newTemplateValidateCommand() *cobra.Command {
 const templateInitStatusComingSoon = "coming_soon"
 
 type templateInitOutput struct {
-	Template string `json:"template"`
-	Version  string `json:"version"`
-	Source   string `json:"source"`
-	Status   string `json:"status"`
+	Template    string `json:"template"`
+	Version     string `json:"version,omitempty"`
+	PackVersion string `json:"packVersion"`
+	Source      string `json:"source"`
+	Status      string `json:"status"`
 }
 
 type templateValidateOutput struct {
@@ -195,16 +197,27 @@ type templateValidateOutput struct {
 
 func writeTemplateList(writer io.Writer, templates []templatecatalog.TemplateRef) error {
 	for _, template := range templates {
+		version := templateListVersion(template)
 		if template.Description == "" {
-			if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\n", template.Name, template.Version, template.Source); err != nil {
+			if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\n", template.Name, version, template.Source); err != nil {
 				return err
 			}
 			continue
 		}
-		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", template.Name, template.Version, template.Source, template.Description); err != nil {
+		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", template.Name, version, template.Source, template.Description); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func templateListVersion(template templatecatalog.TemplateRef) string {
+	if template.Version != "" {
+		return template.Version
+	}
+	if template.Placeholder {
+		return "coming soon"
+	}
+	return template.PackVersion
 }
