@@ -155,6 +155,93 @@ packs:
 	}
 }
 
+func TestRenderLocalTemplate(t *testing.T) {
+	registryRoot, packRoot := writeRenderablePack(t)
+	destination := t.TempDir()
+
+	result, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    destination,
+		Values: map[string]string{
+			"Name": "orders",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Template != "examples/renderable" {
+		t.Fatalf("expected examples/renderable, got %q", result.Template)
+	}
+	if result.Version != "1.2.3" {
+		t.Fatalf("expected template version 1.2.3, got %q", result.Version)
+	}
+	if result.PackVersion != "0.1.0" {
+		t.Fatalf("expected pack version 0.1.0, got %q", result.PackVersion)
+	}
+	if result.Source != "local:"+packRoot {
+		t.Fatalf("expected source local:%s, got %q", packRoot, result.Source)
+	}
+	if result.Files != 1 {
+		t.Fatalf("expected one rendered file, got %d", result.Files)
+	}
+	if result.Status != "rendered" {
+		t.Fatalf("expected rendered status, got %q", result.Status)
+	}
+
+	payload, err := os.ReadFile(filepath.Join(destination, "orders.txt"))
+	if err != nil {
+		t.Fatalf("read rendered file: %v", err)
+	}
+	if string(payload) != "hello orders\n" {
+		t.Fatalf("expected rendered file payload, got %q", payload)
+	}
+}
+
+func TestRenderRejectsPlaceholderTemplate(t *testing.T) {
+	packRoot := t.TempDir()
+	writeGatlingPack(t, packRoot)
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: gatling
+    source: local:%s
+`, packRoot))
+
+	_, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "gatling/scala-sbt",
+		Destination:    t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "coming soon") {
+		t.Fatalf("expected coming soon error, got %v", err)
+	}
+}
+
+func TestRenderRejectsEscapingPath(t *testing.T) {
+	registryRoot, _ := writeRenderablePack(t)
+
+	_, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    t.TempDir(),
+		Values: map[string]string{
+			"Name": "../escape",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "escapes destination") {
+		t.Fatalf("expected safe path error, got %v", err)
+	}
+}
+
 func TestValidateSourceAcceptsPackWithoutTemplates(t *testing.T) {
 	root := t.TempDir()
 	writeGatlingPack(t, root)
@@ -329,6 +416,44 @@ func TestValidatePackRejectsParentPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func writeRenderablePack(t *testing.T) (string, string) {
+	t.Helper()
+
+	packRoot := t.TempDir()
+	writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.2.3
+    path: renderable
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: default
+files:
+  - from: files
+    to: .
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable", "files"), "{{ .Name }}.txt", "hello {{ .Name }}\n")
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+	return registryRoot, packRoot
 }
 
 func writeGatlingPack(t *testing.T, root string) {

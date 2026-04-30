@@ -3,6 +3,8 @@
 package templatecatalog
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -58,18 +61,25 @@ type PackTemplate struct {
 	Description string `yaml:"description"`
 }
 
+// TemplateInput describes one configurable template input.
+type TemplateInput struct {
+	Type        string `yaml:"type"`
+	Default     any    `yaml:"default"`
+	Description string `yaml:"description"`
+}
+
 // Template describes one renderable template.
 type Template struct {
-	APIVersion  string            `yaml:"apiVersion"`
-	Kind        string            `yaml:"kind"`
-	Name        string            `yaml:"name"`
-	DisplayName string            `yaml:"displayName"`
-	Description string            `yaml:"description"`
-	Engine      string            `yaml:"engine"`
-	Tags        []string          `yaml:"tags"`
-	Inputs      map[string]any    `yaml:"inputs"`
-	Computed    map[string]string `yaml:"computed"`
-	Files       []TemplateFile    `yaml:"files"`
+	APIVersion  string                   `yaml:"apiVersion"`
+	Kind        string                   `yaml:"kind"`
+	Name        string                   `yaml:"name"`
+	DisplayName string                   `yaml:"displayName"`
+	Description string                   `yaml:"description"`
+	Engine      string                   `yaml:"engine"`
+	Tags        []string                 `yaml:"tags"`
+	Inputs      map[string]TemplateInput `yaml:"inputs"`
+	Computed    map[string]string        `yaml:"computed"`
+	Files       []TemplateFile           `yaml:"files"`
 }
 
 // TemplateFile describes one file mapping in a template.
@@ -84,10 +94,30 @@ type TemplateRef struct {
 	Pack        string `json:"pack"`
 	PackVersion string `json:"packVersion"`
 	Version     string `json:"version,omitempty"`
+	Path        string `json:"-"`
 	Source      string `json:"source"`
 	Description string `json:"description,omitempty"`
 	Templates   int    `json:"templates"`
 	Placeholder bool   `json:"placeholder"`
+}
+
+// RenderOptions configures template rendering.
+type RenderOptions struct {
+	RegistrySource string
+	TemplateName   string
+	Destination    string
+	Values         map[string]string
+}
+
+// RenderResult describes rendered template output.
+type RenderResult struct {
+	Template    string `json:"template"`
+	Version     string `json:"version,omitempty"`
+	PackVersion string `json:"packVersion"`
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Files       int    `json:"files"`
+	Status      string `json:"status"`
 }
 
 // SourceFetcher loads manifest files from local paths or remote sources.
@@ -190,6 +220,7 @@ func (f SourceFetcher) ListTemplates(ctx context.Context, registrySource string)
 				Pack:        pack.Name,
 				PackVersion: pack.Version,
 				Version:     template.Version,
+				Path:        template.Path,
 				Source:      registryPack.Source,
 				Description: template.Description,
 				Templates:   len(pack.Templates),
@@ -199,6 +230,53 @@ func (f SourceFetcher) ListTemplates(ctx context.Context, registrySource string)
 	}
 
 	return result, nil
+}
+
+// Render resolves a template from a registry and renders it into a destination.
+func (f SourceFetcher) Render(ctx context.Context, opts RenderOptions) (RenderResult, error) {
+	ref, err := f.FindTemplate(ctx, opts.RegistrySource, opts.TemplateName)
+	if err != nil {
+		return RenderResult{}, err
+	}
+	if ref.Path == "" {
+		return RenderResult{}, fmt.Errorf("template %q is coming soon", ref.Name)
+	}
+
+	manifest, err := f.LoadTemplate(ctx, ref.Source, ref.Path)
+	if err != nil {
+		return RenderResult{}, err
+	}
+
+	sourceRoot, cleanup, err := f.materializeSource(ctx, ref.Source)
+	if err != nil {
+		return RenderResult{}, err
+	}
+	defer cleanup()
+
+	destination := opts.Destination
+	if destination == "" {
+		destination = "."
+	}
+	absDestination, err := filepath.Abs(destination)
+	if err != nil {
+		return RenderResult{}, err
+	}
+
+	data := templateData(manifest, opts.Values)
+	files, err := renderTemplateFiles(filepath.Join(sourceRoot, filepath.FromSlash(ref.Path)), absDestination, manifest, data)
+	if err != nil {
+		return RenderResult{}, err
+	}
+
+	return RenderResult{
+		Template:    ref.Name,
+		Version:     ref.Version,
+		PackVersion: ref.PackVersion,
+		Source:      ref.Source,
+		Destination: absDestination,
+		Files:       files,
+		Status:      "rendered",
+	}, nil
 }
 
 // FindTemplate resolves a template reference from a registry.
@@ -351,6 +429,60 @@ func (f SourceFetcher) readURL(ctx context.Context, url string) ([]byte, error) 
 	return io.ReadAll(resp.Body)
 }
 
+func (f SourceFetcher) materializeSource(ctx context.Context, source string) (string, func(), error) {
+	switch {
+	case strings.HasPrefix(source, "local:"):
+		return strings.TrimPrefix(source, "local:"), func() {}, nil
+	case strings.HasPrefix(source, "github:"):
+		return f.materializeGitHubSource(ctx, strings.TrimPrefix(source, "github:"))
+	case strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://"):
+		return "", nil, fmt.Errorf("rendering from URL sources is not supported yet")
+	default:
+		return source, func() {}, nil
+	}
+}
+
+func (f SourceFetcher) materializeGitHubSource(ctx context.Context, repo string) (string, func(), error) {
+	owner, name, subpath, err := parseGitHubSource(repo)
+	if err != nil {
+		return "", nil, err
+	}
+	payload, err := f.readURL(ctx, fmt.Sprintf("https://codeload.github.com/%s/%s/zip/refs/heads/main", owner, name))
+	if err != nil {
+		return "", nil, err
+	}
+
+	tempDir, err := os.MkdirTemp("", "galaxio-template-*")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() {
+		_ = os.RemoveAll(tempDir)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(payload), int64(len(payload)))
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	if err := extractZip(reader, tempDir); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	if len(entries) != 1 || !entries[0].IsDir() {
+		cleanup()
+		return "", nil, fmt.Errorf("unexpected GitHub archive layout for %q", repo)
+	}
+
+	return filepath.Join(tempDir, entries[0].Name(), filepath.FromSlash(subpath)), cleanup, nil
+}
+
 func readLocalManifest(root string, manifest string) ([]byte, error) {
 	if root == "" {
 		return nil, errors.New("local source path is required")
@@ -380,6 +512,151 @@ func githubRawURL(repo string, manifest string) string {
 	}
 
 	return "https://raw.githubusercontent.com/" + parts[0] + "/" + parts[1] + "/main/" + path + manifest
+}
+
+func parseGitHubSource(repo string) (string, string, string, error) {
+	parts := strings.Split(strings.Trim(repo, "/"), "/")
+	if len(parts) < 2 {
+		return "", "", "", fmt.Errorf("github source must be owner/repo, got %q", repo)
+	}
+	subpath := ""
+	if len(parts) > 2 {
+		subpath = strings.Join(parts[2:], "/")
+	}
+	return parts[0], parts[1], subpath, nil
+}
+
+func extractZip(reader *zip.Reader, destination string) error {
+	for _, file := range reader.File {
+		target := filepath.Join(destination, filepath.Clean(file.Name))
+		if !strings.HasPrefix(target, filepath.Clean(destination)+string(os.PathSeparator)) {
+			return fmt.Errorf("zip entry escapes destination: %s", file.Name)
+		}
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		source, err := file.Open()
+		if err != nil {
+			return err
+		}
+		if err := copyFile(target, source, file.FileInfo().Mode()); err != nil {
+			_ = source.Close()
+			return err
+		}
+		if err := source.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFile(path string, source io.Reader, mode os.FileMode) error {
+	target, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer target.Close()
+	_, err = io.Copy(target, source)
+	return err
+}
+
+func templateData(manifest Template, overrides map[string]string) map[string]any {
+	data := make(map[string]any, len(manifest.Inputs))
+	for name, input := range manifest.Inputs {
+		data[name] = input.Default
+	}
+	for name, value := range overrides {
+		data[name] = value
+	}
+	return data
+}
+
+func renderTemplateFiles(templateRoot string, destination string, manifest Template, data map[string]any) (int, error) {
+	var rendered int
+	for _, mapping := range manifest.Files {
+		sourceRoot := filepath.Join(templateRoot, filepath.FromSlash(mapping.From))
+		targetRoot := filepath.Join(destination, filepath.FromSlash(mapping.To))
+		count, err := renderTree(sourceRoot, targetRoot, data)
+		if err != nil {
+			return 0, err
+		}
+		rendered += count
+	}
+	return rendered, nil
+}
+
+func renderTree(sourceRoot string, targetRoot string, data map[string]any) (int, error) {
+	var rendered int
+	err := filepath.WalkDir(sourceRoot, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		relative, err := filepath.Rel(sourceRoot, path)
+		if err != nil {
+			return err
+		}
+		targetRelative, err := renderString("path", filepath.ToSlash(relative), data)
+		if err != nil {
+			return err
+		}
+		target, err := safeJoin(targetRoot, filepath.FromSlash(targetRelative))
+		if err != nil {
+			return err
+		}
+
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		body, err := renderString(relative, string(payload), data)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, []byte(body), 0o644); err != nil {
+			return err
+		}
+		rendered++
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return rendered, nil
+}
+
+func renderString(name string, value string, data map[string]any) (string, error) {
+	tmpl, err := template.New(name).Option("missingkey=error").Parse(value)
+	if err != nil {
+		return "", err
+	}
+	var output strings.Builder
+	if err := tmpl.Execute(&output, data); err != nil {
+		return "", err
+	}
+	return output.String(), nil
+}
+
+func safeJoin(root string, relative string) (string, error) {
+	target := filepath.Join(root, relative)
+	cleanRoot := filepath.Clean(root)
+	cleanTarget := filepath.Clean(target)
+	if cleanTarget != cleanRoot && !strings.HasPrefix(cleanTarget, cleanRoot+string(os.PathSeparator)) {
+		return "", fmt.Errorf("template path escapes destination: %s", relative)
+	}
+	return target, nil
 }
 
 func joinSource(source string, child string) string {
