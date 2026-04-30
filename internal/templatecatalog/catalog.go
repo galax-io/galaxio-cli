@@ -77,6 +77,7 @@ type TemplateFile struct {
 type TemplateRef struct {
 	Name        string `json:"name"`
 	Pack        string `json:"pack"`
+	Version     string `json:"version"`
 	Source      string `json:"source"`
 	Description string `json:"description,omitempty"`
 	Templates   int    `json:"templates"`
@@ -181,6 +182,7 @@ func (f SourceFetcher) ListPacks(ctx context.Context, registrySource string) ([]
 			result = append(result, TemplateRef{
 				Name:        pack.Name + "/" + template.Name,
 				Pack:        pack.Name,
+				Version:     pack.Version,
 				Source:      registryPack.Source,
 				Description: template.Description,
 				Templates:   len(pack.Templates),

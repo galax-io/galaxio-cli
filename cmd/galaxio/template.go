@@ -67,14 +67,10 @@ func newTemplateListCommand() *cobra.Command {
 			}
 
 			for _, pack := range packs {
-				state := "available"
-				if pack.Placeholder {
-					state = "coming soon"
-				}
 				if pack.Description == "" {
-					_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", pack.Name, state, pack.Source)
+					_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", pack.Name, pack.Version, pack.Source)
 				} else {
-					_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\n", pack.Name, state, pack.Source, pack.Description)
+					_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\n", pack.Name, pack.Version, pack.Source, pack.Description)
 				}
 				if err != nil {
 					return RuntimeError{Err: err}

@@ -55,6 +55,9 @@ packs:
 	if packs[0].Name != "gatling/scala-sbt" {
 		t.Fatalf("expected gatling/scala-sbt, got %q", packs[0].Name)
 	}
+	if packs[0].Version != "0.1.0" {
+		t.Fatalf("expected version 0.1.0, got %q", packs[0].Version)
+	}
 	if !packs[0].Placeholder {
 		t.Fatal("expected placeholder template")
 	}
