@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 const (
@@ -19,7 +20,16 @@ func validateOutputFormat(format string) error {
 	}
 }
 
-func encodeJSON(value interface{}) ([]byte, error) {
+func writeJSON(writer io.Writer, value any) error {
+	payload, err := encodeJSON(value)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(payload)
+	return err
+}
+
+func encodeJSON(value any) ([]byte, error) {
 	payload, err := json.Marshal(value)
 	if err != nil {
 		return nil, err

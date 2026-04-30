@@ -183,7 +183,9 @@ templates: []
 }
 
 func TestTemplateInitWithJSONOutput(t *testing.T) {
-	code, stdout, stderr := runCLI("template", "init", "gatling/scala-sbt", "--output", "json")
+	registryRoot, packRoot := writeTemplateCatalogFixture(t)
+
+	code, stdout, stderr := runCLI("template", "init", "gatling/scala-sbt", "--registry", "local:"+registryRoot, "--output", "json")
 
 	if code != exitOK {
 		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
@@ -194,6 +196,8 @@ func TestTemplateInitWithJSONOutput(t *testing.T) {
 
 	var result struct {
 		Template string `json:"template"`
+		Version  string `json:"version"`
+		Source   string `json:"source"`
 		Status   string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
@@ -202,8 +206,32 @@ func TestTemplateInitWithJSONOutput(t *testing.T) {
 	if result.Template != "gatling/scala-sbt" {
 		t.Fatalf("expected template gatling/scala-sbt, got %q", result.Template)
 	}
+	if result.Version != "0.1.0" {
+		t.Fatalf("expected version 0.1.0, got %q", result.Version)
+	}
+	if result.Source != "local:"+packRoot {
+		t.Fatalf("expected source local:%s, got %q", packRoot, result.Source)
+	}
 	if result.Status != "coming_soon" {
 		t.Fatalf("expected status coming_soon, got %q", result.Status)
+	}
+}
+
+func TestTemplateInitReportsUnknownTemplate(t *testing.T) {
+	registryRoot, _ := writeTemplateCatalogFixture(t)
+
+	code, stdout, stderr := runCLI("template", "init", "missing/template", "--registry", "local:"+registryRoot)
+
+	if code != exitUsage {
+		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	for _, want := range []string{"template not found", "missing/template"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected error to contain %q, got %q", want, stderr)
+		}
 	}
 }
 
