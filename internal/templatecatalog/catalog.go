@@ -88,6 +88,21 @@ type SourceFetcher struct {
 	HTTPClient *http.Client
 }
 
+// SourceError adds user-facing context to source loading failures.
+type SourceError struct {
+	Source string
+	What   string
+	Err    error
+}
+
+func (e SourceError) Error() string {
+	return fmt.Sprintf("%s %q: %v", e.What, e.Source, e.Err)
+}
+
+func (e SourceError) Unwrap() error {
+	return e.Err
+}
+
 // LoadRegistry loads and validates a registry manifest from source.
 func (f SourceFetcher) LoadRegistry(ctx context.Context, source string) (Registry, error) {
 	if source == "" {
@@ -96,16 +111,16 @@ func (f SourceFetcher) LoadRegistry(ctx context.Context, source string) (Registr
 
 	payload, err := f.readManifest(ctx, source, registryFileName)
 	if err != nil {
-		return Registry{}, err
+		return Registry{}, SourceError{Source: sourceOrDefault(source), What: "read template registry", Err: err}
 	}
 
 	var registry Registry
 	if err := yaml.Unmarshal(payload, &registry); err != nil {
-		return Registry{}, fmt.Errorf("decode registry: %w", err)
+		return Registry{}, SourceError{Source: sourceOrDefault(source), What: "decode template registry", Err: err}
 	}
 
 	if err := ValidateRegistry(registry); err != nil {
-		return Registry{}, err
+		return Registry{}, SourceError{Source: sourceOrDefault(source), What: "validate template registry", Err: err}
 	}
 
 	return registry, nil
@@ -115,16 +130,16 @@ func (f SourceFetcher) LoadRegistry(ctx context.Context, source string) (Registr
 func (f SourceFetcher) LoadPack(ctx context.Context, source string) (Pack, error) {
 	payload, err := f.readManifest(ctx, source, packFileName)
 	if err != nil {
-		return Pack{}, err
+		return Pack{}, SourceError{Source: source, What: "read template pack", Err: err}
 	}
 
 	var pack Pack
 	if err := yaml.Unmarshal(payload, &pack); err != nil {
-		return Pack{}, fmt.Errorf("decode pack: %w", err)
+		return Pack{}, SourceError{Source: source, What: "decode template pack", Err: err}
 	}
 
 	if err := ValidatePack(pack); err != nil {
-		return Pack{}, err
+		return Pack{}, SourceError{Source: source, What: "validate template pack", Err: err}
 	}
 
 	return pack, nil
@@ -134,16 +149,16 @@ func (f SourceFetcher) LoadPack(ctx context.Context, source string) (Pack, error
 func (f SourceFetcher) LoadTemplate(ctx context.Context, packSource string, templatePath string) (Template, error) {
 	payload, err := f.readManifest(ctx, joinSource(packSource, templatePath), templateFileName)
 	if err != nil {
-		return Template{}, err
+		return Template{}, SourceError{Source: joinSource(packSource, templatePath), What: "read template manifest", Err: err}
 	}
 
 	var template Template
 	if err := yaml.Unmarshal(payload, &template); err != nil {
-		return Template{}, fmt.Errorf("decode template: %w", err)
+		return Template{}, SourceError{Source: joinSource(packSource, templatePath), What: "decode template manifest", Err: err}
 	}
 
 	if err := ValidateTemplate(template); err != nil {
-		return Template{}, err
+		return Template{}, SourceError{Source: joinSource(packSource, templatePath), What: "validate template manifest", Err: err}
 	}
 
 	return template, nil
@@ -316,7 +331,16 @@ func readLocalManifest(root string, manifest string) ([]byte, error) {
 		return nil, errors.New("local source path is required")
 	}
 
-	return os.ReadFile(filepath.Join(root, manifest))
+	path := filepath.Join(root, manifest)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%s not found; check the source path and expected manifest name", path)
+		}
+		return nil, err
+	}
+
+	return payload, nil
 }
 
 func githubRawURL(repo string, manifest string) string {
@@ -345,4 +369,11 @@ func joinSource(source string, child string) string {
 	default:
 		return filepath.Join(source, child)
 	}
+}
+
+func sourceOrDefault(source string) string {
+	if source == "" {
+		return DefaultRegistrySource
+	}
+	return source
 }

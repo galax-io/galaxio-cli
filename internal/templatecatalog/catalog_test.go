@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -164,6 +165,58 @@ func TestValidateRegistryRejectsMissingPacks(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestLoadRegistryWrapsDecodeErrors(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, registryFileName, `apiVersion: [`)
+
+	_, err := SourceFetcher{}.LoadRegistry(context.Background(), root)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "decode template registry") {
+		t.Fatalf("expected decode context, got %v", err)
+	}
+}
+
+func TestLoadPackWrapsMissingManifest(t *testing.T) {
+	root := t.TempDir()
+
+	_, err := SourceFetcher{}.LoadPack(context.Background(), root)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, want := range []string{"read template pack", "galaxio-pack.yaml", "not found"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error to contain %q, got %v", want, err)
+		}
+	}
+}
+
+func TestLoadTemplateWrapsValidationErrors(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "fake"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: fake
+engine: wrong
+inputs:
+  Name:
+    type: string
+files:
+  - from: files
+    to: .
+`)
+
+	_, err := SourceFetcher{}.LoadTemplate(context.Background(), root, "fake")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, want := range []string{"validate template manifest", "template engine must be go-template"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error to contain %q, got %v", want, err)
+		}
 	}
 }
 
