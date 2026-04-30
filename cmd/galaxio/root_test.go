@@ -60,7 +60,7 @@ func TestTemplateCommandPrintsHelp(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"Discover and validate", "init", "list", "validate"} {
+	for _, want := range []string{"Discover and validate", "configure", "init", "list", "validate"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected template help to contain %q, got %q", want, stdout)
 		}

@@ -84,6 +84,76 @@ func TestTemplateListWithJSONOutput(t *testing.T) {
 	}
 }
 
+func TestTemplateListUsesConfiguredRegistry(t *testing.T) {
+	registryRoot, packRoot := writeTemplateCatalogFixture(t)
+	t.Setenv(configEnv, filepath.Join(t.TempDir(), "config.yaml"))
+
+	code, stdout, stderr := runCLI("template", "configure", "--registry", "local:"+registryRoot)
+	if code != exitOK {
+		t.Fatalf("expected configure exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty configure stderr, got %q", stderr)
+	}
+
+	code, stdout, stderr = runCLI("template", "list")
+	if code != exitOK {
+		t.Fatalf("expected list exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty list stderr, got %q", stderr)
+	}
+	for _, want := range []string{"gatling/scala-sbt", "local:" + packRoot} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected configured registry output to contain %q, got %q", want, stdout)
+		}
+	}
+}
+
+func TestTemplateConfigureShowsDefaultRegistry(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	t.Setenv(configEnv, configFile)
+
+	code, stdout, stderr := runCLI("template", "configure", "--show")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	for _, want := range []string{"config: " + configFile, "registry: github:galax-io/galaxio-template-registry"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected configure output to contain %q, got %q", want, stdout)
+		}
+	}
+}
+
+func TestTemplateConfigureWritesRegistry(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	t.Setenv(configEnv, configFile)
+
+	code, stdout, stderr := runCLI("template", "configure", "--registry", "github:my-org/my-template-registry")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "registry: github:my-org/my-template-registry") {
+		t.Fatalf("expected written registry in output, got %q", stdout)
+	}
+
+	payload, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("read config file: %v", err)
+	}
+	if !strings.Contains(string(payload), "registry: github:my-org/my-template-registry") {
+		t.Fatalf("expected config file to contain registry, got %q", payload)
+	}
+}
+
 func TestTemplateListReportsMissingRegistry(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 
@@ -312,6 +382,78 @@ func TestTemplateInitRendersJSONOutput(t *testing.T) {
 	}
 	if result.Status != "rendered" {
 		t.Fatalf("expected rendered status, got %q", result.Status)
+	}
+}
+
+func TestTemplateInitRendersValuesFile(t *testing.T) {
+	registryRoot, _ := writeRenderableTemplateCatalogFixture(t)
+	destination := t.TempDir()
+	valuesFile := filepath.Join(t.TempDir(), "values.yaml")
+	writeTestFile(t, filepath.Dir(valuesFile), filepath.Base(valuesFile), "Name: payments\n")
+
+	code, stdout, stderr := runCLI(
+		"template",
+		"init",
+		"examples/service",
+		"--registry",
+		"local:"+registryRoot,
+		"--destination",
+		destination,
+		"--values",
+		valuesFile,
+	)
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "Rendered examples/service to ") {
+		t.Fatalf("expected render summary, got %q", stdout)
+	}
+
+	payload, err := os.ReadFile(filepath.Join(destination, "payments.txt"))
+	if err != nil {
+		t.Fatalf("read rendered file: %v", err)
+	}
+	if string(payload) != "hello payments\n" {
+		t.Fatalf("expected rendered values file payload, got %q", payload)
+	}
+}
+
+func TestTemplateInitSetOverridesValuesFile(t *testing.T) {
+	registryRoot, _ := writeRenderableTemplateCatalogFixture(t)
+	destination := t.TempDir()
+	valuesFile := filepath.Join(t.TempDir(), "values.yaml")
+	writeTestFile(t, filepath.Dir(valuesFile), filepath.Base(valuesFile), "Name: payments\n")
+
+	code, _, stderr := runCLI(
+		"template",
+		"init",
+		"examples/service",
+		"--registry",
+		"local:"+registryRoot,
+		"--destination",
+		destination,
+		"--values",
+		valuesFile,
+		"--set",
+		"Name=orders",
+	)
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	payload, err := os.ReadFile(filepath.Join(destination, "orders.txt"))
+	if err != nil {
+		t.Fatalf("read rendered file: %v", err)
+	}
+	if string(payload) != "hello orders\n" {
+		t.Fatalf("expected --set override payload, got %q", payload)
+	}
+	if _, err := os.Stat(filepath.Join(destination, "payments.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected values-only file to be absent, stat err %v", err)
 	}
 }
 
