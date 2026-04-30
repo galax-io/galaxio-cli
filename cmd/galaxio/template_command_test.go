@@ -19,13 +19,13 @@ func TestTemplateListWithLocalRegistry(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"gatling/scala-sbt", "0.1.0", "local:" + packRoot, "Gatling Scala project with sbt"} {
+	for _, want := range []string{"gatling/scala-sbt", "coming soon", "local:" + packRoot, "Gatling Scala project with sbt"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected output to contain %q, got %q", want, stdout)
 		}
 	}
-	if strings.Contains(stdout, "coming soon") {
-		t.Fatalf("expected template list to omit placeholder status, got %q", stdout)
+	if strings.Contains(stdout, "\t0.1.0\t") {
+		t.Fatalf("expected placeholder template list to omit pack version, got %q", stdout)
 	}
 }
 
@@ -44,6 +44,7 @@ func TestTemplateListWithJSONOutput(t *testing.T) {
 	var refs []struct {
 		Name        string `json:"name"`
 		Pack        string `json:"pack"`
+		PackVersion string `json:"packVersion"`
 		Version     string `json:"version"`
 		Source      string `json:"source"`
 		Description string `json:"description"`
@@ -63,8 +64,11 @@ func TestTemplateListWithJSONOutput(t *testing.T) {
 	if ref.Pack != "gatling" {
 		t.Fatalf("expected pack gatling, got %q", ref.Pack)
 	}
-	if ref.Version != "0.1.0" {
-		t.Fatalf("expected version 0.1.0, got %q", ref.Version)
+	if ref.PackVersion != "0.1.0" {
+		t.Fatalf("expected pack version 0.1.0, got %q", ref.PackVersion)
+	}
+	if ref.Version != "" {
+		t.Fatalf("expected placeholder template version to be empty, got %q", ref.Version)
 	}
 	if ref.Source != "local:"+packRoot {
 		t.Fatalf("expected source local:%s, got %q", packRoot, ref.Source)
@@ -195,10 +199,11 @@ func TestTemplateInitWithJSONOutput(t *testing.T) {
 	}
 
 	var result struct {
-		Template string `json:"template"`
-		Version  string `json:"version"`
-		Source   string `json:"source"`
-		Status   string `json:"status"`
+		Template    string `json:"template"`
+		Version     string `json:"version"`
+		PackVersion string `json:"packVersion"`
+		Source      string `json:"source"`
+		Status      string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
 		t.Fatalf("decode json output: %v; output %q", err, stdout)
@@ -206,8 +211,11 @@ func TestTemplateInitWithJSONOutput(t *testing.T) {
 	if result.Template != "gatling/scala-sbt" {
 		t.Fatalf("expected template gatling/scala-sbt, got %q", result.Template)
 	}
-	if result.Version != "0.1.0" {
-		t.Fatalf("expected version 0.1.0, got %q", result.Version)
+	if result.Version != "" {
+		t.Fatalf("expected placeholder template version to be empty, got %q", result.Version)
+	}
+	if result.PackVersion != "0.1.0" {
+		t.Fatalf("expected pack version 0.1.0, got %q", result.PackVersion)
 	}
 	if result.Source != "local:"+packRoot {
 		t.Fatalf("expected source local:%s, got %q", packRoot, result.Source)

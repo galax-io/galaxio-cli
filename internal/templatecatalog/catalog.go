@@ -53,6 +53,7 @@ type Pack struct {
 // PackTemplate points to one template manifest inside a pack.
 type PackTemplate struct {
 	Name        string `yaml:"name"`
+	Version     string `yaml:"version"`
 	Path        string `yaml:"path"`
 	Description string `yaml:"description"`
 }
@@ -81,7 +82,8 @@ type TemplateFile struct {
 type TemplateRef struct {
 	Name        string `json:"name"`
 	Pack        string `json:"pack"`
-	Version     string `json:"version"`
+	PackVersion string `json:"packVersion"`
+	Version     string `json:"version,omitempty"`
 	Source      string `json:"source"`
 	Description string `json:"description,omitempty"`
 	Templates   int    `json:"templates"`
@@ -186,7 +188,8 @@ func (f SourceFetcher) ListTemplates(ctx context.Context, registrySource string)
 			result = append(result, TemplateRef{
 				Name:        pack.Name + "/" + template.Name,
 				Pack:        pack.Name,
-				Version:     pack.Version,
+				PackVersion: pack.Version,
+				Version:     template.Version,
 				Source:      registryPack.Source,
 				Description: template.Description,
 				Templates:   len(pack.Templates),

@@ -56,8 +56,11 @@ packs:
 	if templates[0].Name != "gatling/scala-sbt" {
 		t.Fatalf("expected gatling/scala-sbt, got %q", templates[0].Name)
 	}
-	if templates[0].Version != "0.1.0" {
-		t.Fatalf("expected version 0.1.0, got %q", templates[0].Version)
+	if templates[0].PackVersion != "0.1.0" {
+		t.Fatalf("expected pack version 0.1.0, got %q", templates[0].PackVersion)
+	}
+	if templates[0].Version != "" {
+		t.Fatalf("expected placeholder template version to be empty, got %q", templates[0].Version)
 	}
 	if !templates[0].Placeholder {
 		t.Fatal("expected placeholder template")
@@ -103,6 +106,52 @@ packs:
 	_, err := SourceFetcher{}.FindTemplate(context.Background(), registryRoot, "missing/template")
 	if !errors.Is(err, ErrTemplateNotFound) {
 		t.Fatalf("expected ErrTemplateNotFound, got %v", err)
+	}
+}
+
+func TestListTemplatesUsesTemplateVersionWhenPresent(t *testing.T) {
+	packRoot := t.TempDir()
+	writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.2.3
+    path: renderable
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  Name:
+    type: string
+files:
+  - from: files
+    to: .
+`)
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+	templates, err := SourceFetcher{}.ListTemplates(context.Background(), registryRoot)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if templates[0].PackVersion != "0.1.0" {
+		t.Fatalf("expected pack version 0.1.0, got %q", templates[0].PackVersion)
+	}
+	if templates[0].Version != "1.2.3" {
+		t.Fatalf("expected template version 1.2.3, got %q", templates[0].Version)
+	}
+	if templates[0].Placeholder {
+		t.Fatal("expected renderable template")
 	}
 }
 
