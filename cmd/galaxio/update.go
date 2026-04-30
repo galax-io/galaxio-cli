@@ -12,6 +12,7 @@ type updateOptions struct {
 	repo    string
 	version string
 	dryRun  bool
+	output  string
 }
 
 func newUpdateCommand() *cobra.Command {
@@ -28,6 +29,10 @@ func newUpdateCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(opts.output); err != nil {
+				return err
+			}
+
 			executable, err := os.Executable()
 			if err != nil {
 				return RuntimeError{Err: fmt.Errorf("resolve executable path: %w", err)}
@@ -44,7 +49,7 @@ func newUpdateCommand() *cobra.Command {
 				return RuntimeError{Err: err}
 			}
 
-			if err := printUpdateResult(cmd, result); err != nil {
+			if err := printUpdateResult(cmd, result, opts.output); err != nil {
 				return RuntimeError{Err: err}
 			}
 			return nil
@@ -54,11 +59,24 @@ func newUpdateCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.repo, "repo", "galax-io/galaxio-cli", "GitHub repository to update from")
 	cmd.Flags().StringVar(&opts.version, "version", "", "target version to install")
 	cmd.Flags().BoolVar(&opts.dryRun, "dry-run", false, "check for an update without installing it")
+	cmd.Flags().StringVarP(&opts.output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
 }
 
-func printUpdateResult(cmd *cobra.Command, result selfupdate.Result) error {
+func printUpdateResult(cmd *cobra.Command, result selfupdate.Result, output string) error {
+	if err := validateOutputFormat(output); err != nil {
+		return err
+	}
+	if output == outputJSON {
+		payload, err := encodeJSON(result)
+		if err != nil {
+			return err
+		}
+		_, err = cmd.OutOrStdout().Write(payload)
+		return err
+	}
+
 	switch {
 	case result.Updated:
 		_, err := fmt.Fprintf(cmd.OutOrStdout(), "Updated galaxio from %s to %s\n", result.CurrentVersion, result.TargetVersion)

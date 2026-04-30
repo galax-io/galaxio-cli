@@ -9,6 +9,7 @@ import (
 
 func newDoctorCommand() *cobra.Command {
 	var registry string
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -21,10 +22,30 @@ func newDoctorCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(output); err != nil {
+				return err
+			}
+
 			fetcher := templatecatalog.SourceFetcher{}
 			templates, err := fetcher.ListPacks(cmd.Context(), registry)
 			if err != nil {
 				return RuntimeError{Err: err}
+			}
+
+			if output == outputJSON {
+				payload, err := encodeJSON(map[string]interface{}{
+					"registry":        registry,
+					"status":          "ok",
+					"templateEntries": len(templates),
+				})
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				_, err = cmd.OutOrStdout().Write(payload)
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				return nil
 			}
 
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "OK template registry: %s\n", registry)
@@ -41,6 +62,7 @@ func newDoctorCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&registry, "registry", templatecatalog.DefaultRegistrySource, "template registry source")
+	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
 }

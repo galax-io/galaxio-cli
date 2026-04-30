@@ -75,12 +75,12 @@ type TemplateFile struct {
 
 // TemplateRef is a resolved template available to users.
 type TemplateRef struct {
-	Name        string
-	Pack        string
-	Source      string
-	Description string
-	Templates   int
-	Placeholder bool
+	Name        string `json:"name"`
+	Pack        string `json:"pack"`
+	Source      string `json:"source"`
+	Description string `json:"description,omitempty"`
+	Templates   int    `json:"templates"`
+	Placeholder bool   `json:"placeholder"`
 }
 
 // SourceFetcher loads manifest files from local paths or remote sources.
