@@ -32,6 +32,7 @@ func newTemplateCommand() *cobra.Command {
 
 func newTemplateListCommand() *cobra.Command {
 	var registry string
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -44,9 +45,25 @@ func newTemplateListCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(output); err != nil {
+				return err
+			}
+
 			packs, err := (templatecatalog.SourceFetcher{}).ListPacks(cmd.Context(), registry)
 			if err != nil {
 				return RuntimeError{Err: err}
+			}
+
+			if output == outputJSON {
+				payload, err := encodeJSON(packs)
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				_, err = cmd.OutOrStdout().Write(payload)
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				return nil
 			}
 
 			for _, pack := range packs {
@@ -69,11 +86,14 @@ func newTemplateListCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&registry, "registry", templatecatalog.DefaultRegistrySource, "template registry source")
+	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
 }
 
 func newTemplateInitCommand() *cobra.Command {
+	var output string
+
 	cmd := &cobra.Command{
 		Use:   "init <template>",
 		Short: "Initialize a project from a template.",
@@ -85,6 +105,24 @@ func newTemplateInitCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(output); err != nil {
+				return err
+			}
+			if output == outputJSON {
+				payload, err := encodeJSON(map[string]string{
+					"template": args[0],
+					"status":   "coming_soon",
+				})
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				_, err = cmd.OutOrStdout().Write(payload)
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				return nil
+			}
+
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Template %s is coming soon\n", args[0])
 			if err != nil {
 				return RuntimeError{Err: err}
@@ -93,10 +131,14 @@ func newTemplateInitCommand() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
+
 	return cmd
 }
 
 func newTemplateValidateCommand() *cobra.Command {
+	var output string
+
 	cmd := &cobra.Command{
 		Use:   "validate <source>",
 		Short: "Validate a template pack.",
@@ -108,9 +150,28 @@ func newTemplateValidateCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(output); err != nil {
+				return err
+			}
+
 			source := args[0]
 			if err := (templatecatalog.SourceFetcher{}).ValidateSource(cmd.Context(), source); err != nil {
 				return RuntimeError{Err: err}
+			}
+
+			if output == outputJSON {
+				payload, err := encodeJSON(map[string]string{
+					"source": source,
+					"status": "valid",
+				})
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				_, err = cmd.OutOrStdout().Write(payload)
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				return nil
 			}
 
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Template pack %s is valid\n", source)
@@ -121,6 +182,8 @@ func newTemplateValidateCommand() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 
 	return cmd
 }

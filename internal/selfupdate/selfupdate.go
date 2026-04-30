@@ -39,11 +39,11 @@ type Options struct {
 
 // Result describes the outcome of a self-update run.
 type Result struct {
-	CurrentVersion string
-	TargetVersion  string
-	Updated        bool
-	DryRun         bool
-	AssetName      string
+	CurrentVersion string `json:"currentVersion"`
+	TargetVersion  string `json:"targetVersion"`
+	Updated        bool   `json:"updated"`
+	DryRun         bool   `json:"dryRun"`
+	AssetName      string `json:"assetName,omitempty"`
 }
 
 // Updater updates galaxio from GitHub Releases.

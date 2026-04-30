@@ -8,7 +8,9 @@ import (
 )
 
 func newVersionCommand() *cobra.Command {
-	return &cobra.Command{
+	var output string
+
+	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print version information.",
 		Long:  "Print version, commit, and build date information for the galaxio binary.",
@@ -19,13 +21,44 @@ func newVersionCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), versionInfo().String())
+			if err := validateOutputFormat(output); err != nil {
+				return err
+			}
+
+			info := versionInfo()
+			if output == outputJSON {
+				payload, err := encodeJSON(versionOutput{
+					Version: info.CleanVersion(),
+					Commit:  info.Commit,
+					Date:    info.Date,
+				})
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				_, err = cmd.OutOrStdout().Write(payload)
+				if err != nil {
+					return RuntimeError{Err: err}
+				}
+				return nil
+			}
+
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), info.String())
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
+
+	return cmd
+}
+
+type versionOutput struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	Date    string `json:"date"`
 }
 
 func versionInfo() buildinfo.Info {

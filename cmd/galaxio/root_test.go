@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/galax-io/galaxio-cli/internal/buildinfo"
+	"github.com/galax-io/galaxio-cli/internal/selfupdate"
+	"github.com/spf13/cobra"
 )
 
 func runCLI(args ...string) (int, string, string) {
@@ -134,8 +137,43 @@ func TestVersionCommandPrintsBuildInfo(t *testing.T) {
 	}
 }
 
+func TestVersionCommandPrintsJSONOutput(t *testing.T) {
+	originalVersion := buildinfo.Version
+	buildinfo.Version = "v1.2.3"
+	t.Cleanup(func() {
+		buildinfo.Version = originalVersion
+	})
+
+	code, stdout, stderr := runCLI("version", "--output", "json")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d", exitOK, code)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+
+	var result struct {
+		Version string `json:"version"`
+		Commit  string `json:"commit"`
+		Date    string `json:"date"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("decode json output: %v; output %q", err, stdout)
+	}
+	if result.Version != "1.2.3" {
+		t.Fatalf("expected clean version 1.2.3 in json output, got %#v", result)
+	}
+	if result.Commit == "" {
+		t.Fatalf("expected commit in json output, got %#v", result)
+	}
+	if result.Date == "" {
+		t.Fatalf("expected build date in json output, got %#v", result)
+	}
+}
+
 func TestVersionCommandTrimsTagPrefix(t *testing.T) {
-	originalVersion := versionInfo().Version
+	originalVersion := buildinfo.Version
 	buildinfo.Version = "v1.2.3"
 	t.Cleanup(func() {
 		buildinfo.Version = originalVersion
@@ -165,6 +203,63 @@ func TestVersionFlagPrintsVersion(t *testing.T) {
 	}
 	if want := "galaxio version dev"; !strings.Contains(stdout, want) {
 		t.Fatalf("expected version flag output to contain %q, got %q", want, stdout)
+	}
+}
+
+func TestUpdateResultPrintsJSONOutput(t *testing.T) {
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+
+	err := printUpdateResult(cmd, selfupdate.Result{
+		CurrentVersion: "0.1.0",
+		TargetVersion:  "0.2.0",
+		DryRun:         true,
+		AssetName:      "galaxio_0.2.0_darwin_arm64.tar.gz",
+	}, outputJSON)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	var result struct {
+		CurrentVersion string `json:"currentVersion"`
+		TargetVersion  string `json:"targetVersion"`
+		Updated        bool   `json:"updated"`
+		DryRun         bool   `json:"dryRun"`
+		AssetName      string `json:"assetName"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode json output: %v; output %q", err, stdout.String())
+	}
+	if result.CurrentVersion != "0.1.0" {
+		t.Fatalf("expected current version 0.1.0, got %q", result.CurrentVersion)
+	}
+	if result.TargetVersion != "0.2.0" {
+		t.Fatalf("expected target version 0.2.0, got %q", result.TargetVersion)
+	}
+	if !result.DryRun {
+		t.Fatalf("expected dry run result, got %#v", result)
+	}
+	if result.Updated {
+		t.Fatalf("expected update not installed during dry run, got %#v", result)
+	}
+	if result.AssetName != "galaxio_0.2.0_darwin_arm64.tar.gz" {
+		t.Fatalf("expected asset name, got %q", result.AssetName)
+	}
+}
+
+func TestUpdateRejectsUnsupportedOutputBeforeRunning(t *testing.T) {
+	code, stdout, stderr := runCLI("update", "--output", "xml")
+
+	if code != exitUsage {
+		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, `unsupported output format "xml"`) {
+		t.Fatalf("expected unsupported output error, got %q", stderr)
 	}
 }
 
