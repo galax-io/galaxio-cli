@@ -225,6 +225,112 @@ func TestTemplateInitWithJSONOutput(t *testing.T) {
 	}
 }
 
+func TestTemplateInitRendersLocalTemplate(t *testing.T) {
+	registryRoot, _ := writeRenderableTemplateCatalogFixture(t)
+	destination := t.TempDir()
+
+	code, stdout, stderr := runCLI(
+		"template",
+		"init",
+		"examples/service",
+		"--registry",
+		"local:"+registryRoot,
+		"--destination",
+		destination,
+		"--set",
+		"Name=orders",
+	)
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "Rendered examples/service to ") {
+		t.Fatalf("expected render summary, got %q", stdout)
+	}
+
+	renderedPath := filepath.Join(destination, "orders.txt")
+	payload, err := os.ReadFile(renderedPath)
+	if err != nil {
+		t.Fatalf("read rendered file: %v", err)
+	}
+	if string(payload) != "hello orders\n" {
+		t.Fatalf("expected rendered payload, got %q", payload)
+	}
+}
+
+func TestTemplateInitRendersJSONOutput(t *testing.T) {
+	registryRoot, _ := writeRenderableTemplateCatalogFixture(t)
+	destination := t.TempDir()
+
+	code, stdout, stderr := runCLI(
+		"template",
+		"init",
+		"examples/service",
+		"--registry",
+		"local:"+registryRoot,
+		"--destination",
+		destination,
+		"--output",
+		"json",
+	)
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+
+	var result struct {
+		Template    string `json:"template"`
+		Version     string `json:"version"`
+		PackVersion string `json:"packVersion"`
+		Destination string `json:"destination"`
+		Files       int    `json:"files"`
+		Status      string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("decode json output: %v; output %q", err, stdout)
+	}
+	if result.Template != "examples/service" {
+		t.Fatalf("expected template examples/service, got %q", result.Template)
+	}
+	if result.Version != "1.2.3" {
+		t.Fatalf("expected version 1.2.3, got %q", result.Version)
+	}
+	if result.PackVersion != "0.1.0" {
+		t.Fatalf("expected pack version 0.1.0, got %q", result.PackVersion)
+	}
+	if result.Destination == "" {
+		t.Fatalf("expected destination in result, got %#v", result)
+	}
+	if result.Files != 1 {
+		t.Fatalf("expected one rendered file, got %d", result.Files)
+	}
+	if result.Status != "rendered" {
+		t.Fatalf("expected rendered status, got %q", result.Status)
+	}
+}
+
+func TestTemplateInitRejectsInvalidSetValue(t *testing.T) {
+	registryRoot, _ := writeRenderableTemplateCatalogFixture(t)
+
+	code, stdout, stderr := runCLI("template", "init", "examples/service", "--registry", "local:"+registryRoot, "--set", "Name")
+
+	if code != exitUsage {
+		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "--set must use Key=Value") {
+		t.Fatalf("expected invalid set error, got %q", stderr)
+	}
+}
+
 func TestTemplateInitReportsUnknownTemplate(t *testing.T) {
 	registryRoot, _ := writeTemplateCatalogFixture(t)
 
@@ -323,6 +429,45 @@ func TestTemplateInitRequiresTemplateName(t *testing.T) {
 	if !strings.Contains(stderr, "accepts 1 arg") {
 		t.Fatalf("expected argument validation error, got %q", stderr)
 	}
+}
+
+func writeRenderableTemplateCatalogFixture(t *testing.T) (string, string) {
+	t.Helper()
+
+	packRoot := t.TempDir()
+	writeTestFile(t, packRoot, "galaxio-pack.yaml", `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: service
+    version: 1.2.3
+    path: service
+    description: Example service
+`)
+	writeTestFile(t, packRoot, "service/galaxio-template.yaml", `apiVersion: galaxio.io/v1
+kind: Template
+name: service
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: default
+files:
+  - from: files
+    to: .
+`)
+	writeTestFile(t, packRoot, "service/files/{{ .Name }}.txt", "hello {{ .Name }}\n")
+
+	registryRoot := t.TempDir()
+	writeTestFile(t, registryRoot, "galaxio-registry.yaml", `apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:`+packRoot+`
+`)
+
+	return registryRoot, packRoot
 }
 
 func writeTemplateCatalogFixture(t *testing.T) (string, string) {
