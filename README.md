@@ -19,6 +19,20 @@ Install the latest version with Go:
 go install github.com/galax-io/galaxio-cli/cmd/galaxio@latest
 ```
 
+Install a tagged release binary:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/install.sh | sh
+GALAXIO_VERSION=0.1.1 sh scripts/install.sh
+```
+
+The installer writes to `$HOME/.local/bin` by default. Add it to `PATH` if
+needed:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 Or download a prebuilt binary from the
 [GitHub Releases](https://github.com/galax-io/galaxio-cli/releases) page.
 
@@ -52,6 +66,13 @@ galaxio completion bash
 galaxio completion zsh
 galaxio completion fish
 galaxio completion powershell
+```
+
+Example zsh install:
+
+```sh
+mkdir -p ~/.zsh/completion
+galaxio completion zsh > ~/.zsh/completion/_galaxio
 ```
 
 Update `galaxio` from GitHub Releases:

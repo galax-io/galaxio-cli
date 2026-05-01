@@ -242,12 +242,13 @@ func (f SourceFetcher) Render(ctx context.Context, opts RenderOptions) (RenderRe
 		return RenderResult{}, fmt.Errorf("template %q is coming soon", ref.Name)
 	}
 
-	manifest, err := f.LoadTemplate(ctx, ref.Source, ref.Path)
+	renderSource := ref.renderSource()
+	manifest, err := f.LoadTemplate(ctx, renderSource, ref.Path)
 	if err != nil {
 		return RenderResult{}, err
 	}
 
-	sourceRoot, cleanup, err := f.materializeSource(ctx, ref.Source)
+	sourceRoot, cleanup, err := f.materializeSource(ctx, renderSource)
 	if err != nil {
 		return RenderResult{}, err
 	}
@@ -443,11 +444,11 @@ func (f SourceFetcher) materializeSource(ctx context.Context, source string) (st
 }
 
 func (f SourceFetcher) materializeGitHubSource(ctx context.Context, repo string) (string, func(), error) {
-	owner, name, subpath, err := parseGitHubSource(repo)
+	ref, err := parseGitHubSource(repo, "main")
 	if err != nil {
 		return "", nil, err
 	}
-	payload, err := f.readURL(ctx, fmt.Sprintf("https://codeload.github.com/%s/%s/zip/refs/heads/main", owner, name))
+	payload, err := f.readURL(ctx, ref.archiveURL())
 	if err != nil {
 		return "", nil, err
 	}
@@ -480,7 +481,7 @@ func (f SourceFetcher) materializeGitHubSource(ctx context.Context, repo string)
 		return "", nil, fmt.Errorf("unexpected GitHub archive layout for %q", repo)
 	}
 
-	return filepath.Join(tempDir, entries[0].Name(), filepath.FromSlash(subpath)), cleanup, nil
+	return filepath.Join(tempDir, entries[0].Name(), filepath.FromSlash(ref.Subpath)), cleanup, nil
 }
 
 func readLocalManifest(root string, manifest string) ([]byte, error) {
@@ -501,29 +502,70 @@ func readLocalManifest(root string, manifest string) ([]byte, error) {
 }
 
 func githubRawURL(repo string, manifest string) string {
-	parts := strings.Split(strings.Trim(repo, "/"), "/")
-	if len(parts) < 2 {
+	ref, err := parseGitHubSource(repo, "main")
+	if err != nil {
 		return "https://raw.githubusercontent.com/" + strings.Trim(repo, "/") + "/main/" + manifest
 	}
 
 	path := ""
-	if len(parts) > 2 {
-		path = strings.Join(parts[2:], "/") + "/"
+	if ref.Subpath != "" {
+		path = strings.Trim(ref.Subpath, "/") + "/"
 	}
 
-	return "https://raw.githubusercontent.com/" + parts[0] + "/" + parts[1] + "/main/" + path + manifest
+	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s%s", ref.Owner, ref.Repo, ref.Ref, path, manifest)
 }
 
-func parseGitHubSource(repo string) (string, string, string, error) {
+type githubSource struct {
+	Owner   string
+	Repo    string
+	Ref     string
+	Subpath string
+}
+
+func parseGitHubSource(repo string, fallbackRef string) (githubSource, error) {
+	repo, ref, hasRef := strings.Cut(repo, "#")
+	if !hasRef || ref == "" {
+		ref = fallbackRef
+	}
+
 	parts := strings.Split(strings.Trim(repo, "/"), "/")
 	if len(parts) < 2 {
-		return "", "", "", fmt.Errorf("github source must be owner/repo, got %q", repo)
+		return githubSource{}, fmt.Errorf("github source must be owner/repo, got %q", repo)
 	}
+	if parts[1] == "" {
+		return githubSource{}, fmt.Errorf("github source must include repository name, got %q", repo)
+	}
+
 	subpath := ""
 	if len(parts) > 2 {
 		subpath = strings.Join(parts[2:], "/")
 	}
-	return parts[0], parts[1], subpath, nil
+	return githubSource{
+		Owner:   parts[0],
+		Repo:    parts[1],
+		Ref:     ref,
+		Subpath: subpath,
+	}, nil
+}
+
+func (s githubSource) archiveURL() string {
+	refPath := s.Ref
+	if s.Ref == "main" || s.Ref == "master" {
+		refPath = "refs/heads/" + s.Ref
+	} else if strings.HasPrefix(s.Ref, "v") {
+		refPath = "refs/tags/" + s.Ref
+	}
+	return fmt.Sprintf("https://codeload.github.com/%s/%s/zip/%s", s.Owner, s.Repo, refPath)
+}
+
+func (r TemplateRef) renderSource() string {
+	if !strings.HasPrefix(r.Source, "github:") {
+		return r.Source
+	}
+	if r.PackVersion == "" {
+		return r.Source
+	}
+	return r.Source + "#v" + strings.TrimPrefix(r.PackVersion, "v")
 }
 
 func extractZip(reader *zip.Reader, destination string) error {

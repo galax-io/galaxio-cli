@@ -352,9 +352,6 @@ func writeTemplateList(writer io.Writer, templates []templatecatalog.TemplateRef
 }
 
 func templateListVersion(template templatecatalog.TemplateRef) string {
-	if template.Version != "" {
-		return template.Version
-	}
 	if template.Placeholder {
 		return "coming soon"
 	}

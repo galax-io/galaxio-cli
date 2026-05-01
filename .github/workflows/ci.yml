@@ -39,7 +39,7 @@ jobs:
 
       - name: Check coverage threshold
         env:
-          COVERAGE_THRESHOLD: "65.0"
+          COVERAGE_THRESHOLD: "80.0"
         run: |
           coverage=$(go tool cover -func=coverage.out | awk '/^total:/ { gsub("%", "", $3); print $3 }')
           awk -v coverage="$coverage" -v threshold="$COVERAGE_THRESHOLD" 'BEGIN {

@@ -36,6 +36,19 @@ packs:
     description: Gatling performance testing templates
 ```
 
+For GitHub packs, `template init` renders from the release tag that matches the
+pack version. A listed pack version `0.3.0` resolves to repository tag `v0.3.0`.
+The registry still points at the repository, not at a pinned tag:
+
+```yaml
+packs:
+  - name: gatling
+    source: github:galax-io/templates-gatling
+```
+
+`template list` reads the latest registry and pack manifests. `template init`
+uses the listed pack version as the immutable GitHub release tag.
+
 ## Planned CLI Flow
 
 ```sh
