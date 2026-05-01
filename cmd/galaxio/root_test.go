@@ -9,6 +9,7 @@ import (
 
 	"github.com/galax-io/galaxio-cli/internal/buildinfo"
 	"github.com/galax-io/galaxio-cli/internal/selfupdate"
+	"github.com/galax-io/galaxio-cli/internal/templatecatalog"
 	"github.com/spf13/cobra"
 )
 
@@ -248,6 +249,103 @@ func TestUpdateResultPrintsJSONOutput(t *testing.T) {
 	}
 	if result.AssetName != "galaxio_0.2.0_darwin_arm64.tar.gz" {
 		t.Fatalf("expected asset name, got %q", result.AssetName)
+	}
+}
+
+func TestUpdateResultPrintsTextBranches(t *testing.T) {
+	tests := []struct {
+		name   string
+		result selfupdate.Result
+		want   string
+	}{
+		{
+			name: "updated",
+			result: selfupdate.Result{
+				CurrentVersion: "0.1.0",
+				TargetVersion:  "0.2.0",
+				Updated:        true,
+			},
+			want: "Updated galaxio from 0.1.0 to 0.2.0",
+		},
+		{
+			name: "dry run no update",
+			result: selfupdate.Result{
+				CurrentVersion: "0.2.0",
+				DryRun:         true,
+			},
+			want: "galaxio is already up to date (0.2.0)",
+		},
+		{
+			name: "no update",
+			result: selfupdate.Result{
+				CurrentVersion: "0.2.0",
+			},
+			want: "galaxio is already up to date (0.2.0)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			cmd := &cobra.Command{}
+			cmd.SetOut(&stdout)
+
+			err := printUpdateResult(cmd, tt.result, outputText)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if !strings.Contains(stdout.String(), tt.want) {
+				t.Fatalf("expected %q, got %q", tt.want, stdout.String())
+			}
+		})
+	}
+}
+
+func TestConfigPathUsesEnvironmentOverride(t *testing.T) {
+	t.Setenv(configEnv, "/tmp/galaxio-test-config.yaml")
+
+	path, err := configPath()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if path != "/tmp/galaxio-test-config.yaml" {
+		t.Fatalf("expected env config path, got %q", path)
+	}
+}
+
+func TestConfigPathUsesHomeDirectory(t *testing.T) {
+	t.Setenv(configEnv, "")
+	t.Setenv("HOME", "/tmp/galaxio-home")
+
+	path, err := configPath()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if path != "/tmp/galaxio-home/.galaxio/config.yaml" {
+		t.Fatalf("expected home config path, got %q", path)
+	}
+}
+
+func TestWriteTemplateListCoversVersionFallbacks(t *testing.T) {
+	var stdout bytes.Buffer
+	err := writeTemplateList(&stdout, []templatecatalog.TemplateRef{
+		{Name: "examples/service", PackVersion: "0.1.0", Version: "1.2.3", Source: "local:/tmp/templates"},
+		{Name: "gatling/scala-sbt", Placeholder: true, Source: "local:/tmp/templates"},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	for _, want := range []string{"examples/service\t0.1.0", "gatling/scala-sbt\tcoming soon"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("expected output to contain %q, got %q", want, stdout.String())
+		}
+	}
+}
+
+func TestEncodeJSONRejectsUnsupportedValue(t *testing.T) {
+	_, err := encodeJSON(func() {})
+	if err == nil {
+		t.Fatal("expected json error")
 	}
 }
 

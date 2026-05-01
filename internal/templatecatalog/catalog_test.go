@@ -1,6 +1,8 @@
 package templatecatalog
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -339,6 +341,116 @@ files:
 	}
 }
 
+func TestRenderFromGitHubSourceUsesPackVersionTag(t *testing.T) {
+	archive := zipSource(t, "templates-gatling-0.3.0/service/files/{{ .Name }}.txt", "hello {{ .Name }}\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/galax-io/templates-gatling/main/galaxio-pack.yaml":
+			_, _ = w.Write([]byte(`apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.3.0
+templates:
+  - name: service
+    version: service-local-version
+    path: service
+`))
+		case "/galax-io/templates-gatling/v0.3.0/service/galaxio-template.yaml":
+			_, _ = w.Write([]byte(`apiVersion: galaxio.io/v1
+kind: Template
+name: service
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: default
+files:
+  - from: files
+    to: .
+`))
+		case "/galax-io/templates-gatling/zip/refs/tags/v0.3.0":
+			_, _ = w.Write(archive)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, `apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: github:galax-io/templates-gatling
+`)
+
+	destination := t.TempDir()
+	result, err := (SourceFetcher{HTTPClient: rewriteClient(t, server.URL)}).Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/service",
+		Destination:    destination,
+		Values:         map[string]string{"Name": "orders"},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.PackVersion != "0.3.0" || result.Files != 1 {
+		t.Fatalf("unexpected render result %#v", result)
+	}
+
+	payload, err := os.ReadFile(filepath.Join(destination, "orders.txt"))
+	if err != nil {
+		t.Fatalf("read rendered file: %v", err)
+	}
+	if string(payload) != "hello orders\n" {
+		t.Fatalf("unexpected rendered payload %q", payload)
+	}
+}
+
+func TestMaterializeSourceRejectsURLSources(t *testing.T) {
+	_, _, err := SourceFetcher{}.materializeSource(context.Background(), "https://example.com/templates")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "URL sources is not supported") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestRenderRejectsEscapingTemplatePath(t *testing.T) {
+	registryRoot, _ := writeRenderablePack(t)
+	_, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    t.TempDir(),
+		Values:         map[string]string{"Name": "../escape"},
+	})
+	if err == nil {
+		t.Fatal("expected escaping path error")
+	}
+	if !strings.Contains(err.Error(), "template path escapes destination") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestParseGitHubSourceRejectsMissingRepoName(t *testing.T) {
+	_, err := parseGitHubSource("galax-io/", "main")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "owner/repo") {
+		t.Fatalf("expected owner/repo error, got %v", err)
+	}
+}
+
+func TestSourceErrorUnwrap(t *testing.T) {
+	cause := errors.New("boom")
+	err := SourceError{Source: "local:/tmp/missing", What: "read", Err: cause}
+	if !errors.Is(err, cause) {
+		t.Fatalf("expected source error to unwrap cause")
+	}
+}
+
 func TestValidateRegistryRejectsMissingPacks(t *testing.T) {
 	err := ValidateRegistry(Registry{
 		APIVersion: "galaxio.io/v1",
@@ -347,6 +459,122 @@ func TestValidateRegistryRejectsMissingPacks(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestValidateRegistryRejectsMissingPackNameAndSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		registry Registry
+		want     string
+	}{
+		{
+			name: "missing name",
+			registry: Registry{
+				APIVersion: "galaxio.io/v1",
+				Kind:       "TemplateRegistry",
+				Packs:      []RegistryPack{{Source: "github:galax-io/templates-gatling"}},
+			},
+			want: "registry pack name is required",
+		},
+		{
+			name: "missing source",
+			registry: Registry{
+				APIVersion: "galaxio.io/v1",
+				Kind:       "TemplateRegistry",
+				Packs:      []RegistryPack{{Name: "gatling"}},
+			},
+			want: `registry pack "gatling" source is required`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRegistry(tt.registry)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q error, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestValidatePackRejectsInvalidTemplateEntries(t *testing.T) {
+	tests := []struct {
+		name string
+		pack Pack
+		want string
+	}{
+		{
+			name: "missing template name",
+			pack: Pack{
+				APIVersion: "galaxio.io/v1",
+				Kind:       "TemplatePack",
+				Name:       "gatling",
+				Version:    "0.1.0",
+				Templates:  []PackTemplate{{Path: "scala-sbt"}},
+			},
+			want: "template name is required",
+		},
+		{
+			name: "template path escapes",
+			pack: Pack{
+				APIVersion: "galaxio.io/v1",
+				Kind:       "TemplatePack",
+				Name:       "gatling",
+				Version:    "0.1.0",
+				Templates:  []PackTemplate{{Name: "scala-sbt", Path: "../scala-sbt"}},
+			},
+			want: `template "scala-sbt" path must not contain '..'`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePack(tt.pack)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q error, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestValidateTemplateRejectsMissingInputsAndFiles(t *testing.T) {
+	tests := []struct {
+		name     string
+		template Template
+		want     string
+	}{
+		{
+			name: "missing inputs",
+			template: Template{
+				APIVersion: "galaxio.io/v1",
+				Kind:       "Template",
+				Name:       "scala-sbt",
+				Engine:     "go-template",
+				Files:      []TemplateFile{{From: "files", To: "."}},
+			},
+			want: "template inputs are required",
+		},
+		{
+			name: "missing files",
+			template: Template{
+				APIVersion: "galaxio.io/v1",
+				Kind:       "Template",
+				Name:       "scala-sbt",
+				Engine:     "go-template",
+				Inputs:     map[string]TemplateInput{"Name": {Type: "string"}},
+			},
+			want: "template files are required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTemplate(tt.template)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q error, got %v", tt.want, err)
+			}
+		})
 	}
 }
 
@@ -494,6 +722,25 @@ func rewriteClient(t *testing.T, baseURL string) *http.Client {
 	})
 
 	return &http.Client{Transport: transport}
+}
+
+func zipSource(t *testing.T, name string, body string) []byte {
+	t.Helper()
+
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	file, err := writer.Create(name)
+	if err != nil {
+		t.Fatalf("create zip entry: %v", err)
+	}
+	if _, err := file.Write([]byte(body)); err != nil {
+		t.Fatalf("write zip entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	return buffer.Bytes()
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

@@ -279,6 +279,31 @@ func TestExtractBinaryFromZip(t *testing.T) {
 	}
 }
 
+func TestArchiveAndExecutableNames(t *testing.T) {
+	if got := archiveName("v1.2.3", "windows", "amd64"); got != "galaxio_1.2.3_windows_amd64.zip" {
+		t.Fatalf("unexpected windows archive name %q", got)
+	}
+	if got := archiveName("1.2.3", "linux", "arm64"); got != "galaxio_1.2.3_linux_arm64.tar.gz" {
+		t.Fatalf("unexpected linux archive name %q", got)
+	}
+	if got := executableName("windows"); got != "galaxio.exe" {
+		t.Fatalf("unexpected windows executable name %q", got)
+	}
+	if got := executableName("darwin"); got != "galaxio" {
+		t.Fatalf("unexpected darwin executable name %q", got)
+	}
+}
+
+func TestFindAssetRejectsMissingAsset(t *testing.T) {
+	_, err := findAsset([]asset{{Name: "checksums.txt"}}, "galaxio_1.2.3_linux_amd64.tar.gz")
+	if err == nil {
+		t.Fatal("expected missing asset error")
+	}
+	if !strings.Contains(err.Error(), "release asset") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func serverURL(r *http.Request) string {
 	return "http://" + r.Host
 }
