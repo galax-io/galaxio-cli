@@ -407,6 +407,154 @@ packs:
 	}
 }
 
+func TestRenderFromGitHubSourceUsesCacheOnSecondRun(t *testing.T) {
+	t.Setenv(cacheEnv, t.TempDir())
+
+	archive := zipSource(t, "templates-gatling-0.3.0/service/files/{{ .Name }}.txt", "hello {{ .Name }}\n")
+	var archiveRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/galax-io/templates-gatling/main/galaxio-pack.yaml":
+			_, _ = w.Write([]byte(`apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.3.0
+templates:
+  - name: service
+    version: service-local-version
+    path: service
+`))
+		case "/galax-io/templates-gatling/v0.3.0/service/galaxio-template.yaml":
+			_, _ = w.Write([]byte(`apiVersion: galaxio.io/v1
+kind: Template
+name: service
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: default
+files:
+  - from: files
+    to: .
+`))
+		case "/galax-io/templates-gatling/zip/refs/tags/v0.3.0":
+			archiveRequests++
+			_, _ = w.Write(archive)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, `apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: github:galax-io/templates-gatling
+`)
+
+	fetcher := SourceFetcher{HTTPClient: rewriteClient(t, server.URL)}
+	for i := 0; i < 2; i++ {
+		_, err := fetcher.Render(context.Background(), RenderOptions{
+			RegistrySource: registryRoot,
+			TemplateName:   "examples/service",
+			Destination:    t.TempDir(),
+			Values:         map[string]string{"Name": "orders"},
+		})
+		if err != nil {
+			t.Fatalf("render %d failed: %v", i+1, err)
+		}
+	}
+
+	if archiveRequests != 1 {
+		t.Fatalf("expected one archive request, got %d", archiveRequests)
+	}
+}
+
+func TestClearCacheRemovesTemplateCacheDirectory(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv(cacheEnv, cacheRoot)
+
+	dir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("cache dir: %v", err)
+	}
+	path := filepath.Join(dir, "sources", "cached", "file.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cleared, err := ClearCache()
+	if err != nil {
+		t.Fatalf("clear cache: %v", err)
+	}
+	if cleared != dir {
+		t.Fatalf("expected cleared path %q, got %q", dir, cleared)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected cache dir removed, got %v", err)
+	}
+}
+
+func TestClearCacheReturnsPathWhenDirectoryDoesNotExist(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv(cacheEnv, cacheRoot)
+
+	dir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("cache dir: %v", err)
+	}
+	cleared, err := ClearCache()
+	if err != nil {
+		t.Fatalf("clear cache: %v", err)
+	}
+	if cleared != dir {
+		t.Fatalf("expected cleared path %q, got %q", dir, cleared)
+	}
+}
+
+func TestCacheReadyHandlesMissingMarkerAndDirectory(t *testing.T) {
+	root := t.TempDir()
+
+	ready, err := cacheReady(filepath.Join(root, "cache"), filepath.Join(root, "cache", ".ready"))
+	if err != nil {
+		t.Fatalf("cache ready returned error: %v", err)
+	}
+	if ready {
+		t.Fatal("expected cache to be not ready")
+	}
+}
+
+func TestCacheReadyRejectsNonRegularMarker(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, "cache")
+	marker := filepath.Join(cacheDir, ".ready")
+	if err := os.MkdirAll(marker, 0o755); err != nil {
+		t.Fatalf("mkdir marker dir: %v", err)
+	}
+
+	ready, err := cacheReady(cacheDir, marker)
+	if err != nil {
+		t.Fatalf("cache ready returned error: %v", err)
+	}
+	if ready {
+		t.Fatal("expected cache to be not ready for non-regular marker")
+	}
+}
+
+func TestSourceOrDefaultUsesFallback(t *testing.T) {
+	if got := sourceOrDefault(""); got != DefaultRegistrySource {
+		t.Fatalf("expected default source, got %q", got)
+	}
+	if got := sourceOrDefault("local:/tmp/registry"); got != "local:/tmp/registry" {
+		t.Fatalf("expected explicit source, got %q", got)
+	}
+}
+
 func TestMaterializeSourceRejectsURLSources(t *testing.T) {
 	_, _, err := SourceFetcher{}.materializeSource(context.Background(), "https://example.com/templates")
 	if err == nil {

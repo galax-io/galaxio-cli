@@ -61,9 +61,41 @@ func TestTemplateCommandPrintsHelp(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"Discover and validate", "configure", "init", "list", "validate"} {
+	for _, want := range []string{
+		"Discover, render, and validate",
+		"configure",
+		"init",
+		"list",
+		"validate",
+		"clear-cache",
+		"galaxio template init gatling/scala-sbt",
+		"--set Name=orders",
+		"--values ./template-values.yaml",
+	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected template help to contain %q, got %q", want, stdout)
+		}
+	}
+}
+
+func TestTemplateInitHelpShowsExamples(t *testing.T) {
+	code, stdout, stderr := runCLI("template", "init", "--help")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d", exitOK, code)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	for _, want := range []string{
+		"Initialize a project from a template",
+		"galaxio template init gatling/scala-sbt",
+		"--destination ./perf",
+		"--set Name=orders",
+		"--values ./template-values.yaml",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected init help to contain %q, got %q", want, stdout)
 		}
 	}
 }
@@ -329,16 +361,67 @@ func TestConfigPathUsesHomeDirectory(t *testing.T) {
 func TestWriteTemplateListCoversVersionFallbacks(t *testing.T) {
 	var stdout bytes.Buffer
 	err := writeTemplateList(&stdout, []templatecatalog.TemplateRef{
-		{Name: "examples/service", PackVersion: "0.1.0", Version: "1.2.3", Source: "local:/tmp/templates"},
-		{Name: "gatling/scala-sbt", Placeholder: true, Source: "local:/tmp/templates"},
+		{Name: "examples/service", Pack: "examples", PackVersion: "0.1.0", Version: "1.2.3", Source: "local:/tmp/templates"},
+		{Name: "gatling/scala-sbt", Pack: "gatling", PackVersion: "0.2.0", Placeholder: true, Source: "github:galax-io/templates-gatling"},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	for _, want := range []string{"examples/service\t0.1.0", "gatling/scala-sbt\tcoming soon"} {
+	for _, want := range []string{
+		"Pack: examples",
+		"Pack version: 0.1.0",
+		"Source: local:/tmp/templates",
+		"service",
+		"1.2.3",
+		"Pack: gatling",
+		"Pack version: 0.2.0",
+		"Source: github:galax-io/templates-gatling",
+		"scala-sbt",
+		"coming soon",
+	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("expected output to contain %q, got %q", want, stdout.String())
 		}
+	}
+}
+
+func TestGroupTemplatesByPackKeepsOrderAndVersions(t *testing.T) {
+	groups := groupTemplatesByPack([]templatecatalog.TemplateRef{
+		{Name: "examples/service", Pack: "examples", PackVersion: "0.1.0", Source: "local:/tmp/examples"},
+		{Name: "examples/worker", Pack: "examples", PackVersion: "0.1.0", Source: "local:/tmp/examples"},
+		{Name: "gatling/scala-sbt", Pack: "gatling", PackVersion: "0.2.0", Source: "github:galax-io/templates-gatling"},
+	})
+
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	if groups[0].Pack != "examples" || groups[0].PackVersion != "0.1.0" {
+		t.Fatalf("unexpected first group %#v", groups[0])
+	}
+	if len(groups[0].Templates) != 2 {
+		t.Fatalf("expected 2 templates in first group, got %d", len(groups[0].Templates))
+	}
+	if groups[1].Pack != "gatling" || groups[1].Source != "github:galax-io/templates-gatling" {
+		t.Fatalf("unexpected second group %#v", groups[1])
+	}
+}
+
+func TestTemplateDisplayNameAndVersionFallbacks(t *testing.T) {
+	if got := templateDisplayName(templatecatalog.TemplateRef{Name: "gatling/scala-sbt"}); got != "scala-sbt" {
+		t.Fatalf("expected short template name, got %q", got)
+	}
+	if got := templateDisplayName(templatecatalog.TemplateRef{Name: "standalone"}); got != "standalone" {
+		t.Fatalf("expected unchanged template name, got %q", got)
+	}
+
+	if got := templateListVersion(templatecatalog.TemplateRef{Version: "1.2.3", PackVersion: "0.1.0"}); got != "1.2.3" {
+		t.Fatalf("expected template version, got %q", got)
+	}
+	if got := templateListVersion(templatecatalog.TemplateRef{Placeholder: true}); got != "coming soon" {
+		t.Fatalf("expected coming soon placeholder, got %q", got)
+	}
+	if got := templateListVersion(templatecatalog.TemplateRef{PackVersion: "0.1.0"}); got != "0.1.0" {
+		t.Fatalf("expected pack version fallback, got %q", got)
 	}
 }
 

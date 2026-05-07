@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/galax-io/galaxio-cli/internal/templatecatalog"
 	"github.com/spf13/cobra"
@@ -16,7 +17,16 @@ func newTemplateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "template",
 		Short: "Discover and validate project templates.",
-		Long:  "Discover and validate project templates from Galaxio template registries.",
+		Long:  "Discover, render, and validate project templates from Galaxio template registries.",
+		Example: strings.Join([]string{
+			"  galaxio template list",
+			"  galaxio template list --registry local:/path/to/registry",
+			"  galaxio template init gatling/scala-sbt",
+			"  galaxio template init gatling/scala-sbt --destination ./load-tests",
+			"  galaxio template init gatling/scala-sbt --set Name=orders --set Package=org.example.performance",
+			"  galaxio template init gatling/scala-sbt --values ./template-values.yaml",
+			"  galaxio template clear-cache",
+		}, "\n"),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.NoArgs(cmd, args); err != nil {
 				return UsageError{Err: err}
@@ -30,6 +40,7 @@ func newTemplateCommand() *cobra.Command {
 
 	cmd.AddCommand(newTemplateListCommand())
 	cmd.AddCommand(newTemplateConfigureCommand())
+	cmd.AddCommand(newTemplateClearCacheCommand())
 	cmd.AddCommand(newTemplateInitCommand())
 	cmd.AddCommand(newTemplateValidateCommand())
 
@@ -136,6 +147,12 @@ func newTemplateInitCommand() *cobra.Command {
 		Use:   "init <template>",
 		Short: "Initialize a project from a template.",
 		Long:  "Initialize a project from a template resolved from a Galaxio template registry.",
+		Example: strings.Join([]string{
+			"  galaxio template init gatling/scala-sbt",
+			"  galaxio template init gatling/scala-sbt --destination ./perf",
+			"  galaxio template init gatling/scala-sbt --set Name=orders --set Package=org.example.performance",
+			"  galaxio template init gatling/scala-sbt --values ./template-values.yaml",
+		}, "\n"),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
 				return UsageError{Err: err}
@@ -209,6 +226,33 @@ func newTemplateInitCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output format: text or json")
 	cmd.Flags().StringVar(&valuesFile, "values", "", "YAML file with template values")
 	cmd.Flags().StringArrayVar(&values, "set", nil, "template value in Key=Value form")
+
+	return cmd
+}
+
+func newTemplateClearCacheCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "clear-cache",
+		Short: "Clear cached template sources.",
+		Long:  "Clear cached remote template sources downloaded for template rendering.",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.NoArgs(cmd, args); err != nil {
+				return UsageError{Err: err}
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := templatecatalog.ClearCache()
+			if err != nil {
+				return RuntimeError{Err: err}
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Cleared template cache: %s\n", path)
+			if err != nil {
+				return RuntimeError{Err: err}
+			}
+			return nil
+		},
+	}
 
 	return cmd
 }
@@ -335,15 +379,34 @@ func parseTemplateValues(values []string) (map[string]string, error) {
 }
 
 func writeTemplateList(writer io.Writer, templates []templatecatalog.TemplateRef) error {
-	for _, template := range templates {
-		version := templateListVersion(template)
-		if template.Description == "" {
-			if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\n", template.Name, version, template.Source); err != nil {
+	groups := groupTemplatesByPack(templates)
+	for i, group := range groups {
+		if i > 0 {
+			if _, err := fmt.Fprintln(writer); err != nil {
 				return err
 			}
-			continue
 		}
-		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", template.Name, version, template.Source, template.Description); err != nil {
+
+		if _, err := fmt.Fprintf(writer, "Pack: %s\n", group.Pack); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(writer, "Pack version: %s\n", group.PackVersion); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(writer, "Source: %s\n", group.Source); err != nil {
+			return err
+		}
+
+		tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
+		if _, err := fmt.Fprintln(tw, "Template\tVersion\tDescription"); err != nil {
+			return err
+		}
+		for _, template := range group.Templates {
+			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\n", templateDisplayName(template), templateListVersion(template), template.Description); err != nil {
+				return err
+			}
+		}
+		if err := tw.Flush(); err != nil {
 			return err
 		}
 	}
@@ -351,7 +414,52 @@ func writeTemplateList(writer io.Writer, templates []templatecatalog.TemplateRef
 	return nil
 }
 
+type templatePackGroup struct {
+	Pack        string
+	PackVersion string
+	Source      string
+	Templates   []templatecatalog.TemplateRef
+}
+
+func groupTemplatesByPack(templates []templatecatalog.TemplateRef) []templatePackGroup {
+	groupOrder := make([]string, 0, len(templates))
+	groupByKey := make(map[string]*templatePackGroup, len(templates))
+
+	for _, template := range templates {
+		key := template.Pack + "\x00" + template.PackVersion + "\x00" + template.Source
+		group, ok := groupByKey[key]
+		if !ok {
+			group = &templatePackGroup{
+				Pack:        template.Pack,
+				PackVersion: template.PackVersion,
+				Source:      template.Source,
+			}
+			groupByKey[key] = group
+			groupOrder = append(groupOrder, key)
+		}
+		group.Templates = append(group.Templates, template)
+	}
+
+	result := make([]templatePackGroup, 0, len(groupOrder))
+	for _, key := range groupOrder {
+		result = append(result, *groupByKey[key])
+	}
+
+	return result
+}
+
+func templateDisplayName(template templatecatalog.TemplateRef) string {
+	_, shortName, ok := strings.Cut(template.Name, "/")
+	if ok && shortName != "" {
+		return shortName
+	}
+	return template.Name
+}
+
 func templateListVersion(template templatecatalog.TemplateRef) string {
+	if template.Version != "" {
+		return template.Version
+	}
 	if template.Placeholder {
 		return "coming soon"
 	}

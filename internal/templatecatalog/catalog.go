@@ -6,6 +6,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +25,7 @@ const (
 	registryFileName      = "galaxio-registry.yaml"
 	packFileName          = "galaxio-pack.yaml"
 	templateFileName      = "galaxio-template.yaml"
+	cacheEnv              = "GALAXIO_CACHE_DIR"
 )
 
 // ErrTemplateNotFound is returned when a registry does not contain a requested
@@ -448,40 +451,62 @@ func (f SourceFetcher) materializeGitHubSource(ctx context.Context, repo string)
 	if err != nil {
 		return "", nil, err
 	}
+	cacheDir, err := templateCacheArchiveDir(repo)
+	if err != nil {
+		return "", nil, err
+	}
+	markerPath := filepath.Join(cacheDir, ".ready")
+	if ready, err := cacheReady(cacheDir, markerPath); err == nil && ready {
+		return filepath.Join(cacheDir, filepath.FromSlash(ref.Subpath)), func() {}, nil
+	}
+
 	payload, err := f.readURL(ctx, ref.archiveURL())
 	if err != nil {
 		return "", nil, err
 	}
 
-	tempDir, err := os.MkdirTemp("", "galaxio-template-*")
-	if err != nil {
-		return "", nil, err
-	}
-	cleanup := func() {
-		_ = os.RemoveAll(tempDir)
-	}
-
 	reader, err := zip.NewReader(bytes.NewReader(payload), int64(len(payload)))
 	if err != nil {
-		cleanup()
 		return "", nil, err
 	}
+
+	tempDir, err := os.MkdirTemp(filepath.Dir(cacheDir), "template-extract-*")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanupTemp := func() {
+		_ = os.RemoveAll(tempDir)
+	}
 	if err := extractZip(reader, tempDir); err != nil {
-		cleanup()
+		cleanupTemp()
 		return "", nil, err
 	}
 
 	entries, err := os.ReadDir(tempDir)
 	if err != nil {
-		cleanup()
+		cleanupTemp()
 		return "", nil, err
 	}
 	if len(entries) != 1 || !entries[0].IsDir() {
-		cleanup()
+		cleanupTemp()
 		return "", nil, fmt.Errorf("unexpected GitHub archive layout for %q", repo)
 	}
 
-	return filepath.Join(tempDir, entries[0].Name(), filepath.FromSlash(ref.Subpath)), cleanup, nil
+	if err := os.RemoveAll(cacheDir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		cleanupTemp()
+		return "", nil, err
+	}
+	if err := os.Rename(filepath.Join(tempDir, entries[0].Name()), cacheDir); err != nil {
+		cleanupTemp()
+		return "", nil, err
+	}
+	if err := os.WriteFile(markerPath, []byte("ok\n"), 0o644); err != nil {
+		_ = os.RemoveAll(cacheDir)
+		return "", nil, err
+	}
+	cleanupTemp()
+
+	return filepath.Join(cacheDir, filepath.FromSlash(ref.Subpath)), func() {}, nil
 }
 
 func readLocalManifest(root string, manifest string) ([]byte, error) {
@@ -566,6 +591,55 @@ func (r TemplateRef) renderSource() string {
 		return r.Source
 	}
 	return r.Source + "#v" + strings.TrimPrefix(r.PackVersion, "v")
+}
+
+func CacheDir() (string, error) {
+	if path := os.Getenv(cacheEnv); path != "" {
+		return filepath.Join(path, "templates"), nil
+	}
+	root, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "galaxio", "templates"), nil
+}
+
+func ClearCache() (string, error) {
+	dir, err := CacheDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func templateCacheArchiveDir(source string) (string, error) {
+	root, err := CacheDir()
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(source))
+	return filepath.Join(root, "sources", hex.EncodeToString(sum[:])), os.MkdirAll(filepath.Join(root, "sources"), 0o755)
+}
+
+func cacheReady(dir string, markerPath string) (bool, error) {
+	info, err := os.Stat(markerPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, nil
+	}
+	entryInfo, err := os.Stat(dir)
+	if err != nil {
+		return false, err
+	}
+	return entryInfo.IsDir(), nil
 }
 
 func extractZip(reader *zip.Reader, destination string) error {
