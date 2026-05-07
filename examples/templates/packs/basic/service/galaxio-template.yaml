@@ -1,0 +1,25 @@
+apiVersion: galaxio.io/v1
+kind: Template
+name: service
+displayName: Example Service
+description: Minimal local template example.
+engine: go-template
+tags:
+  - example
+  - local
+inputs:
+  Name:
+    type: string
+    default: myservice
+    description: Project directory and visible service name.
+  Module:
+    type: string
+    default: github.com/acme/myservice
+    description: Go module or repository identifier.
+  Owner:
+    type: string
+    default: Platform Team
+    description: Team or owner label shown in the README.
+files:
+  - from: files
+    to: .
