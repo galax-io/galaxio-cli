@@ -19,13 +19,17 @@ func TestTemplateListWithLocalRegistry(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"gatling/scala-sbt", "coming soon", "local:" + packRoot, "Gatling Scala project with sbt"} {
+	for _, want := range []string{
+		"Pack: gatling",
+		"Pack version: 0.1.0",
+		"Source: local:" + packRoot,
+		"scala-sbt",
+		"coming soon",
+		"Gatling Scala project with sbt",
+	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected output to contain %q, got %q", want, stdout)
 		}
-	}
-	if strings.Contains(stdout, "\t0.1.0\t") {
-		t.Fatalf("expected placeholder template list to omit pack version, got %q", stdout)
 	}
 }
 
@@ -103,7 +107,7 @@ func TestTemplateListUsesConfiguredRegistry(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty list stderr, got %q", stderr)
 	}
-	for _, want := range []string{"gatling/scala-sbt", "local:" + packRoot} {
+	for _, want := range []string{"Pack: gatling", "Pack version: 0.1.0", "Source: local:" + packRoot, "scala-sbt"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected configured registry output to contain %q, got %q", want, stdout)
 		}
@@ -126,6 +130,34 @@ func TestTemplateConfigureShowsDefaultRegistry(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected configure output to contain %q, got %q", want, stdout)
 		}
+	}
+}
+
+func TestTemplateClearCacheRemovesCachedFiles(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv("GALAXIO_CACHE_DIR", cacheRoot)
+
+	cachePath := filepath.Join(cacheRoot, "templates", "sources", "cached", "entry.txt")
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		t.Fatalf("mkdir cache dir: %v", err)
+	}
+	if err := os.WriteFile(cachePath, []byte("cached"), 0o644); err != nil {
+		t.Fatalf("write cache file: %v", err)
+	}
+
+	code, stdout, stderr := runCLI("template", "clear-cache")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "Cleared template cache: ") {
+		t.Fatalf("expected clear cache output, got %q", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(cacheRoot, "templates")); !os.IsNotExist(err) {
+		t.Fatalf("expected template cache removed, got %v", err)
 	}
 }
 
