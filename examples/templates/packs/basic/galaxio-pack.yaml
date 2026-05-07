@@ -1,0 +1,10 @@
+apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+description: Example local template pack for Galaxio CLI.
+templates:
+  - name: service
+    version: 0.1.0
+    path: service
+    description: Minimal service skeleton rendered from local files

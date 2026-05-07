@@ -2,9 +2,8 @@
 
 Galaxio registries describe where the CLI can discover template packs.
 
-This first step only defines the default registry contract. Template pack and
-template rendering formats will be added separately. Commands currently operate
-at discovery and validation level, not rendering level.
+The CLI now supports discovery, validation, and rendering for local sources and
+GitHub-backed template packs.
 
 ## Default Registry
 
@@ -20,8 +19,10 @@ override the default registry with another source.
 ## Concepts
 
 - **Registry**: an index of template packs available to the CLI.
-- **Pack**: a repository that groups related templates. Pack structure is not
-  defined in this step.
+- **Pack**: a repository or local directory that groups related templates and
+  declares the pack version used for GitHub release resolution.
+- **Template**: one renderable project skeleton with declared inputs and file
+  mappings.
 
 ## Registry
 
@@ -49,6 +50,70 @@ packs:
 `template list` reads the latest registry and pack manifests. `template init`
 uses the listed pack version as the immutable GitHub release tag.
 
+## Local Examples
+
+The repository includes a complete local example under
+`examples/templates`:
+
+```text
+examples/templates/
+  registry/galaxio-registry.yaml
+  packs/basic/galaxio-pack.yaml
+  packs/basic/service/galaxio-template.yaml
+  packs/basic/service/files/...
+```
+
+Use it as a starting point for your own local repositories:
+
+```sh
+galaxio template list --registry local:examples/templates/registry
+galaxio template validate local:examples/templates/packs/basic
+galaxio template init examples/service --registry local:examples/templates/registry --destination ./tmp/example-service
+```
+
+The minimal required manifests are:
+
+Registry:
+
+```yaml
+apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:examples/templates/packs/basic
+```
+
+Pack:
+
+```yaml
+apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: service
+    version: 0.1.0
+    path: service
+```
+
+Template:
+
+```yaml
+apiVersion: galaxio.io/v1
+kind: Template
+name: service
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: myservice
+files:
+  - from: files
+    to: .
+```
+
+`local:` sources are resolved from the current working directory.
+
 ## Planned CLI Flow
 
 ```sh
@@ -60,7 +125,7 @@ galaxio template validate github:galax-io/templates-gatling
 galaxio doctor
 ```
 
-Later steps will add persistent configuration and rendering:
+Persistent configuration is also supported:
 
 ```sh
 galaxio template configure --show

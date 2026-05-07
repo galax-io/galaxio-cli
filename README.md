@@ -83,6 +83,10 @@ galaxio update --dry-run
 galaxio update --version 0.1.1
 ```
 
+Local template examples and manifest format notes live in
+[docs/templates/README.md](docs/templates/README.md) and
+`examples/templates/`.
+
 ## Exit Codes
 
 `galaxio` keeps exit codes stable for scripts and CI:
