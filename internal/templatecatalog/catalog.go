@@ -89,6 +89,7 @@ type Template struct {
 type TemplateFile struct {
 	From string `yaml:"from"`
 	To   string `yaml:"to"`
+	If   string `yaml:"if"`
 }
 
 // TemplateRef is a resolved template available to users.
@@ -696,6 +697,13 @@ func templateData(manifest Template, overrides map[string]string) map[string]any
 func renderTemplateFiles(templateRoot string, destination string, manifest Template, data map[string]any) (int, error) {
 	var rendered int
 	for _, mapping := range manifest.Files {
+		ok, err := shouldRenderMapping(mapping, data)
+		if err != nil {
+			return 0, err
+		}
+		if !ok {
+			continue
+		}
 		sourceRoot := filepath.Join(templateRoot, filepath.FromSlash(mapping.From))
 		targetRoot := filepath.Join(destination, filepath.FromSlash(mapping.To))
 		count, err := renderTree(sourceRoot, targetRoot, data)
@@ -734,6 +742,10 @@ func renderTree(sourceRoot string, targetRoot string, data map[string]any) (int,
 		if err != nil {
 			return err
 		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
 		body, err := renderString(relative, string(payload), data)
 		if err != nil {
 			return err
@@ -741,7 +753,7 @@ func renderTree(sourceRoot string, targetRoot string, data map[string]any) (int,
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(target, []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(target, []byte(body), info.Mode()); err != nil {
 			return err
 		}
 		rendered++
@@ -763,6 +775,22 @@ func renderString(name string, value string, data map[string]any) (string, error
 		return "", err
 	}
 	return output.String(), nil
+}
+
+func shouldRenderMapping(mapping TemplateFile, data map[string]any) (bool, error) {
+	if strings.TrimSpace(mapping.If) == "" {
+		return true, nil
+	}
+	value, err := renderString("mapping if", mapping.If, data)
+	if err != nil {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "0", "false", "no", "off":
+		return false, nil
+	default:
+		return true, nil
+	}
 }
 
 func safeJoin(root string, relative string) (string, error) {
