@@ -110,7 +110,15 @@ inputs:
 files:
   - from: files
     to: .
+  - from: files/plugins/kafka
+    to: plugins
+    if: '{{ .KafkaEnabled }}'
 ```
+
+`files[].if` is optional. When present, the mapping is rendered only if the
+expression evaluates to a truthy value such as `true`, `1`, `yes`, or `on`.
+The condition is evaluated against the same data used by the rest of the
+template, including manifest defaults and `--values` / `--set` overrides.
 
 `local:` sources are resolved from the current working directory.
 

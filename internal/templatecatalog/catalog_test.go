@@ -184,8 +184,8 @@ func TestRenderLocalTemplate(t *testing.T) {
 	if result.Source != "local:"+packRoot {
 		t.Fatalf("expected source local:%s, got %q", packRoot, result.Source)
 	}
-	if result.Files != 1 {
-		t.Fatalf("expected one rendered file, got %d", result.Files)
+	if result.Files != 2 {
+		t.Fatalf("expected two rendered files, got %d", result.Files)
 	}
 	if result.Status != "rendered" {
 		t.Fatalf("expected rendered status, got %q", result.Status)
@@ -197,6 +197,72 @@ func TestRenderLocalTemplate(t *testing.T) {
 	}
 	if string(payload) != "hello orders\n" {
 		t.Fatalf("expected rendered file payload, got %q", payload)
+	}
+}
+
+func TestRenderSkipsConditionalMappings(t *testing.T) {
+	registryRoot, packRoot := writeConditionalRenderablePack(t)
+	destination := t.TempDir()
+
+	result, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    destination,
+		Values: map[string]string{
+			"Name":   "orders",
+			"Flavor": "pro",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Files != 2 {
+		t.Fatalf("expected two rendered files, got %d", result.Files)
+	}
+	for _, want := range []string{
+		filepath.Join(destination, "orders.txt"),
+		filepath.Join(destination, "overrides", "pro.txt"),
+	} {
+		if _, err := os.Stat(want); err != nil {
+			t.Fatalf("expected rendered file %s: %v", want, err)
+		}
+	}
+	for _, unwanted := range []string{
+		filepath.Join(destination, "overrides", "enterprise.txt"),
+	} {
+		if _, err := os.Stat(unwanted); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected %s to be skipped, got %v", unwanted, err)
+		}
+	}
+	if result.Source != "local:"+packRoot {
+		t.Fatalf("expected source local:%s, got %q", packRoot, result.Source)
+	}
+}
+
+func TestRenderPreservesExecutableMode(t *testing.T) {
+	registryRoot, _ := writeRenderablePack(t)
+	destination := t.TempDir()
+
+	result, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    destination,
+		Values: map[string]string{
+			"Name": "orders",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Files != 2 {
+		t.Fatalf("expected two rendered files, got %d", result.Files)
+	}
+	info, err := os.Stat(filepath.Join(destination, "bin", "run.sh"))
+	if err != nil {
+		t.Fatalf("stat rendered script: %v", err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("expected executable mode 0755, got %o", info.Mode().Perm())
 	}
 }
 
@@ -820,6 +886,56 @@ files:
     to: .
 `)
 	writeFile(t, filepath.Join(packRoot, "renderable", "files"), "{{ .Name }}.txt", "hello {{ .Name }}\n")
+	writeFileMode(t, filepath.Join(packRoot, "renderable", "files", "bin"), "run.sh", "#!/bin/sh\necho hi\n", 0o755)
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+	return registryRoot, packRoot
+}
+
+func writeConditionalRenderablePack(t *testing.T) (string, string) {
+	t.Helper()
+
+	packRoot := t.TempDir()
+	writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.2.3
+    path: renderable
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: default
+  Flavor:
+    type: string
+    default: basic
+files:
+  - from: files/base
+    to: .
+  - from: files/overrides/pro
+    to: overrides
+    if: '{{ eq .Flavor "pro" }}'
+  - from: files/overrides/enterprise
+    to: overrides
+    if: '{{ eq .Flavor "enterprise" }}'
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable", "files", "base"), "{{ .Name }}.txt", "hello {{ .Name }}\n")
+	writeFile(t, filepath.Join(packRoot, "renderable", "files", "overrides", "pro"), "pro.txt", "pro\n")
+	writeFile(t, filepath.Join(packRoot, "renderable", "files", "overrides", "enterprise"), "enterprise.txt", "enterprise\n")
 
 	registryRoot := t.TempDir()
 	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
@@ -853,6 +969,18 @@ func writeFile(t *testing.T, root string, name string, content string) {
 		t.Fatalf("create dir: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+}
+
+func writeFileMode(t *testing.T, root string, name string, content string, mode os.FileMode) {
+	t.Helper()
+
+	path := filepath.Join(root, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 }
