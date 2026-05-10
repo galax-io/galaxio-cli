@@ -239,6 +239,256 @@ func TestRenderSkipsConditionalMappings(t *testing.T) {
 	}
 }
 
+func TestRenderSupportsTemplatedMappingDestination(t *testing.T) {
+	registryRoot := t.TempDir()
+	packRoot := t.TempDir()
+
+	writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.2.3
+    path: renderable
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  PackagePath:
+    type: string
+    default: org/example
+  NameWord:
+    type: string
+    default: orders
+files:
+  - from: files/src/test/scala/{{ .PackagePath }}/{{ .NameWord }}/Debug.scala
+    to: src/test/scala/{{ .PackagePath }}/{{ .NameWord }}/Debug.scala
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable", "files", "src", "test", "scala", "{{ .PackagePath }}", "{{ .NameWord }}"), "Debug.scala", "package test\n")
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+	destination := t.TempDir()
+	result, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    destination,
+		Values: map[string]string{
+			"PackagePath": "org/example/performance",
+			"NameWord":    "ordersapi",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Files != 1 {
+		t.Fatalf("expected one rendered file, got %d", result.Files)
+	}
+	rendered := filepath.Join(destination, "src", "test", "scala", "org", "example", "performance", "ordersapi", "Debug.scala")
+	if _, err := os.Stat(rendered); err != nil {
+		t.Fatalf("expected rendered file %s: %v", rendered, err)
+	}
+}
+
+func TestRenderSkipsConditionalMappingWithFalsyValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"empty", ""},
+		{"zero", "0"},
+		{"false", "false"},
+		{"no", "no"},
+		{"off", "off"},
+		{"FALSE", "FALSE"},
+		{"No", "No"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packRoot := t.TempDir()
+			writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.0.0
+    path: renderable
+`)
+			writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: svc
+  EnableKafka:
+    type: string
+    default: "false"
+files:
+  - from: files/base
+    to: .
+  - from: files/kafka
+    to: kafka
+    if: '{{ .EnableKafka }}'
+`)
+			writeFile(t, filepath.Join(packRoot, "renderable", "files", "base"), "main.txt", "main\n")
+			writeFile(t, filepath.Join(packRoot, "renderable", "files", "kafka"), "kafka.txt", "kafka\n")
+
+			registryRoot := t.TempDir()
+			writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+			destination := t.TempDir()
+			result, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+				RegistrySource: registryRoot,
+				TemplateName:   "examples/renderable",
+				Destination:    destination,
+				Values:         map[string]string{"Name": "svc", "EnableKafka": tt.value},
+			})
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if result.Files != 1 {
+				t.Fatalf("expected one rendered file (base only), got %d", result.Files)
+			}
+			if _, err := os.Stat(filepath.Join(destination, "kafka", "kafka.txt")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("expected kafka dir to be skipped, got %v", err)
+			}
+		})
+	}
+}
+
+func TestRenderIncludesConditionalMappingWithTruthyValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"yes", "yes"},
+		{"y", "y"},
+		{"true", "true"},
+		{"1", "1"},
+		{"on", "on"},
+		{"arbitrary", "something"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packRoot := t.TempDir()
+			writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.0.0
+    path: renderable
+`)
+			writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: svc
+  EnableKafka:
+    type: string
+    default: "false"
+files:
+  - from: files/base
+    to: .
+  - from: files/kafka
+    to: kafka
+    if: '{{ .EnableKafka }}'
+`)
+			writeFile(t, filepath.Join(packRoot, "renderable", "files", "base"), "main.txt", "main\n")
+			writeFile(t, filepath.Join(packRoot, "renderable", "files", "kafka"), "kafka.txt", "kafka\n")
+
+			registryRoot := t.TempDir()
+			writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+			destination := t.TempDir()
+			result, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+				RegistrySource: registryRoot,
+				TemplateName:   "examples/renderable",
+				Destination:    destination,
+				Values:         map[string]string{"Name": "svc", "EnableKafka": tt.value},
+			})
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if result.Files != 2 {
+				t.Fatalf("expected two rendered files, got %d", result.Files)
+			}
+			if _, err := os.Stat(filepath.Join(destination, "kafka", "kafka.txt")); err != nil {
+				t.Fatalf("expected kafka file to exist: %v", err)
+			}
+		})
+	}
+}
+
+func TestRenderErrorsOnMissingIfVariable(t *testing.T) {
+	packRoot := t.TempDir()
+	writeFile(t, packRoot, packFileName, `apiVersion: galaxio.io/v1
+kind: TemplatePack
+name: examples
+version: 0.1.0
+templates:
+  - name: renderable
+    version: 1.0.0
+    path: renderable
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable"), templateFileName, `apiVersion: galaxio.io/v1
+kind: Template
+name: renderable
+engine: go-template
+inputs:
+  Name:
+    type: string
+    default: svc
+files:
+  - from: files
+    to: .
+    if: '{{ .MissingKey }}'
+`)
+	writeFile(t, filepath.Join(packRoot, "renderable", "files"), "main.txt", "main\n")
+
+	registryRoot := t.TempDir()
+	writeFile(t, registryRoot, registryFileName, fmt.Sprintf(`apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: examples
+    source: local:%s
+`, packRoot))
+
+	_, err := SourceFetcher{}.Render(context.Background(), RenderOptions{
+		RegistrySource: registryRoot,
+		TemplateName:   "examples/renderable",
+		Destination:    t.TempDir(),
+		Values:         map[string]string{"Name": "svc"},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing key in if expression")
+	}
+}
+
 func TestRenderPreservesExecutableMode(t *testing.T) {
 	registryRoot, _ := writeRenderablePack(t)
 	destination := t.TempDir()

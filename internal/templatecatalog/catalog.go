@@ -705,7 +705,11 @@ func renderTemplateFiles(templateRoot string, destination string, manifest Templ
 			continue
 		}
 		sourceRoot := filepath.Join(templateRoot, filepath.FromSlash(mapping.From))
-		targetRoot := filepath.Join(destination, filepath.FromSlash(mapping.To))
+		renderedTo, err := renderString("mapping to", mapping.To, data)
+		if err != nil {
+			return 0, err
+		}
+		targetRoot := filepath.Join(destination, filepath.FromSlash(renderedTo))
 		count, err := renderTree(sourceRoot, targetRoot, data)
 		if err != nil {
 			return 0, err
