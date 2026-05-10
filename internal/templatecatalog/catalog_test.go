@@ -14,6 +14,45 @@ import (
 	"testing"
 )
 
+func TestLoadRegistryVersionField(t *testing.T) {
+	t.Run("registry without version is accepted", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, registryFileName, `apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+packs:
+  - name: gatling
+    source: local:/tmp/templates-gatling
+    description: Gatling templates
+`)
+		registry, err := SourceFetcher{}.LoadRegistry(context.Background(), root)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if registry.Version != "" {
+			t.Fatalf("expected empty version, got %q", registry.Version)
+		}
+	})
+
+	t.Run("registry with version is accepted and version is readable", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, registryFileName, `apiVersion: galaxio.io/v1
+kind: TemplateRegistry
+version: 1.0.0
+packs:
+  - name: gatling
+    source: local:/tmp/templates-gatling
+    description: Gatling templates
+`)
+		registry, err := SourceFetcher{}.LoadRegistry(context.Background(), root)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if registry.Version != "1.0.0" {
+			t.Fatalf("expected version 1.0.0, got %q", registry.Version)
+		}
+	})
+}
+
 func TestLoadRegistryFromLocalSource(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, registryFileName, `apiVersion: galaxio.io/v1
