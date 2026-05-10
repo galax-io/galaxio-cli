@@ -36,6 +36,7 @@ var ErrTemplateNotFound = errors.New("template not found")
 type Registry struct {
 	APIVersion string         `yaml:"apiVersion"`
 	Kind       string         `yaml:"kind"`
+	Version    string         `yaml:"version,omitempty"`
 	Packs      []RegistryPack `yaml:"packs"`
 }
 
