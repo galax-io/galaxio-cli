@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	defaultAPIBase = "https://api.github.com"
-	binaryName     = "galaxio"
+	defaultAPIBase   = "https://api.github.com"
+	binaryName       = "galaxio"
+	maxResponseBytes = 256 << 20 // 256 MiB
 )
 
 // Options configures a self-update run.
@@ -203,7 +204,7 @@ func (u Updater) downloadWithHeaders(ctx context.Context, url string, headers ma
 		return nil, fmt.Errorf("GET %s returned %s", url, resp.Status)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 }
 
 func findAsset(assets []asset, name string) (asset, error) {

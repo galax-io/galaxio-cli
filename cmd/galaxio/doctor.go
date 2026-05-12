@@ -29,6 +29,7 @@ func newDoctorCommand() *cobra.Command {
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
+			verboseLog(cmd, "checking registry: %s", registrySource)
 
 			fetcher := templatecatalog.SourceFetcher{}
 			templates, err := fetcher.ListTemplates(cmd.Context(), registrySource)
@@ -47,6 +48,9 @@ func newDoctorCommand() *cobra.Command {
 				return nil
 			}
 
+			if isQuiet(cmd) {
+				return nil
+			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "OK template registry: %s\n", registrySource)
 			if err != nil {
 				return RuntimeError{Err: err}

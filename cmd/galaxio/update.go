@@ -72,6 +72,9 @@ func printUpdateResult(cmd *cobra.Command, result selfupdate.Result, output stri
 		return writeJSON(cmd.OutOrStdout(), result)
 	}
 
+	if isQuiet(cmd) {
+		return nil
+	}
 	switch {
 	case result.Updated:
 		_, err := fmt.Fprintf(cmd.OutOrStdout(), "Updated galaxio from %s to %s\n", result.CurrentVersion, result.TargetVersion)

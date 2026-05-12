@@ -463,6 +463,66 @@ func TestUnknownCommandReturnsUsageExitCode(t *testing.T) {
 	}
 }
 
+func TestVerboseEmitsLogToStderr(t *testing.T) {
+	registryRoot, _ := writeTemplateCatalogFixture(t)
+
+	code, _, stderr := runCLI("--verbose", "template", "list", "--registry", "local:"+registryRoot)
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if !strings.Contains(stderr, "[verbose]") {
+		t.Fatalf("expected verbose log on stderr, got %q", stderr)
+	}
+	if !strings.Contains(stderr, "using registry source:") {
+		t.Fatalf("expected registry source in verbose log, got %q", stderr)
+	}
+}
+
+func TestQuietSuppressesTextOutput(t *testing.T) {
+	registryRoot, _ := writeTemplateCatalogFixture(t)
+
+	code, stdout, stderr := runCLI("--quiet", "doctor", "--registry", "local:"+registryRoot)
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("expected quiet mode to suppress text output, got %q", stdout)
+	}
+}
+
+func TestQuietDoesNotSuppressJSONOutput(t *testing.T) {
+	registryRoot, _ := writeTemplateCatalogFixture(t)
+
+	code, stdout, stderr := runCLI("--quiet", "doctor", "--registry", "local:"+registryRoot, "--output", "json")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+	if !strings.Contains(stdout, `"status":"ok"`) {
+		t.Fatalf("expected JSON output even in quiet mode, got %q", stdout)
+	}
+}
+
+func TestNoColorFlagIsAccepted(t *testing.T) {
+	code, _, stderr := runCLI("--no-color", "version")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+}
+
+func TestNoColorEnvironmentVariable(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	code, _, stderr := runCLI("version")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
+	}
+}
+
 func TestVerboseAndQuietAreMutuallyExclusive(t *testing.T) {
 	code, stdout, stderr := runCLI("--verbose", "--quiet", "version")
 

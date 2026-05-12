@@ -26,6 +26,7 @@ const (
 	packFileName          = "galaxio-pack.yaml"
 	templateFileName      = "galaxio-template.yaml"
 	cacheEnv              = "GALAXIO_CACHE_DIR"
+	maxResponseBytes      = 256 << 20 // 256 MiB
 )
 
 // ErrTemplateNotFound is returned when a registry does not contain a requested
@@ -82,7 +83,6 @@ type Template struct {
 	Engine      string                   `yaml:"engine"`
 	Tags        []string                 `yaml:"tags"`
 	Inputs      map[string]TemplateInput `yaml:"inputs"`
-	Computed    map[string]string        `yaml:"computed"`
 	Files       []TemplateFile           `yaml:"files"`
 }
 
@@ -432,7 +432,7 @@ func (f SourceFetcher) readURL(ctx context.Context, url string) ([]byte, error) 
 		return nil, fmt.Errorf("GET %s returned %s", url, resp.Status)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 }
 
 func (f SourceFetcher) materializeSource(ctx context.Context, source string) (string, func(), error) {

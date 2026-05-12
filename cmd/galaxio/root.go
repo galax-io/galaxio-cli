@@ -2,8 +2,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -12,6 +14,29 @@ type globalOptions struct {
 	noColor bool
 	verbose bool
 	quiet   bool
+}
+
+type contextKey struct{}
+
+func globalOptsFromCmd(cmd *cobra.Command) *globalOptions {
+	if ctx := cmd.Context(); ctx != nil {
+		if opts, ok := ctx.Value(contextKey{}).(*globalOptions); ok {
+			return opts
+		}
+	}
+	return &globalOptions{}
+}
+
+func isQuiet(cmd *cobra.Command) bool {
+	return globalOptsFromCmd(cmd).quiet
+}
+
+func verboseLog(cmd *cobra.Command, format string, args ...any) {
+	opts := globalOptsFromCmd(cmd)
+	if !opts.verbose {
+		return
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "[verbose] "+format+"\n", args...)
 }
 
 // newRootCommand builds the root command for the galaxio CLI.
@@ -33,6 +58,10 @@ func newRootCommand() *cobra.Command {
 			if opts.verbose && opts.quiet {
 				return UsageError{Err: fmt.Errorf("--verbose and --quiet cannot be used together")}
 			}
+			if opts.noColor || os.Getenv("NO_COLOR") != "" {
+				opts.noColor = true
+			}
+			cmd.SetContext(context.WithValue(cmd.Context(), contextKey{}, opts))
 			return nil
 		},
 	}
