@@ -69,11 +69,13 @@ func newTemplateListCommand() *cobra.Command {
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
+			verboseLog(cmd, "using registry source: %s", registrySource)
 
 			templates, err := (templatecatalog.SourceFetcher{}).ListTemplates(cmd.Context(), registrySource)
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
+			verboseLog(cmd, "resolved %d template(s)", len(templates))
 
 			if output == outputJSON {
 				if err := writeJSON(cmd.OutOrStdout(), templates); err != nil {
@@ -167,6 +169,7 @@ func newTemplateInitCommand() *cobra.Command {
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
+			verboseLog(cmd, "using registry source: %s", registrySource)
 			renderValues, err := loadTemplateValues(valuesFile)
 			if err != nil {
 				return err
@@ -178,6 +181,7 @@ func newTemplateInitCommand() *cobra.Command {
 			for key, value := range setValues {
 				renderValues[key] = value
 			}
+			verboseLog(cmd, "resolved %d template value(s)", len(renderValues))
 
 			template, err := (templatecatalog.SourceFetcher{}).FindTemplate(cmd.Context(), registrySource, args[0])
 			if err != nil {
@@ -186,6 +190,7 @@ func newTemplateInitCommand() *cobra.Command {
 				}
 				return RuntimeError{Err: err}
 			}
+			verboseLog(cmd, "found template %s (source: %s, placeholder: %v)", template.Name, template.Source, template.Placeholder)
 			if !template.Placeholder {
 				result, err := (templatecatalog.SourceFetcher{}).Render(cmd.Context(), templatecatalog.RenderOptions{
 					RegistrySource: registrySource,
@@ -213,6 +218,9 @@ func newTemplateInitCommand() *cobra.Command {
 				return nil
 			}
 
+			if isQuiet(cmd) {
+				return nil
+			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Template %s is coming soon\n", template.Name)
 			if err != nil {
 				return RuntimeError{Err: err}
@@ -246,6 +254,9 @@ func newTemplateClearCacheCommand() *cobra.Command {
 			if err != nil {
 				return RuntimeError{Err: err}
 			}
+			if isQuiet(cmd) {
+				return nil
+			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Cleared template cache: %s\n", path)
 			if err != nil {
 				return RuntimeError{Err: err}
@@ -276,6 +287,7 @@ func newTemplateValidateCommand() *cobra.Command {
 			}
 
 			source := args[0]
+			verboseLog(cmd, "validating template pack source: %s", source)
 			if err := (templatecatalog.SourceFetcher{}).ValidateSource(cmd.Context(), source); err != nil {
 				return RuntimeError{Err: err}
 			}
@@ -290,6 +302,9 @@ func newTemplateValidateCommand() *cobra.Command {
 				return nil
 			}
 
+			if isQuiet(cmd) {
+				return nil
+			}
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Template pack %s is valid\n", source)
 			if err != nil {
 				return RuntimeError{Err: err}
@@ -340,6 +355,9 @@ func printTemplateConfig(cmd *cobra.Command, override string) error {
 func printTemplateInitResult(cmd *cobra.Command, result templatecatalog.RenderResult, output string) error {
 	if output == outputJSON {
 		return writeJSON(cmd.OutOrStdout(), result)
+	}
+	if isQuiet(cmd) {
+		return nil
 	}
 	_, err := fmt.Fprintf(cmd.OutOrStdout(), "Rendered %s to %s (%d files)\n", result.Template, result.Destination, result.Files)
 	return err
