@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/galax-io/galaxio-cli/internal/featureflags"
 	"github.com/spf13/cobra"
 )
 
@@ -75,6 +76,9 @@ func newRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&opts.quiet, "quiet", "q", false, "suppress non-essential output")
 
 	cmd.AddCommand(newDoctorCommand())
+	if featureflags.Enabled(featureflags.Generate) {
+		cmd.AddCommand(newGenerateCommand())
+	}
 	cmd.AddCommand(newTemplateCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newVersionCommand())
@@ -88,7 +92,10 @@ func execute(args []string, stdout io.Writer, stderr io.Writer) int {
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 
-	err := cmd.Execute()
+	err := validateExperimentalCommand(args)
+	if err == nil {
+		err = cmd.Execute()
+	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %s\n", err)
 	}
@@ -98,4 +105,46 @@ func execute(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func buildVersionString() string {
 	return versionInfo().CleanVersion()
+}
+
+func validateExperimentalCommand(args []string) error {
+	command := firstCommandArg(args)
+	if command == "" {
+		return nil
+	}
+
+	flag, ok := featureflags.LookupCommandFlag(command)
+	if !ok || featureflags.Enabled(flag) {
+		return nil
+	}
+
+	return UsageError{Err: featureflags.DisabledCommandError(flag)}
+}
+
+func firstCommandArg(args []string) string {
+	for _, arg := range args {
+		if arg == "--" {
+			return ""
+		}
+		if arg == "help" {
+			continue
+		}
+		if len(arg) > 0 && arg[0] == '-' {
+			continue
+		}
+		return arg
+	}
+	return ""
+}
+
+func newGenerateCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "generate",
+		Short: "Experimental project generation commands.",
+		Long:  "Experimental project generation commands.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RuntimeError{Err: fmt.Errorf("generate is enabled but not implemented yet")}
+		},
+	}
 }
