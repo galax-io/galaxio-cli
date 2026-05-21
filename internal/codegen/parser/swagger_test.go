@@ -43,6 +43,9 @@ func TestSwaggerParserParseBuildsSpecFromSwagger2(t *testing.T) {
 	if addPet.Path != "/pet" {
 		t.Fatalf("expected addPet path %q, got %q", "/pet", addPet.Path)
 	}
+	if addPet.Summary != "Add a new pet to the store" {
+		t.Fatalf("expected addPet summary %q, got %q", "Add a new pet to the store", addPet.Summary)
+	}
 	if addPet.Body == nil {
 		t.Fatal("expected addPet to have a request body")
 	}
@@ -130,6 +133,9 @@ func TestSwaggerParserParseCapturesRequestShapesFromOfficialFixture(t *testing.T
 	if deletePet.Params[0].Name != "petId" {
 		t.Fatalf("expected path param %q, got %q", "petId", deletePet.Params[0].Name)
 	}
+	if deletePet.Params[0].In != "path" {
+		t.Fatalf("expected path param location %q, got %q", "path", deletePet.Params[0].In)
+	}
 
 	store := findGroup(t, spec, "store")
 	if len(store.Requests) != 4 {
@@ -159,6 +165,9 @@ func TestSwaggerParserParseCapturesRequestShapesFromOfficialFixture(t *testing.T
 	}
 	if loginUser.Params[0].Name != "username" || loginUser.Params[1].Name != "password" {
 		t.Fatalf("expected loginUser params username/password, got %#v", loginUser.Params)
+	}
+	if loginUser.Params[0].In != "query" || loginUser.Params[1].In != "query" {
+		t.Fatalf("expected loginUser params to be query params, got %#v", loginUser.Params)
 	}
 
 	uploadFile := findRequest(t, pet, "uploadFile")

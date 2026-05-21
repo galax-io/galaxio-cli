@@ -119,9 +119,10 @@ func extractGroups(paths *v2.Paths) ([]codegen.Group, error) {
 
 func buildRequest(method string, path string, pathItem *v2.PathItem, operation *v2.Operation) (codegen.Request, error) {
 	request := codegen.Request{
-		Method: strings.ToUpper(method),
-		Path:   path,
-		Name:   requestNameFor(method, path, operation),
+		Method:  strings.ToUpper(method),
+		Path:    path,
+		Name:    requestNameFor(method, path, operation),
+		Summary: operation.Summary,
 	}
 
 	parameters := append([]*v2.Parameter{}, pathItem.Parameters...)
@@ -152,6 +153,7 @@ func buildRequest(method string, path string, pathItem *v2.PathItem, operation *
 		default:
 			request.Params = append(request.Params, codegen.Param{
 				Name:     parameter.Name,
+				In:       parameter.In,
 				Type:     parameter.Type,
 				Format:   parameter.Format,
 				Required: required,

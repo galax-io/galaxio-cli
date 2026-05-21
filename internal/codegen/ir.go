@@ -22,6 +22,7 @@ type Request struct {
 	Method    string
 	Path      string
 	Name      string
+	Summary   string
 	Headers   []Header
 	Params    []Param
 	Body      *BodySchema
@@ -49,6 +50,7 @@ type AuthScheme struct {
 // Param describes one non-header request parameter.
 type Param struct {
 	Name     string
+	In       string
 	Type     string
 	Format   string
 	Required bool
