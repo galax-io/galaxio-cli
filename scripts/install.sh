@@ -37,7 +37,7 @@ if [ "$version" != "latest" ]; then
   api="https://api.github.com/repos/$repo/releases/tags/v$version"
 fi
 
-curl_opts="--connect-timeout 10 --retry 3 --retry-delay 2 --retry-max-time 60"
+curl_opts="--connect-timeout 10 --retry 3 --retry-delay 2 --retry-max-time 60 --retry-all-errors"
 
 release="$tmp_dir/release.json"
 curl -fsSL $curl_opts --max-time 30 -H "Accept: application/vnd.github+json" "$api" -o "$release"
