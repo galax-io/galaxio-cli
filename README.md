@@ -94,13 +94,14 @@ Browse available templates:
 galaxio template list
 ```
 
-Scaffold a new project from a template:
+Scaffold a new project from a template (files are written to `--destination`,
+which defaults to the current directory):
 
 ```sh
-galaxio template init gatling/scala-sbt
+galaxio template init gatling/scala-sbt -d ./my-project
 ```
 
-Override template inputs with `--set` and choose a destination directory:
+Override template inputs with `--set`:
 
 ```sh
 galaxio template init gatling/scala-sbt --set Name=orders -d ./my-project
@@ -120,8 +121,13 @@ galaxio template list
 
 # 2. Create a project from a template
 galaxio template init gatling/scala-sbt -d ./perf-tests
+```
 
-# 3. Verify your own template pack before publishing
+### For template authors
+
+Validate a template pack before publishing:
+
+```sh
 galaxio template validate local:./my-pack
 ```
 
