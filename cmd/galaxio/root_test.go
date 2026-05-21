@@ -92,6 +92,22 @@ func TestGenerateCommandIsRegisteredWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestGenerateSubcommandsReachPlaceholderWhenEnabled(t *testing.T) {
+	t.Setenv(featureflags.Generate.EnvVar, "true")
+
+	code, stdout, stderr := runCLI("generate", "swagger")
+
+	if code != exitRuntime {
+		t.Fatalf("expected exit code %d, got %d", exitRuntime, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if want := "not implemented yet"; !strings.Contains(stderr, want) {
+		t.Fatalf("expected generate placeholder error, got %q", stderr)
+	}
+}
+
 func TestDoctorRejectsArguments(t *testing.T) {
 	code, stdout, stderr := runCLI("doctor", "unexpected")
 
