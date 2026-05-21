@@ -1,0 +1,96 @@
+swagger: "2.0"
+info:
+  title: Galaxio Petstore
+  version: "1.0.0"
+basePath: /api/v1
+consumes:
+  - application/json
+produces:
+  - application/json
+securityDefinitions:
+  bearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: Use Bearer <token>
+  basicAuth:
+    type: basic
+  apiKeyAuth:
+    type: apiKey
+    name: X-API-Key
+    in: header
+paths:
+  /pets:
+    get:
+      tags:
+        - pets
+      operationId: listPets
+      parameters:
+        - name: limit
+          in: query
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: A paged array of pets
+    post:
+      tags:
+        - pets
+      operationId: createPet
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: "#/definitions/CreatePetRequest"
+      responses:
+        "201":
+          description: Created
+  /api/v1/orders:
+    get:
+      parameters:
+        - name: expand
+          in: query
+          type: string
+      responses:
+        "200":
+          description: Orders list
+  /status:
+    get:
+      parameters:
+        - name: X-Trace-ID
+          in: header
+          type: string
+          required: true
+      responses:
+        "200":
+          description: Service status
+        default:
+          description: Unexpected error
+definitions:
+  CreatePetRequest:
+    type: object
+    required:
+      - name
+      - owner
+    properties:
+      name:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+      owner:
+        $ref: "#/definitions/Owner"
+  Owner:
+    type: object
+    required:
+      - id
+    properties:
+      id:
+        type: string
+      address:
+        type: object
+        properties:
+          city:
+            type: string
