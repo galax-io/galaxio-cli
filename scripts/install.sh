@@ -37,8 +37,10 @@ if [ "$version" != "latest" ]; then
   api="https://api.github.com/repos/$repo/releases/tags/v$version"
 fi
 
+curl_opts="--connect-timeout 10 --retry 3 --retry-delay 2 --retry-max-time 60"
+
 release="$tmp_dir/release.json"
-curl -fsSL -H "Accept: application/vnd.github+json" "$api" -o "$release"
+curl -fsSL $curl_opts --max-time 30 -H "Accept: application/vnd.github+json" "$api" -o "$release"
 
 tag="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$release" | head -1)"
 version="${tag#v}"
@@ -53,8 +55,8 @@ if [ -z "$asset_url" ] || [ -z "$checksums_url" ]; then
   exit 1
 fi
 
-curl -fsSL "$asset_url" -o "$tmp_dir/$asset"
-curl -fsSL "$checksums_url" -o "$tmp_dir/checksums.txt"
+curl -fsSL $curl_opts --max-time 120 "$asset_url" -o "$tmp_dir/$asset"
+curl -fsSL $curl_opts --max-time 30 "$checksums_url" -o "$tmp_dir/checksums.txt"
 
 (cd "$tmp_dir" && grep "  $asset\$" checksums.txt | shasum -a 256 -c -)
 
