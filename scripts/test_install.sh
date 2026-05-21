@@ -22,10 +22,9 @@ for flag in $required_flags; do
   fi
 done
 
-# 2. Every curl invocation that hits a URL (not just curl --version, etc.)
-#    must reference $curl_opts so the shared flags are applied.
-#    We match lines that call curl with a URL or variable URL argument.
-curl_calls=$(grep -n 'curl .*http\|curl .*"\$' "$INSTALL_SH" | grep -v '^\s*#' || true)
+# 2. Every real curl invocation in install.sh must reference $curl_opts so the
+#    shared retry/timeout flags are applied consistently across downloads.
+curl_calls=$(grep -n '^[[:space:]]*curl[[:space:]]' "$INSTALL_SH" || true)
 
 if [ -z "$curl_calls" ]; then
   echo "FAIL: no curl calls found in install.sh — test may be stale" >&2
@@ -36,7 +35,7 @@ count_total=0
 count_with_opts=0
 while IFS= read -r line; do
   count_total=$((count_total + 1))
-  if echo "$line" | grep -q '\$curl_opts\|${curl_opts}'; then
+  if echo "$line" | grep -Eq '\$curl_opts|\$\{curl_opts\}'; then
     count_with_opts=$((count_with_opts + 1))
   else
     lineno=$(echo "$line" | cut -d: -f1)
@@ -44,6 +43,11 @@ while IFS= read -r line; do
     errors=$((errors + 1))
   fi
 done <<< "$curl_calls"
+
+if [ "$count_total" -ne 3 ]; then
+  echo "FAIL: expected 3 curl calls in install.sh, found $count_total" >&2
+  errors=$((errors + 1))
+fi
 
 echo "Checked $count_total curl call(s): $count_with_opts use \$curl_opts."
 
