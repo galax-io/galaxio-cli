@@ -76,12 +76,12 @@ func newRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&opts.quiet, "quiet", "q", false, "suppress non-essential output")
 
 	cmd.AddCommand(newDoctorCommand())
-	if featureflags.Enabled(featureflags.Generate) {
-		cmd.AddCommand(newGenerateCommand())
-	}
 	cmd.AddCommand(newTemplateCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newVersionCommand())
+	if featureflags.Enabled(featureflags.Generate) {
+		cmd.AddCommand(newGenerateCommand())
+	}
 
 	return cmd
 }

@@ -12,7 +12,7 @@ func newGenerateCommand() *cobra.Command {
 		Use:   "generate",
 		Short: "Experimental project generation commands.",
 		Long:  "Experimental project generation commands.",
-		Args:  cobra.NoArgs,
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return RuntimeError{Err: fmt.Errorf("generate is enabled but not implemented yet")}
 		},
