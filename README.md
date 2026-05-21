@@ -31,7 +31,7 @@ Release binaries are built for every OS/architecture combination below.
 
 ### Option 1 — `go install` (all platforms)
 
-Requires Go 1.23 or later on your `PATH`.
+Requires Go 1.24 or later on your `PATH`.
 
 ```sh
 go install github.com/galax-io/galaxio-cli/cmd/galaxio@latest
@@ -51,14 +51,14 @@ curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/i
 Pin a specific version:
 
 ```sh
-GALAXIO_VERSION=0.1.1 sh scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/install.sh | GALAXIO_VERSION=0.1.1 sh
 ```
 
 The installer writes to `$HOME/.local/bin` by default. Override with
 `GALAXIO_BIN_DIR`:
 
 ```sh
-GALAXIO_BIN_DIR=/usr/local/bin sh scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/install.sh | GALAXIO_BIN_DIR=/usr/local/bin sh
 ```
 
 ### Option 3 — Manual download (all platforms)
@@ -147,7 +147,7 @@ failures:
 | --- | --- | --- |
 | `curl: (7) Failed to connect` | Corporate proxy or firewall | Set `https_proxy` before running the installer: `https_proxy=http://proxy:port sh scripts/install.sh` |
 | `curl: (28) Connection timed out` | Slow or blocked network | Retry, or download the binary manually from a browser |
-| HTTP 403 / rate-limit error | GitHub API rate limit (60 req/h unauthenticated) | Export a GitHub token: `GITHUB_TOKEN=ghp_... sh scripts/install.sh`, or download manually |
+| HTTP 403 / rate-limit error | GitHub API rate limit (60 req/h unauthenticated) | Wait an hour, or download the binary manually from the [Releases](https://github.com/galax-io/galaxio-cli/releases) page |
 | `release asset not found` | OS/arch not in the release | Verify your platform is in the support matrix above; fall back to `go install` |
 
 #### Checksum verification fails
