@@ -58,3 +58,20 @@ jobs:
 
       - name: Build
         run: go build -trimpath -o dist/galaxio ./cmd/galaxio
+
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration tests
+        run: go test -tags=integration -race -count=1 ./...
