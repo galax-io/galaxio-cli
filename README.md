@@ -83,9 +83,60 @@ galaxio update --dry-run
 galaxio update --version 0.1.1
 ```
 
-Local template examples and manifest format notes live in
-[docs/templates/README.md](docs/templates/README.md) and
-`examples/templates/`.
+## Template Workflow
+
+The CLI ships with a default registry (`github:galax-io/galaxio-template-registry`),
+so template discovery works out of the box with no configuration.
+
+Browse available templates:
+
+```sh
+galaxio template list
+```
+
+Scaffold a new project from a template:
+
+```sh
+galaxio template init gatling/scala-sbt
+```
+
+Override template inputs with `--set` and choose a destination directory:
+
+```sh
+galaxio template init gatling/scala-sbt --set Name=orders -d ./my-project
+```
+
+Validate a template pack (useful for template authors):
+
+```sh
+galaxio template validate local:../my-templates
+```
+
+### End-to-end example
+
+```sh
+# 1. See what templates are available
+galaxio template list
+
+# 2. Create a project from a template
+galaxio template init gatling/scala-sbt -d ./perf-tests
+
+# 3. Verify your own template pack before publishing
+galaxio template validate local:./my-pack
+```
+
+### Custom registries
+
+The default registry is used automatically. Run `template configure` only when
+you need a different registry:
+
+```sh
+galaxio template configure --registry github:my-org/my-registry
+galaxio template configure --show
+```
+
+For manifest format details and local examples, see
+[docs/templates/README.md](docs/templates/README.md) and `examples/templates/`.
 
 ## Exit Codes
 
