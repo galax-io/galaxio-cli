@@ -7,11 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/galax-io/galaxio-cli/internal/featureflags"
 )
 
 func TestGenerateHARWritesFilesAndPrintsSummary(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "har-application-json.json")
@@ -77,7 +75,6 @@ func TestGenerateHARWritesFilesAndPrintsSummary(t *testing.T) {
 }
 
 func TestGenerateHARIncludeStaticKeepsAssetRequests(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "har-static-asset.json")
@@ -110,7 +107,6 @@ func TestGenerateHARIncludeStaticKeepsAssetRequests(t *testing.T) {
 }
 
 func TestGenerateHARSupportsJSONOutput(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "har-application-json.json")
@@ -149,7 +145,6 @@ func TestGenerateHARSupportsJSONOutput(t *testing.T) {
 }
 
 func TestGenerateHARRejectsInvalidHAR(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	source := filepath.Join(t.TempDir(), "invalid.har")
 	if err := os.WriteFile(source, []byte(`{"log":{}}`), 0o644); err != nil {

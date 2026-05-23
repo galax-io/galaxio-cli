@@ -12,17 +12,7 @@ type Flag struct {
 	EnvVar  string
 }
 
-var (
-	// Generate gates the experimental generate command.
-	Generate = Flag{
-		Command: "generate",
-		EnvVar:  "GALAXIO_FEATURE_GENERATE",
-	}
-
-	commandFlags = map[string]Flag{
-		Generate.Command: Generate,
-	}
-)
+var commandFlags = map[string]Flag{}
 
 // Enabled reports whether a feature flag is enabled through its environment variable.
 func Enabled(flag Flag) bool {
