@@ -6,12 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/galax-io/galaxio-cli/internal/featureflags"
 )
 
 func TestGenerateCommandPrintsHelpWhenEnabled(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	code, stdout, stderr := runCLI("generate")
 
@@ -29,7 +26,6 @@ func TestGenerateCommandPrintsHelpWhenEnabled(t *testing.T) {
 }
 
 func TestGenerateSwaggerWritesFilesAndPrintsSummary(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
@@ -84,7 +80,6 @@ func TestGenerateSwaggerWritesFilesAndPrintsSummary(t *testing.T) {
 }
 
 func TestGenerateSwaggerSupportsJSONOutput(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
@@ -126,7 +121,6 @@ func TestGenerateSwaggerSupportsJSONOutput(t *testing.T) {
 }
 
 func TestGenerateSwaggerSupportsOpenAPI3Input(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-openapi3.yaml")
@@ -174,7 +168,6 @@ func TestGenerateSwaggerSupportsOpenAPI3Input(t *testing.T) {
 }
 
 func TestGenerateSwaggerRejectsMissingSourceFile(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	code, stdout, stderr := runCLI("generate", "swagger", "--from", filepath.Join(t.TempDir(), "missing.yaml"))
 
@@ -192,7 +185,6 @@ func TestGenerateSwaggerRejectsMissingSourceFile(t *testing.T) {
 }
 
 func TestGenerateSwaggerRejectsInvalidSwagger(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	source := filepath.Join(t.TempDir(), "invalid.yaml")
 	if err := os.WriteFile(source, []byte("swagger: ["), 0o644); err != nil {
@@ -213,7 +205,6 @@ func TestGenerateSwaggerRejectsInvalidSwagger(t *testing.T) {
 }
 
 func TestGenerateSwaggerRejectsUnknownTemplate(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
 	code, stdout, stderr := runCLI("generate", "swagger", "--from", source, "--template", "java-gradle")
@@ -230,7 +221,6 @@ func TestGenerateSwaggerRejectsUnknownTemplate(t *testing.T) {
 }
 
 func TestGenerateSwaggerRequiresFromFlag(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	code, stdout, stderr := runCLI("generate", "swagger")
 
@@ -246,7 +236,6 @@ func TestGenerateSwaggerRequiresFromFlag(t *testing.T) {
 }
 
 func TestGenerateSwaggerSuffixWritesGeneratedSiblingOnSecondRun(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
@@ -272,7 +261,6 @@ func TestGenerateSwaggerSuffixWritesGeneratedSiblingOnSecondRun(t *testing.T) {
 }
 
 func TestGenerateSwaggerMergeWritesConflictMarkers(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
@@ -310,7 +298,6 @@ func TestGenerateSwaggerMergeWritesConflictMarkers(t *testing.T) {
 }
 
 func TestGenerateSwaggerSkipLeavesOriginalUntouched(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
@@ -349,7 +336,6 @@ func TestGenerateSwaggerSkipLeavesOriginalUntouched(t *testing.T) {
 }
 
 func TestGenerateSwaggerOverwriteReplacesExistingFile(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
@@ -385,7 +371,6 @@ func TestGenerateSwaggerOverwriteReplacesExistingFile(t *testing.T) {
 }
 
 func TestGenerateSwaggerRejectsUnknownIfExistsStrategy(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "petstore-swagger2.yaml")
 	code, stdout, stderr := runCLI("generate", "swagger", "--from", source, "--if-exists", "explode")
@@ -402,7 +387,6 @@ func TestGenerateSwaggerRejectsUnknownIfExistsStrategy(t *testing.T) {
 }
 
 func TestGenerateSwaggerInitRendersProjectAndOverlay(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	registryRoot := writeGenerateInitTemplateCatalogFixture(t)
 	dest := t.TempDir()
@@ -456,7 +440,6 @@ func TestGenerateSwaggerInitRendersProjectAndOverlay(t *testing.T) {
 }
 
 func TestGenerateSwaggerInitRejectsExistingDestinationWithoutExplicitIfExists(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	registryRoot := writeGenerateInitTemplateCatalogFixture(t)
 	dest := t.TempDir()
@@ -484,7 +467,6 @@ func TestGenerateSwaggerInitRejectsExistingDestinationWithoutExplicitIfExists(t 
 }
 
 func TestGenerateSwaggerInitAllowsExistingDestinationWithExplicitIfExists(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
 
 	registryRoot := writeGenerateInitTemplateCatalogFixture(t)
 	dest := t.TempDir()

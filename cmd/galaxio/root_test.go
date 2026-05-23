@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/galax-io/galaxio-cli/internal/buildinfo"
-	"github.com/galax-io/galaxio-cli/internal/featureflags"
 	"github.com/galax-io/galaxio-cli/internal/selfupdate"
 	"github.com/galax-io/galaxio-cli/internal/templatecatalog"
 	"github.com/spf13/cobra"
@@ -24,8 +23,6 @@ func runCLI(args ...string) (int, string, string) {
 }
 
 func TestHelpPrintsMinimalUsage(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "false")
-
 	code, stdout, stderr := runCLI("--help")
 
 	if code != exitOK {
@@ -34,51 +31,14 @@ func TestHelpPrintsMinimalUsage(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "doctor", "template", "update", "version"} {
+	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "doctor", "generate", "template", "update", "version"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected help output to contain %q, got %q", want, stdout)
 		}
 	}
-	if strings.Contains(stdout, "generate") {
-		t.Fatalf("did not expect generate in help when feature is disabled, got %q", stdout)
-	}
 }
 
-func TestHelpShowsGenerateWhenFeatureEnabled(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
-	code, stdout, stderr := runCLI("--help")
-
-	if code != exitOK {
-		t.Fatalf("expected exit code %d, got %d", exitOK, code)
-	}
-	if stderr != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr)
-	}
-	if !strings.Contains(stdout, "generate") {
-		t.Fatalf("expected generate in help when feature is enabled, got %q", stdout)
-	}
-}
-
-func TestGenerateCommandReturnsFeatureFlagErrorWhenDisabled(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "false")
-
-	code, stdout, stderr := runCLI("generate")
-
-	if code != exitUsage {
-		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
-	}
-	if stdout != "" {
-		t.Fatalf("expected empty stdout, got %q", stdout)
-	}
-	if want := "GALAXIO_FEATURE_GENERATE=true"; !strings.Contains(stderr, want) {
-		t.Fatalf("expected feature flag guidance %q, got %q", want, stderr)
-	}
-}
-
-func TestGenerateCommandIsRegisteredWhenEnabled(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
+func TestGenerateCommandPrintsHelp(t *testing.T) {
 	code, stdout, stderr := runCLI("generate")
 
 	if code != exitOK {
@@ -92,9 +52,7 @@ func TestGenerateCommandIsRegisteredWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestGenerateSubcommandsAreShownWhenEnabled(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
+func TestGenerateSubcommandsAreShown(t *testing.T) {
 	code, stdout, stderr := runCLI("generate", "--help")
 
 	if code != exitOK {
