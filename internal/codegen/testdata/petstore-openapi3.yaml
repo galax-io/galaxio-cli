@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: Petstore OpenAPI 3
+  version: 3.0.0
+servers:
+  - url: https://example.com/api/v3
+paths:
+  /pets:
+    get:
+      tags: [pets]
+      summary: List pets
+      operationId: listPets
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: OK
+    post:
+      tags: [pets]
+      summary: Create pet
+      operationId: createPet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetInput"
+      responses:
+        "201":
+          description: Created
+  /pets/{petId}:
+    delete:
+      tags: [pets]
+      summary: Delete pet
+      operationId: deletePet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Trace-Id
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+components:
+  schemas:
+    PetInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        tag:
+          type: string
+        metadata:
+          type: object
+          properties:
+            nickname:
+              type: string
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      name: X-API-Key
+      in: header
+    BearerAuth:
+      type: http
+      scheme: bearer

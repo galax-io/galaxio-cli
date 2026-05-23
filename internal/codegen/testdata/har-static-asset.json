@@ -1,0 +1,38 @@
+{
+  "log": {
+    "entries": [
+      {
+        "startedDateTime": "2026-05-21T10:00:03.000Z",
+        "time": 14,
+        "request": {
+          "method": "GET",
+          "url": "https://httpbin.org/assets/app.js",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "*/*"
+            }
+          ],
+          "queryString": [],
+          "bodySize": -1,
+          "headersSize": -1
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [],
+          "content": {
+            "size": 17,
+            "mimeType": "application/javascript",
+            "text": "console.log('x')"
+          },
+          "headersSize": -1,
+          "bodySize": -1
+        }
+      }
+    ]
+  }
+}

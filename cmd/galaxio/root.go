@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/galax-io/galaxio-cli/internal/featureflags"
 	"github.com/spf13/cobra"
@@ -96,6 +97,7 @@ func execute(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err == nil {
 		err = cmd.Execute()
 	}
+	err = normalizeCLIError(err)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %s\n", err)
 	}
@@ -105,4 +107,14 @@ func execute(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func buildVersionString() string {
 	return versionInfo().CleanVersion()
+}
+
+func normalizeCLIError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "unknown command") {
+		return UsageError{Err: err}
+	}
+	return err
 }

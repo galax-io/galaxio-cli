@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/galax-io/galaxio-cli/internal/codegen"
 	highbase "github.com/pb33f/libopenapi/datamodel/high/base"
 	v2 "github.com/pb33f/libopenapi/datamodel/high/v2"
 	liborderedmap "github.com/pb33f/libopenapi/orderedmap"
@@ -201,22 +202,12 @@ func TestRequestNameForFallbacks(t *testing.T) {
 	}
 }
 
-func TestAppendWordSkipsEmptyAndPathParams(t *testing.T) {
+func TestSplitWordsSplitsPathLikeTokens(t *testing.T) {
 	t.Parallel()
 
-	words := appendWord(nil, "  ")
-	if len(words) != 0 {
-		t.Fatalf("expected empty result for blank word, got %#v", words)
-	}
-
-	words = appendWord(words, "{id}")
-	if len(words) != 0 {
-		t.Fatalf("expected path param word to be skipped, got %#v", words)
-	}
-
-	words = appendWord(words, "pets")
-	if len(words) != 1 || words[0] != "pets" {
-		t.Fatalf("expected regular word to be appended, got %#v", words)
+	words := codegen.SplitWords("  /{id}/pets")
+	if len(words) != 2 || words[0] != "id" || words[1] != "pets" {
+		t.Fatalf("expected path-like tokens to be split consistently, got %#v", words)
 	}
 }
 

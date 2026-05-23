@@ -250,6 +250,140 @@ func TestSwaggerParserParseSupportsExpandedSwagger2Fixture(t *testing.T) {
 	}
 }
 
+func TestSwaggerParserParseBuildsSpecFromOpenAPI3(t *testing.T) {
+	fixture := readTestFixture(t, "petstore-openapi3.yaml")
+
+	spec, err := NewSwaggerParser().Parse(context.Background(), fixture)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if spec.Title != "Petstore OpenAPI 3" {
+		t.Fatalf("expected title %q, got %q", "Petstore OpenAPI 3", spec.Title)
+	}
+	if spec.Version != "3.0.0" {
+		t.Fatalf("expected version %q, got %q", "3.0.0", spec.Version)
+	}
+	if spec.BasePath != "/api/v3" {
+		t.Fatalf("expected base path %q, got %q", "/api/v3", spec.BasePath)
+	}
+
+	pets := findGroup(t, spec, "pets")
+	if len(pets.Requests) != 3 {
+		t.Fatalf("expected 3 requests in pets group, got %d", len(pets.Requests))
+	}
+
+	createPet := findRequest(t, pets, "createPet")
+	if createPet.Method != "POST" || createPet.Path != "/pets" {
+		t.Fatalf("unexpected createPet request %#v", createPet)
+	}
+	if createPet.Body == nil || createPet.Body.Type != "object" {
+		t.Fatalf("expected createPet body object, got %#v", createPet.Body)
+	}
+	nameField := findField(t, createPet.Body, "name")
+	if !nameField.Required || nameField.Type != "string" {
+		t.Fatalf("expected required string name field, got %#v", nameField)
+	}
+	metadataField := findField(t, createPet.Body, "metadata")
+	nicknameField := findField(t, metadataField, "nickname")
+	if nicknameField.Type != "string" {
+		t.Fatalf("expected nested nickname field, got %#v", nicknameField)
+	}
+
+	deletePet := findRequest(t, pets, "deletePet")
+	if len(deletePet.Headers) != 1 || deletePet.Headers[0].Name != "X-Trace-Id" {
+		t.Fatalf("expected X-Trace-Id header, got %#v", deletePet.Headers)
+	}
+	if len(deletePet.Params) != 1 || deletePet.Params[0].Name != "petId" || deletePet.Params[0].In != "path" {
+		t.Fatalf("expected petId path param, got %#v", deletePet.Params)
+	}
+
+	if len(spec.AuthSchemes) != 2 {
+		t.Fatalf("expected 2 auth schemes, got %d", len(spec.AuthSchemes))
+	}
+	apiKey := findAuthScheme(t, spec, "ApiKeyAuth")
+	if apiKey.Type != "apikey" || apiKey.Name != "X-API-Key" || apiKey.Location != "header" {
+		t.Fatalf("expected api key auth scheme, got %#v", apiKey)
+	}
+	bearer := findAuthScheme(t, spec, "BearerAuth")
+	if bearer.Type != "bearer" {
+		t.Fatalf("expected bearer auth scheme, got %#v", bearer)
+	}
+}
+
+func TestSwaggerParserParseBuildsSpecFromOpenAPI31(t *testing.T) {
+	fixture := readTestFixture(t, "petstore-openapi31.yaml")
+
+	spec, err := NewSwaggerParser().Parse(context.Background(), fixture)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if spec.Title != "Petstore OpenAPI 3.1" {
+		t.Fatalf("expected title %q, got %q", "Petstore OpenAPI 3.1", spec.Title)
+	}
+	if spec.Version != "3.1.0" {
+		t.Fatalf("expected version %q, got %q", "3.1.0", spec.Version)
+	}
+	if spec.BasePath != "/platform/v31" {
+		t.Fatalf("expected base path %q, got %q", "/platform/v31", spec.BasePath)
+	}
+	if len(spec.Groups) != 1 {
+		t.Fatalf("expected only paths to be rendered, got %#v", spec.Groups)
+	}
+
+	pets := findGroup(t, spec, "pets")
+	upsertPet := findRequest(t, pets, "upsertPet")
+	if upsertPet.Body == nil || upsertPet.Body.Type != "object" {
+		t.Fatalf("expected upsertPet body object, got %#v", upsertPet.Body)
+	}
+	nicknameField := findField(t, upsertPet.Body, "nickname")
+	if nicknameField.Type != "string" {
+		t.Fatalf("expected nullable nickname to normalize to string, got %#v", nicknameField)
+	}
+	aliasesField := findField(t, upsertPet.Body, "aliases")
+	if aliasesField.Type != "array" || aliasesField.Items == nil || aliasesField.Items.Type != "string" {
+		t.Fatalf("expected aliases items to normalize to string, got %#v", aliasesField)
+	}
+}
+
+func TestSwaggerParserParseSupportsOpenAPIExamplesAndWebhooksOnly(t *testing.T) {
+	t.Run("official examples document falls back to default group", func(t *testing.T) {
+		spec, err := NewSwaggerParser().Parse(context.Background(), readTestFixture(t, "api-with-examples-openapi3.yaml"))
+		if err != nil {
+			t.Fatalf("Parse() returned error: %v", err)
+		}
+
+		if len(spec.Groups) != 1 {
+			t.Fatalf("expected 1 group, got %d", len(spec.Groups))
+		}
+		group := findGroup(t, spec, "default")
+		if len(group.Requests) != 2 {
+			t.Fatalf("expected 2 requests in default group, got %d", len(group.Requests))
+		}
+		listVersions := findRequest(t, group, "listVersionsv2")
+		if listVersions.Summary != "List API versions" {
+			t.Fatalf("expected summary to be preserved, got %#v", listVersions)
+		}
+		if len(listVersions.Responses) != 2 {
+			t.Fatalf("expected response metadata to be preserved, got %#v", listVersions.Responses)
+		}
+	})
+
+	t.Run("webhooks-only 3.1 document is accepted and ignored for generation", func(t *testing.T) {
+		spec, err := NewSwaggerParser().Parse(context.Background(), readTestFixture(t, "webhook-example-openapi31.yaml"))
+		if err != nil {
+			t.Fatalf("Parse() returned error: %v", err)
+		}
+		if spec.Title != "Webhook Example" {
+			t.Fatalf("expected title %q, got %q", "Webhook Example", spec.Title)
+		}
+		if len(spec.Groups) != 0 {
+			t.Fatalf("expected no groups for webhooks-only document, got %#v", spec.Groups)
+		}
+	})
+}
+
 func readTestFixture(t *testing.T, name string) []byte {
 	t.Helper()
 

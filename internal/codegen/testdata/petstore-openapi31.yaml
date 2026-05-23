@@ -1,0 +1,51 @@
+openapi: 3.1.0
+info:
+  title: Petstore OpenAPI 3.1
+  version: 3.1.0
+servers:
+  - url: https://example.com/platform/v31/
+paths:
+  /pets:
+    post:
+      tags: [pets]
+      summary: Upsert pet
+      operationId: upsertPet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetPatch"
+      responses:
+        "200":
+          description: Updated
+webhooks:
+  petUpdated:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "202":
+          description: Accepted
+components:
+  schemas:
+    PetPatch:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        nickname:
+          type:
+            - string
+            - "null"
+        aliases:
+          type: array
+          items:
+            type:
+              - string
+              - "null"

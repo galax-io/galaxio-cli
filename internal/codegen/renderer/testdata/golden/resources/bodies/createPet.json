@@ -1,0 +1,13 @@
+{
+  "name": "${name}",
+  "category": {
+    "id": ${categoryId},
+    "name": "${categoryName}"
+  },
+  "tags": [
+    {
+      "id": ${tagsItemId},
+      "name": "${tagsItemName}"
+    }
+  ]
+}

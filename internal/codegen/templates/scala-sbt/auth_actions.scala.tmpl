@@ -1,0 +1,13 @@
+package {{ .Package }}
+
+import io.gatling.core.Predef._
+
+object AuthActions {
+  // TODO: replace this placeholder with project-specific authentication calls.
+  // Suggested schemes from the source spec:
+{{- range .Schemes }}
+  // - {{ .Key }} (type={{ .Type }}, name={{ .Name }}, in={{ .Location }})
+{{- end }}
+  // Example saveAs pattern:
+  // exec(session => session.set("accessToken", "replace-me"))
+}
