@@ -122,7 +122,7 @@ template, including manifest defaults and `--values` / `--set` overrides.
 
 `local:` sources are resolved from the current working directory.
 
-## Planned CLI Flow
+## CLI Reference
 
 ```sh
 galaxio template list
@@ -133,7 +133,7 @@ galaxio template validate github:galax-io/templates-gatling
 galaxio doctor
 ```
 
-Persistent configuration is also supported:
+Persistent configuration:
 
 ```sh
 galaxio template configure --show
