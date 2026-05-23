@@ -23,6 +23,7 @@ type Request struct {
 	Path      string
 	Name      string
 	Summary   string
+	Comments  []string
 	Headers   []Header
 	Params    []Param
 	Body      *BodySchema
@@ -35,6 +36,7 @@ type BodySchema struct {
 	Type     string
 	Format   string
 	Required bool
+	Raw      string
 	Fields   []BodySchema
 	Items    *BodySchema
 }

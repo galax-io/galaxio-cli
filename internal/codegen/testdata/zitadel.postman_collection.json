@@ -1,0 +1,462 @@
+{
+  "info": {
+    "_postman_id": "8a9b32cd-04ce-4138-a422-5aa313bc7f51",
+    "name": "ZITADEL with Postman",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "32877280"
+  },
+  "item": [
+    {
+      "name": "Add ZITADEL Project",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "let response_body = pm.response.json();",
+              "pm.environment.set(\"project_id\", response_body.id); "
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{service_user_PAT}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n \"name\": \"MyPostmanProject\",\n \"projectRoleAssertion\": true,\n \"projectRoleCheck\": true,\n \"hasProjectCheck\": true,\n \"privateLabelingSetting\": \"PRIVATE_LABELING_SETTING_UNSPECIFIED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{your_zitadel_domain}}/management/v1/projects",
+          "host": [
+            "{{your_zitadel_domain}}"
+          ],
+          "path": [
+            "management",
+            "v1",
+            "projects"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Add ZITADEL WebApp - PKCE",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "let response_body = pm.response.json();",
+              "pm.environment.set(\"web_app_client_id\", response_body.clientId); "
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{service_user_PAT}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n \"name\": \"MyOIDCWebApp\",\n \"redirectUris\": [\n \"https://oauth.pstmn.io/v1/browser-callback\"\n ],\n \"responseTypes\": [\n \"OIDC_RESPONSE_TYPE_CODE\"\n ],\n \"grantTypes\": [\n \"OIDC_GRANT_TYPE_AUTHORIZATION_PKCE\"\n ],\n \"appType\": \"OIDC_APP_TYPE_WEB\",\n \"authMethodType\": \"OIDC_AUTH_METHOD_TYPE_NONE\",\n \"version\": \"OIDC_VERSION_1_0\",\n \"devMode\": true,\n \"accessTokenType\": \"OIDC_TOKEN_TYPE_BEARER\",\n \"accessTokenRoleAssertion\": true,\n \"idTokenRoleAssertion\": true,\n \"idTokenUserinfoAssertion\": true,\n \"clockSkew\": \"1s\",\n \"skipNativeAppSuccessPage\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{your_zitadel_domain}}/management/v1/projects/{{project_id}}/apps/oidc",
+          "host": [
+            "{{your_zitadel_domain}}"
+          ],
+          "path": [
+            "management",
+            "v1",
+            "projects",
+            "{{project_id}}",
+            "apps",
+            "oidc"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Add ZITADEL API",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{service_user_PAT}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n \"name\": \"MyAPIApp\",\n \"authMethodType\": \"API_AUTH_METHOD_TYPE_BASIC\"\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{your_zitadel_domain}}/management/v1/projects/{{project_id}}/apps/api",
+          "host": [
+            "{{your_zitadel_domain}}"
+          ],
+          "path": [
+            "management",
+            "v1",
+            "projects",
+            "{{project_id}}",
+            "apps",
+            "api"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Add ZITADEL User (Human)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{service_user_PAT}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n \"userName\": \"minnie-mouse\",\n \"profile\": {\n \"firstName\": \"Minnie\",\n \"lastName\": \"Mouse\",\n \"nickName\": \"Mini\",\n \"displayName\": \"Minnie Mouse\",\n \"preferredLanguage\": \"en\",\n \"gender\": \"GENDER_FEMALE\"\n },\n \"email\": {\n \"email\": \"minnie@mouse.com\",\n \"isEmailVerified\": true\n },\n \"phone\": {\n \"phone\": \"+41 71 000 00 00\",\n \"isPhoneVerified\": true\n },\n \"hashedPassword\": {\n \"value\": \"$2a$12$k0LsiR40ZNcMxbyD80g5nebjB9R0/VqilwfFLLr6m/XTOc9WRf8Om\"\n },\n \"passwordChangeRequired\": true,\n \"requestPasswordlessRegistration\": true,\n \"otpCode\": \"string\"\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{your_zitadel_domain}}/management/v1/users/human/_import",
+          "host": [
+            "{{your_zitadel_domain}}"
+          ],
+          "path": [
+            "management",
+            "v1",
+            "users",
+            "human",
+            "_import"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login User and Call Userinfo Endpoint",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.request.headers.has(\"Authorization\")) {",
+              " let authHeader = pm.request.headers.get(\"Authorization\");",
+              " let accessToken = authHeader.split(\" \")[1]; // Assuming the format is \"Bearer \"",
+              " pm.environment.set(\"access_token\", accessToken);",
+              "}",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            {
+              "key": "clientId",
+              "value": "{{web_app_client_id}}",
+              "type": "string"
+            },
+            {
+              "key": "tokenName",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "key": "tokenType",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "key": "accessToken",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "key": "tokenRequestParams",
+              "value": [],
+              "type": "any"
+            },
+            {
+              "key": "authUrl",
+              "value": "{{auth_url}}",
+              "type": "string"
+            },
+            {
+              "key": "accessTokenUrl",
+              "value": "{{token_url}}",
+              "type": "string"
+            },
+            {
+              "key": "scope",
+              "value": "openid profile email required_scope urn:zitadel:iam:org:project:id:{{project_id}}:aud ",
+              "type": "string"
+            },
+            {
+              "key": "headerPrefix",
+              "value": "Bearer",
+              "type": "string"
+            },
+            {
+              "key": "grant_type",
+              "value": "authorization_code_with_pkce",
+              "type": "string"
+            },
+            {
+              "key": "code_verifier",
+              "value": "pepsicola123",
+              "type": "string"
+            },
+            {
+              "key": "addTokenTo",
+              "value": "header",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{your_zitadel_domain}}/oidc/v1/userinfo",
+          "host": [
+            "{{your_zitadel_domain}}"
+          ],
+          "path": [
+            "oidc",
+            "v1",
+            "userinfo"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Unprotected API Call",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/simple-get",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "simple-get"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Protected API Call",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "",
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/protected-get",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "protected-get"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "client_id",
+      "value": "253xxxxxxxxxx@test"
+    },
+    {
+      "key": "project_id",
+      "value": "25xxxxxxxxx981\n",
+      "type": "string"
+    },
+    {
+      "key": "auth_url",
+      "value": "https://your_domain.zitadel.cloud/oauth/v2/authorize"
+    },
+    {
+      "key": "token_url",
+      "value": "token_url"
+    }
+  ]
+}

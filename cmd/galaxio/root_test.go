@@ -81,30 +81,32 @@ func TestGenerateCommandIsRegisteredWhenEnabled(t *testing.T) {
 
 	code, stdout, stderr := runCLI("generate")
 
-	if code != exitRuntime {
-		t.Fatalf("expected exit code %d, got %d", exitRuntime, code)
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d", exitOK, code)
 	}
-	if stdout != "" {
-		t.Fatalf("expected empty stdout, got %q", stdout)
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	if want := "not implemented yet"; !strings.Contains(stderr, want) {
-		t.Fatalf("expected generate placeholder error, got %q", stderr)
+	if want := "Generate Gatling load-test source files"; !strings.Contains(stdout, want) {
+		t.Fatalf("expected generate help output, got %q", stdout)
 	}
 }
 
-func TestGenerateSubcommandsReachPlaceholderWhenEnabled(t *testing.T) {
+func TestGenerateSubcommandsAreShownWhenEnabled(t *testing.T) {
 	t.Setenv(featureflags.Generate.EnvVar, "true")
 
-	code, stdout, stderr := runCLI("generate", "swagger")
+	code, stdout, stderr := runCLI("generate", "--help")
 
-	if code != exitRuntime {
-		t.Fatalf("expected exit code %d, got %d", exitRuntime, code)
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d", exitOK, code)
 	}
-	if stdout != "" {
-		t.Fatalf("expected empty stdout, got %q", stdout)
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	if want := "not implemented yet"; !strings.Contains(stderr, want) {
-		t.Fatalf("expected generate placeholder error, got %q", stderr)
+	for _, want := range []string{"swagger", "har", "postman", "--from", "--template", "--dest", "--package"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("expected generate help to contain %q, got %q", want, stdout)
+		}
 	}
 }
 

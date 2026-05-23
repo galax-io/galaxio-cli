@@ -1,0 +1,18 @@
+package {{ .Package }}
+
+import io.gatling.core.Predef._
+import io.gatling.core.structure.ScenarioBuilder
+import {{ .CasesImport }}
+
+object {{ .ObjectName }} {
+  def apply(): ScenarioBuilder = new {{ .ObjectName }}().scn
+}
+
+class {{ .ObjectName }} {
+
+  val scn: ScenarioBuilder = scenario("{{ .ScenarioName }}")
+{{- range .ExecCalls }}
+    .exec({{ . }})
+{{- end }}
+
+}
