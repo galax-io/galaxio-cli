@@ -67,4 +67,3 @@ func newGenerateCommand() *cobra.Command {
 
 	return cmd
 }
-

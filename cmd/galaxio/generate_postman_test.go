@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 func TestGeneratePostmanWritesFilesAndPrintsSummary(t *testing.T) {

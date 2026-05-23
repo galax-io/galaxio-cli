@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 func TestGenerateHARWritesFilesAndPrintsSummary(t *testing.T) {
