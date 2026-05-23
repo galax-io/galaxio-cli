@@ -20,6 +20,13 @@ inputs:
     type: string
     default: Platform Team
     description: Team or owner label shown in the README.
+  MetricsEnabled:
+    type: string
+    default: "false"
+    description: Overlay the metrics plugin files when set to true.
 files:
   - from: files
     to: .
+  - from: plugins/metrics
+    to: .
+    if: '{{ .MetricsEnabled }}'
