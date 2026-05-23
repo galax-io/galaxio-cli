@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/galax-io/galaxio-cli/internal/featureflags"
 	"github.com/spf13/cobra"
 )
 
@@ -80,9 +79,7 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newTemplateCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newVersionCommand())
-	if featureflags.Enabled(featureflags.Generate) {
-		cmd.AddCommand(newGenerateCommand())
-	}
+	cmd.AddCommand(newGenerateCommand())
 
 	return cmd
 }
@@ -93,10 +90,7 @@ func execute(args []string, stdout io.Writer, stderr io.Writer) int {
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 
-	err := validateExperimentalCommand(args)
-	if err == nil {
-		err = cmd.Execute()
-	}
+	err := cmd.Execute()
 	err = normalizeCLIError(err)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %s\n", err)

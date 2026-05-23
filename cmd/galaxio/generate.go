@@ -3,7 +3,6 @@ package main
 import (
 	"strings"
 
-	"github.com/galax-io/galaxio-cli/internal/featureflags"
 	"github.com/spf13/cobra"
 )
 
@@ -67,34 +66,4 @@ func newGenerateCommand() *cobra.Command {
 	cmd.AddCommand(newGeneratePostmanCommand(opts))
 
 	return cmd
-}
-
-func validateExperimentalCommand(args []string) error {
-	command := firstCommandArg(args)
-	if command == "" {
-		return nil
-	}
-
-	flag, ok := featureflags.LookupCommandFlag(command)
-	if !ok || featureflags.Enabled(flag) {
-		return nil
-	}
-
-	return UsageError{Err: featureflags.DisabledCommandError(flag)}
-}
-
-func firstCommandArg(args []string) string {
-	for _, arg := range args {
-		if arg == "--" {
-			return ""
-		}
-		if arg == "help" {
-			continue
-		}
-		if len(arg) > 0 && arg[0] == '-' {
-			continue
-		}
-		return arg
-	}
-	return ""
 }

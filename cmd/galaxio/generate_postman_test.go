@@ -6,13 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/galax-io/galaxio-cli/internal/featureflags"
 )
 
 func TestGeneratePostmanWritesFilesAndPrintsSummary(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "sample-collection.json")
 
@@ -82,8 +78,6 @@ func TestGeneratePostmanWritesFilesAndPrintsSummary(t *testing.T) {
 }
 
 func TestGeneratePostmanSupportsJSONOutput(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "sample-collection.json")
 
@@ -118,8 +112,6 @@ func TestGeneratePostmanSupportsJSONOutput(t *testing.T) {
 }
 
 func TestGeneratePostmanRejectsInvalidCollection(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
 	source := filepath.Join(t.TempDir(), "invalid-postman.json")
 	if err := os.WriteFile(source, []byte(`{"info":{}}`), 0o644); err != nil {
 		t.Fatalf("write invalid collection: %v", err)
@@ -139,8 +131,6 @@ func TestGeneratePostmanRejectsInvalidCollection(t *testing.T) {
 }
 
 func TestGeneratePostmanSupportsZitadelFixture(t *testing.T) {
-	t.Setenv(featureflags.Generate.EnvVar, "true")
-
 	dest := t.TempDir()
 	source := filepath.Join("..", "..", "internal", "codegen", "testdata", "zitadel.postman_collection.json")
 
