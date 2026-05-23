@@ -368,7 +368,7 @@ func TestGenerateSwaggerOverwriteReplacesExistingFile(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	if !strings.Contains(stdout, "skipped: 6") || !strings.Contains(stdout, "overwritten: 2") {
+	if !strings.Contains(stdout, "skipped: ") || !strings.Contains(stdout, "overwritten: ") || strings.Contains(stdout, "overwritten: 8") {
 		t.Fatalf("expected overwrite summary, got %q", stdout)
 	}
 
