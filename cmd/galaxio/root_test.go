@@ -618,7 +618,7 @@ func TestExitCodeMapping(t *testing.T) {
 		{name: "ok", err: nil, want: exitOK},
 		{name: "usage", err: UsageError{Err: errors.New("bad args")}, want: exitUsage},
 		{name: "runtime", err: RuntimeError{Err: errors.New("boom")}, want: exitRuntime},
-		{name: "unknown defaults to usage", err: errors.New("unknown command"), want: exitUsage},
+		{name: "unknown defaults to runtime", err: errors.New("unknown command"), want: exitRuntime},
 	}
 
 	for _, tt := range tests {

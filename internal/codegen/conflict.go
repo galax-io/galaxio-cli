@@ -19,11 +19,20 @@ const (
 	IfExistsOverwrite = "overwrite"
 )
 
+type ConflictStatus string
+
+const (
+	ConflictStatusWritten     ConflictStatus = "written"
+	ConflictStatusSkipped     ConflictStatus = "skipped"
+	ConflictStatusConflict    ConflictStatus = "conflict"
+	ConflictStatusOverwritten ConflictStatus = "overwritten"
+)
+
 // ConflictResult reports how one file write was resolved.
 type ConflictResult struct {
 	Path        string
 	WrittenPath string
-	Status      string
+	Status      ConflictStatus
 }
 
 // ValidateIfExistsStrategy validates supported conflict strategies.
@@ -54,7 +63,7 @@ func WriteFileWithStrategy(targetPath string, content []byte, strategy string) (
 		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
 			return ConflictResult{}, err
 		}
-		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: "written"}, nil
+		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: ConflictStatusWritten}, nil
 	}
 
 	switch strategy {
@@ -63,23 +72,23 @@ func WriteFileWithStrategy(targetPath string, content []byte, strategy string) (
 		if err := os.WriteFile(generatedPath, content, 0o644); err != nil {
 			return ConflictResult{}, err
 		}
-		return ConflictResult{Path: targetPath, WrittenPath: generatedPath, Status: "written"}, nil
+		return ConflictResult{Path: targetPath, WrittenPath: generatedPath, Status: ConflictStatusWritten}, nil
 	case IfExistsMerge:
 		merged := mergeConflictContent(content, existing)
 		if err := os.WriteFile(targetPath, merged, 0o644); err != nil {
 			return ConflictResult{}, err
 		}
-		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: "conflict"}, nil
+		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: ConflictStatusConflict}, nil
 	case IfExistsSkip:
-		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: "skipped"}, nil
+		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: ConflictStatusSkipped}, nil
 	case IfExistsOverwrite:
 		if bytes.Equal(existing, content) {
-			return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: "overwritten"}, nil
+			return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: ConflictStatusSkipped}, nil
 		}
 		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
 			return ConflictResult{}, err
 		}
-		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: "overwritten"}, nil
+		return ConflictResult{Path: targetPath, WrittenPath: targetPath, Status: ConflictStatusOverwritten}, nil
 	default:
 		return ConflictResult{}, fmt.Errorf("unknown if-exists strategy %q", strategy)
 	}

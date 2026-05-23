@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/galax-io/galaxio-cli/internal/codegen"
 )
@@ -42,7 +41,7 @@ type bodyTemplateData struct {
 }
 
 func buildRequestTemplateData(spec *codegen.Spec, request codegen.Request) actionsRequestTemplateData {
-	name := lowerCamel(request.Name)
+	name := codegen.LowerCamel(request.Name)
 	if name == "" {
 		name = "request"
 	}
@@ -56,7 +55,7 @@ func buildRequestTemplateData(spec *codegen.Spec, request codegen.Request) actio
 
 	bodyFile := ""
 	if request.Body != nil {
-		bodyFile = lowerCamel(request.Name) + ".json"
+		bodyFile = codegen.LowerCamel(request.Name) + ".json"
 		lines = append(lines, fmt.Sprintf(".body(ElFileBody(%q)).asJson", "bodies/"+bodyFile))
 	}
 
@@ -75,7 +74,7 @@ func buildRequestTemplateData(spec *codegen.Spec, request codegen.Request) actio
 func renderParamLines(params []codegen.Param) []string {
 	lines := make([]string, 0, len(params))
 	for _, param := range params {
-		placeholder := scalaPlaceholder(lowerCamel(param.Name))
+		placeholder := scalaPlaceholder(codegen.LowerCamel(param.Name))
 		switch strings.ToLower(param.In) {
 		case "query":
 			lines = append(lines, fmt.Sprintf(".queryParam(%q, %q)", param.Name, placeholder))
@@ -91,7 +90,7 @@ func renderHeaderLines(headers []codegen.Header) []string {
 	for _, header := range headers {
 		value := header.Value
 		if strings.TrimSpace(value) == "" {
-			value = scalaPlaceholder(lowerCamel(header.Name))
+			value = scalaPlaceholder(codegen.LowerCamel(header.Name))
 		}
 		lines = append(lines, fmt.Sprintf(".header(%q, %q)", header.Name, value))
 	}
@@ -136,7 +135,7 @@ func pathParamReplacer(value string) string {
 			end := strings.IndexByte(value[i:], '}')
 			if end > 0 {
 				name := value[i+1 : i+end]
-				builder.WriteString(scalaPlaceholder(lowerCamel(name)))
+				builder.WriteString(scalaPlaceholder(codegen.LowerCamel(name)))
 				i += end
 				continue
 			}
@@ -241,7 +240,7 @@ func appendPath(path []string, part string) []string {
 func flattenPlaceholder(parts []string) string {
 	filtered := make([]string, 0, len(parts))
 	for _, part := range parts {
-		part = lowerCamel(part)
+		part = codegen.LowerCamel(part)
 		if part != "" {
 			filtered = append(filtered, part)
 		}
@@ -268,25 +267,8 @@ func scalaPlaceholder(name string) string {
 	return "${" + name + "}"
 }
 
-func lowerCamel(value string) string {
-	words := splitWords(value)
-	if len(words) == 0 {
-		return ""
-	}
-
-	for i := range words {
-		words[i] = strings.ToLower(words[i])
-	}
-
-	result := words[0]
-	for _, word := range words[1:] {
-		result += strings.ToUpper(word[:1]) + word[1:]
-	}
-	return result
-}
-
 func pascalCase(value string) string {
-	words := splitWords(value)
+	words := codegen.SplitWords(value)
 	if len(words) == 0 {
 		return ""
 	}
@@ -298,41 +280,4 @@ func pascalCase(value string) string {
 		builder.WriteString(lower[1:])
 	}
 	return builder.String()
-}
-
-func splitWords(value string) []string {
-	replacer := strings.NewReplacer("/", " ", "-", " ", "_", " ", ".", " ")
-	value = replacer.Replace(value)
-
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return unicode.IsSpace(r) || unicode.IsPunct(r)
-	})
-
-	words := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-
-		var builder strings.Builder
-		runes := []rune(part)
-		for i, r := range runes {
-			if i > 0 && unicode.IsUpper(r) && (unicode.IsLower(runes[i-1]) || i+1 < len(runes) && unicode.IsLower(runes[i+1])) {
-				words = appendWord(words, builder.String())
-				builder.Reset()
-			}
-			builder.WriteRune(r)
-		}
-		words = appendWord(words, builder.String())
-	}
-
-	return words
-}
-
-func appendWord(words []string, word string) []string {
-	word = strings.TrimSpace(word)
-	if word == "" {
-		return words
-	}
-	return append(words, word)
 }

@@ -180,7 +180,7 @@ func walkPostmanItem(item postmanItem, ctx postmanWalkContext) error {
 	currentScope := ctx.authScopeName
 	if item.Auth != nil {
 		currentAuth = item.Auth
-		currentScope = lowerCamel(item.Name)
+		currentScope = codegen.LowerCamel(item.Name)
 		if currentScope == "" {
 			currentScope = "item"
 		}
@@ -191,7 +191,7 @@ func walkPostmanItem(item postmanItem, ctx postmanWalkContext) error {
 	currentEvents = append(currentEvents, extractPreRequestScripts(item.Events)...)
 
 	if len(item.Items) > 0 {
-		groupName := lowerCamel(item.Name)
+		groupName := codegen.LowerCamel(item.Name)
 		if groupName == "" {
 			groupName = ctx.groupName
 		}
@@ -223,7 +223,7 @@ func walkPostmanItem(item postmanItem, ctx postmanWalkContext) error {
 	}
 	ctx.ensureGroup(ctx.groupName).Requests = append(ctx.ensureGroup(ctx.groupName).Requests, request)
 	if item.Request.Auth != nil {
-		scope := lowerCamel(item.Name)
+		scope := codegen.LowerCamel(item.Name)
 		if scope == "" {
 			scope = "request"
 		}
@@ -233,7 +233,7 @@ func walkPostmanItem(item postmanItem, ctx postmanWalkContext) error {
 }
 
 func buildPostmanRequest(item postmanItem, inheritedAuth *postmanAuth, inheritedEvents []string, variables map[string]string, nameCounts map[string]int) (codegen.Request, error) {
-	requestName := lowerCamel(item.Name)
+	requestName := codegen.LowerCamel(item.Name)
 	if requestName == "" {
 		requestName = "request"
 	}
@@ -481,7 +481,7 @@ func mapPostmanVariables(value string) string {
 		end += start + 2
 		builder.WriteString(value[:start])
 		name := strings.TrimSpace(value[start+2 : end])
-		builder.WriteString("${" + lowerCamel(name) + "}")
+		builder.WriteString("${" + codegen.LowerCamel(name) + "}")
 		value = value[end+2:]
 	}
 	return builder.String()

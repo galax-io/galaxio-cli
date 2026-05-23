@@ -29,7 +29,7 @@ func TestWriteFileWithStrategyWritesNewFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteFileWithStrategy() error = %v", err)
 	}
-	if result.Status != "written" {
+	if result.Status != ConflictStatusWritten {
 		t.Fatalf("expected written status, got %#v", result)
 	}
 	assertFileEquals(t, target, "generated")
@@ -72,7 +72,7 @@ func TestWriteFileWithStrategyMergeWritesConflictMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteFileWithStrategy() error = %v", err)
 	}
-	if result.Status != "conflict" {
+	if result.Status != ConflictStatusConflict {
 		t.Fatalf("expected conflict status, got %#v", result)
 	}
 
@@ -102,7 +102,7 @@ func TestWriteFileWithStrategySkipLeavesOriginalUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteFileWithStrategy() error = %v", err)
 	}
-	if result.Status != "skipped" {
+	if result.Status != ConflictStatusSkipped {
 		t.Fatalf("expected skipped status, got %#v", result)
 	}
 	assertFileEquals(t, target, "existing")
@@ -123,10 +123,31 @@ func TestWriteFileWithStrategyOverwriteReplacesExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteFileWithStrategy() error = %v", err)
 	}
-	if result.Status != "overwritten" {
+	if result.Status != ConflictStatusOverwritten {
 		t.Fatalf("expected overwritten status, got %#v", result)
 	}
 	assertFileEquals(t, target, "generated")
+}
+
+func TestWriteFileWithStrategyOverwriteSkipsIdenticalContent(t *testing.T) {
+	t.Parallel()
+
+	target := filepath.Join(t.TempDir(), "cases", "PetsActions.scala")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(target, []byte("same"), 0o644); err != nil {
+		t.Fatalf("WriteFile(existing) error = %v", err)
+	}
+
+	result, err := WriteFileWithStrategy(target, []byte("same"), IfExistsOverwrite)
+	if err != nil {
+		t.Fatalf("WriteFileWithStrategy() error = %v", err)
+	}
+	if result.Status != ConflictStatusSkipped {
+		t.Fatalf("expected skipped status for identical overwrite, got %#v", result)
+	}
+	assertFileEquals(t, target, "same")
 }
 
 func assertFileEquals(t *testing.T, path string, want string) {

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/galax-io/galaxio-cli/internal/codegen"
 	"github.com/galax-io/galaxio-cli/internal/codegen/parser"
@@ -65,8 +64,9 @@ func newGenerateSwaggerCommand(opts *generateOptions) *cobra.Command {
 			if err := validateGenerateTemplateOptions(*opts); err != nil {
 				return err
 			}
+			opts.ifExistsSet = cmd.Flags().Changed("if-exists")
 
-			result, err := runGenerateSwagger(cmd.Context(), *opts, cmd.Flags().Changed("if-exists"))
+			result, err := runGenerateSwagger(cmd.Context(), *opts)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,7 @@ func validateGenerateTemplateOptions(opts generateOptions) error {
 	return nil
 }
 
-func runGenerateSwagger(ctx context.Context, opts generateOptions, ifExistsExplicit bool) (generateSwaggerOutput, error) {
+func runGenerateSwagger(ctx context.Context, opts generateOptions) (generateSwaggerOutput, error) {
 	payload, err := os.ReadFile(opts.from)
 	if err != nil {
 		return generateSwaggerOutput{}, RuntimeError{Err: fmt.Errorf("read swagger input: %w", err)}
@@ -130,7 +130,7 @@ func runGenerateSwagger(ctx context.Context, opts generateOptions, ifExistsExpli
 		return generateSwaggerOutput{}, RuntimeError{Err: fmt.Errorf("parse swagger input: %w", err)}
 	}
 
-	summary, err := renderAndWriteSpec(ctx, opts, ifExistsExplicit, spec)
+	summary, err := renderAndWriteSpec(ctx, opts, spec)
 	if err != nil {
 		return generateSwaggerOutput{}, err
 	}
@@ -152,10 +152,10 @@ func runGenerateSwagger(ctx context.Context, opts generateOptions, ifExistsExpli
 	}, nil
 }
 
-func renderAndWriteSpec(ctx context.Context, opts generateOptions, ifExistsExplicit bool, spec *codegen.Spec) (*generateExecutionSummary, error) {
+func renderAndWriteSpec(ctx context.Context, opts generateOptions, spec *codegen.Spec) (*generateExecutionSummary, error) {
 	renderPackage := opts.pkg
 	if opts.init {
-		nameWord := deriveNameWord(filepath.Base(opts.dest))
+		nameWord := codegen.DeriveNameWord(filepath.Base(opts.dest))
 		if templateValues, err := resolveGenerateTemplateValues(opts); err == nil {
 			if value := strings.TrimSpace(templateValues["NameWord"]); value != "" {
 				nameWord = value
@@ -169,7 +169,7 @@ func renderAndWriteSpec(ctx context.Context, opts generateOptions, ifExistsExpli
 		return nil, RuntimeError{Err: fmt.Errorf("render generated files: %w", err)}
 	}
 
-	conflictSummary, err := writeGeneratedProject(ctx, opts, ifExistsExplicit, files)
+	conflictSummary, err := writeGeneratedProject(ctx, opts, files)
 	if err != nil {
 		return nil, RuntimeError{Err: fmt.Errorf("write generated files: %w", err)}
 	}
@@ -192,7 +192,7 @@ func renderAndWriteSpec(ctx context.Context, opts generateOptions, ifExistsExpli
 	}, nil
 }
 
-func writeGeneratedProject(ctx context.Context, opts generateOptions, ifExistsExplicit bool, files []renderer.OutputFile) (writeSummary, error) {
+func writeGeneratedProject(ctx context.Context, opts generateOptions, files []renderer.OutputFile) (writeSummary, error) {
 	if !opts.init {
 		return writeRenderedFiles(opts.dest, files, opts.ifExists)
 	}
@@ -201,7 +201,7 @@ func writeGeneratedProject(ctx context.Context, opts generateOptions, ifExistsEx
 	if err != nil {
 		return writeSummary{}, err
 	}
-	if destExists && !ifExistsExplicit {
+	if destExists && !opts.ifExistsSet {
 		return writeSummary{}, fmt.Errorf("destination %q already contains files; rerun with --if-exists to allow project regeneration", opts.dest)
 	}
 
@@ -254,13 +254,13 @@ func writeRenderedFiles(dest string, files []renderer.OutputFile, strategy strin
 			return writeSummary{}, err
 		}
 		switch result.Status {
-		case "written":
+		case codegen.ConflictStatusWritten:
 			summary.Written++
-		case "skipped":
+		case codegen.ConflictStatusSkipped:
 			summary.Skipped++
-		case "conflict":
+		case codegen.ConflictStatusConflict:
 			summary.Conflicted++
-		case "overwritten":
+		case codegen.ConflictStatusOverwritten:
 			summary.Overwritten++
 		}
 	}
@@ -284,7 +284,7 @@ func resolveGenerateTemplateValues(opts generateOptions) (map[string]string, err
 		values["Name"] = filepath.Base(opts.dest)
 	}
 	if strings.TrimSpace(values["NameWord"]) == "" {
-		values["NameWord"] = deriveNameWord(values["Name"])
+		values["NameWord"] = codegen.DeriveNameWord(values["Name"])
 	}
 	values["Package"] = opts.pkg
 	values["PackagePath"] = strings.ReplaceAll(opts.pkg, ".", "/")
@@ -297,37 +297,6 @@ func templateRefForGenerateTemplate(templateName string) string {
 		return templateName
 	}
 	return "gatling/" + templateName
-}
-
-func deriveNameWord(value string) string {
-	words := splitGenerateWords(value)
-	if len(words) == 0 {
-		return "generated"
-	}
-
-	var builder strings.Builder
-	for _, word := range words {
-		builder.WriteString(strings.ToLower(word))
-	}
-	return builder.String()
-}
-
-func splitGenerateWords(value string) []string {
-	replacer := strings.NewReplacer("/", " ", "-", " ", "_", " ", ".", " ")
-	value = replacer.Replace(value)
-
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return unicode.IsSpace(r) || unicode.IsPunct(r)
-	})
-
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			result = append(result, part)
-		}
-	}
-	return result
 }
 
 func dirHasEntries(path string) (bool, error) {

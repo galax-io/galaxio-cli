@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/galax-io/galaxio-cli/internal/codegen"
 	"github.com/pb33f/libopenapi"
@@ -512,7 +511,7 @@ func groupNameFor(path string, operation *v2.Operation) string {
 	if operation != nil {
 		for _, tag := range operation.Tags {
 			if strings.TrimSpace(tag) != "" {
-				return lowerCamel(tag)
+				return codegen.LowerCamel(tag)
 			}
 		}
 	}
@@ -522,14 +521,14 @@ func groupNameFor(path string, operation *v2.Operation) string {
 		return "default"
 	}
 
-	return lowerCamel(segments[0])
+	return codegen.LowerCamel(segments[0])
 }
 
 func groupNameForV3(path string, operation *v3.Operation) string {
 	if operation != nil {
 		for _, tag := range operation.Tags {
 			if strings.TrimSpace(tag) != "" {
-				return lowerCamel(tag)
+				return codegen.LowerCamel(tag)
 			}
 		}
 	}
@@ -539,17 +538,17 @@ func groupNameForV3(path string, operation *v3.Operation) string {
 		return "default"
 	}
 
-	return lowerCamel(segments[0])
+	return codegen.LowerCamel(segments[0])
 }
 
 func requestNameFor(method string, path string, operation *v2.Operation) string {
 	if operation != nil && strings.TrimSpace(operation.OperationId) != "" {
-		return lowerCamel(operation.OperationId)
+		return codegen.LowerCamel(operation.OperationId)
 	}
 
 	segments := meaningfulSegments(path)
 	if len(segments) == 0 {
-		return lowerCamel(method + " request")
+		return codegen.LowerCamel(method + " request")
 	}
 
 	words := make([]string, 0, len(segments)+1)
@@ -558,17 +557,17 @@ func requestNameFor(method string, path string, operation *v2.Operation) string 
 		words = append(words, segment)
 	}
 
-	return lowerCamel(strings.Join(words, " "))
+	return codegen.LowerCamel(strings.Join(words, " "))
 }
 
 func requestNameForV3(method string, path string, operation *v3.Operation) string {
 	if operation != nil && strings.TrimSpace(operation.OperationId) != "" {
-		return lowerCamel(operation.OperationId)
+		return codegen.LowerCamel(operation.OperationId)
 	}
 
 	segments := meaningfulSegments(path)
 	if len(segments) == 0 {
-		return lowerCamel(method + " request")
+		return codegen.LowerCamel(method + " request")
 	}
 
 	words := make([]string, 0, len(segments)+1)
@@ -577,7 +576,7 @@ func requestNameForV3(method string, path string, operation *v3.Operation) strin
 		words = append(words, segment)
 	}
 
-	return lowerCamel(strings.Join(words, " "))
+	return codegen.LowerCamel(strings.Join(words, " "))
 }
 
 func basePathFromServers(servers []*v3.Server) string {
@@ -628,62 +627,4 @@ func meaningfulSegments(path string) []string {
 	}
 
 	return segments
-}
-
-func lowerCamel(value string) string {
-	words := splitWords(value)
-	if len(words) == 0 {
-		return ""
-	}
-
-	for i := range words {
-		words[i] = strings.ToLower(words[i])
-	}
-
-	result := words[0]
-	for _, word := range words[1:] {
-		result += strings.ToUpper(word[:1]) + word[1:]
-	}
-
-	return result
-}
-
-func splitWords(value string) []string {
-	replacer := strings.NewReplacer("/", " ", "-", " ", "_", " ", ".", " ")
-	value = replacer.Replace(value)
-
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return unicode.IsSpace(r) || unicode.IsPunct(r)
-	})
-
-	words := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-
-		var builder strings.Builder
-		runes := []rune(part)
-		for i, r := range runes {
-			if i > 0 && unicode.IsUpper(r) && (unicode.IsLower(runes[i-1]) || i+1 < len(runes) && unicode.IsLower(runes[i+1])) {
-				words = appendWord(words, builder.String())
-				builder.Reset()
-			}
-			builder.WriteRune(r)
-		}
-		words = appendWord(words, builder.String())
-	}
-
-	return words
-}
-
-func appendWord(words []string, word string) []string {
-	word = strings.TrimSpace(word)
-	if word == "" {
-		return words
-	}
-	if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") {
-		return words
-	}
-	return append(words, word)
 }

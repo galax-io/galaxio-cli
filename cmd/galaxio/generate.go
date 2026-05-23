@@ -8,15 +8,17 @@ import (
 )
 
 type generateOptions struct {
-	from          string
-	template      string
-	dest          string
-	pkg           string
-	ifExists      string
-	registry      string
-	valuesFile    string
-	values        []string
-	init          bool
+	from        string
+	template    string
+	dest        string
+	pkg         string
+	ifExists    string
+	ifExistsSet bool
+	registry    string
+	valuesFile  string
+	values      []string
+	init        bool
+	// includeStatic is only used by `generate har`.
 	includeStatic bool
 }
 

@@ -45,8 +45,9 @@ func newGeneratePostmanCommand(opts *generateOptions) *cobra.Command {
 			if err := validateGenerateTemplateOptions(*opts); err != nil {
 				return err
 			}
+			opts.ifExistsSet = cmd.Flags().Changed("if-exists")
 
-			result, err := runGeneratePostman(cmd.Context(), *opts, cmd.Flags().Changed("if-exists"))
+			result, err := runGeneratePostman(cmd.Context(), *opts)
 			if err != nil {
 				return err
 			}
@@ -85,7 +86,7 @@ func newGeneratePostmanCommand(opts *generateOptions) *cobra.Command {
 	return cmd
 }
 
-func runGeneratePostman(ctx context.Context, opts generateOptions, ifExistsExplicit bool) (generatePostmanOutput, error) {
+func runGeneratePostman(ctx context.Context, opts generateOptions) (generatePostmanOutput, error) {
 	payload, err := os.ReadFile(opts.from)
 	if err != nil {
 		return generatePostmanOutput{}, RuntimeError{Err: fmt.Errorf("read postman input: %w", err)}
@@ -96,7 +97,7 @@ func runGeneratePostman(ctx context.Context, opts generateOptions, ifExistsExpli
 		return generatePostmanOutput{}, RuntimeError{Err: fmt.Errorf("parse postman input: %w", err)}
 	}
 
-	summary, err := renderAndWriteSpec(ctx, opts, ifExistsExplicit, spec)
+	summary, err := renderAndWriteSpec(ctx, opts, spec)
 	if err != nil {
 		return generatePostmanOutput{}, err
 	}

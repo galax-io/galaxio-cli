@@ -46,8 +46,9 @@ func newGenerateHARCommand(opts *generateOptions) *cobra.Command {
 			if err := validateGenerateTemplateOptions(*opts); err != nil {
 				return err
 			}
+			opts.ifExistsSet = cmd.Flags().Changed("if-exists")
 
-			result, err := runGenerateHAR(cmd.Context(), *opts, cmd.Flags().Changed("if-exists"))
+			result, err := runGenerateHAR(cmd.Context(), *opts)
 			if err != nil {
 				return err
 			}
@@ -88,18 +89,18 @@ func newGenerateHARCommand(opts *generateOptions) *cobra.Command {
 	return cmd
 }
 
-func runGenerateHAR(ctx context.Context, opts generateOptions, ifExistsExplicit bool) (generateHAROutput, error) {
+func runGenerateHAR(ctx context.Context, opts generateOptions) (generateHAROutput, error) {
 	payload, err := os.ReadFile(opts.from)
 	if err != nil {
 		return generateHAROutput{}, RuntimeError{Err: fmt.Errorf("read har input: %w", err)}
 	}
 
-	summary, err := runGenerateSpec(ctx, opts, ifExistsExplicit, payload, func(ctx context.Context, payload []byte) (*generateExecutionSummary, error) {
+	summary, err := runGenerateSpec(ctx, opts, payload, func(ctx context.Context, payload []byte) (*generateExecutionSummary, error) {
 		spec, err := parser.NewHARParser(opts.includeStatic).Parse(ctx, payload)
 		if err != nil {
 			return nil, RuntimeError{Err: fmt.Errorf("parse har input: %w", err)}
 		}
-		return renderAndWriteSpec(ctx, opts, ifExistsExplicit, spec)
+		return renderAndWriteSpec(ctx, opts, spec)
 	})
 	if err != nil {
 		return generateHAROutput{}, err
@@ -123,6 +124,6 @@ func runGenerateHAR(ctx context.Context, opts generateOptions, ifExistsExplicit 
 	}, nil
 }
 
-func runGenerateSpec(ctx context.Context, opts generateOptions, ifExistsExplicit bool, payload []byte, run func(context.Context, []byte) (*generateExecutionSummary, error)) (*generateExecutionSummary, error) {
+func runGenerateSpec(ctx context.Context, opts generateOptions, payload []byte, run func(context.Context, []byte) (*generateExecutionSummary, error)) (*generateExecutionSummary, error) {
 	return run(ctx, payload)
 }

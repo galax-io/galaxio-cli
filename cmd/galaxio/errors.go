@@ -50,5 +50,5 @@ func exitCode(err error) int {
 		return exitRuntime
 	}
 
-	return exitUsage
+	return exitRuntime
 }
