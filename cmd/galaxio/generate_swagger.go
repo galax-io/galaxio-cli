@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,19 +19,20 @@ import (
 const generateTemplateScalaSBT = "scala-sbt"
 
 type generateSwaggerOutput struct {
-	Template         string `json:"template"`
-	Source           string `json:"source"`
-	Destination      string `json:"destination"`
-	Package          string `json:"package"`
-	IfExists         string `json:"ifExists"`
-	Init             bool   `json:"init"`
-	Actions          int    `json:"actions"`
-	Scenarios        int    `json:"scenarios"`
-	BodyFiles        int    `json:"bodyFiles"`
-	FilesWritten     int    `json:"filesWritten"`
-	FilesSkipped     int    `json:"filesSkipped"`
-	FilesConflicted  int    `json:"filesConflicted"`
-	FilesOverwritten int    `json:"filesOverwritten"`
+	Template         string   `json:"template"`
+	Source           string   `json:"source"`
+	Destination      string   `json:"destination"`
+	Package          string   `json:"package"`
+	IfExists         string   `json:"ifExists"`
+	Warnings         []string `json:"warnings,omitempty"`
+	Init             bool     `json:"init"`
+	Actions          int      `json:"actions"`
+	Scenarios        int      `json:"scenarios"`
+	BodyFiles        int      `json:"bodyFiles"`
+	FilesWritten     int      `json:"filesWritten"`
+	FilesSkipped     int      `json:"filesSkipped"`
+	FilesConflicted  int      `json:"filesConflicted"`
+	FilesOverwritten int      `json:"filesOverwritten"`
 }
 
 type generateExecutionSummary struct {
@@ -42,6 +44,7 @@ type generateExecutionSummary struct {
 	skipped     int
 	conflicted  int
 	overwritten int
+	warnings    []string
 }
 
 func newGenerateSwaggerCommand(opts *generateOptions) *cobra.Command {
@@ -69,6 +72,9 @@ func newGenerateSwaggerCommand(opts *generateOptions) *cobra.Command {
 			result, err := runGenerateSwagger(cmd.Context(), *opts)
 			if err != nil {
 				return err
+			}
+			if err := writeGenerateWarnings(cmd.ErrOrStderr(), result.Warnings); err != nil {
+				return RuntimeError{Err: err}
 			}
 
 			if output == outputJSON {
@@ -141,6 +147,7 @@ func runGenerateSwagger(ctx context.Context, opts generateOptions) (generateSwag
 		Destination:      summary.destination,
 		Package:          opts.pkg,
 		IfExists:         opts.ifExists,
+		Warnings:         summary.warnings,
 		Init:             opts.init,
 		Actions:          summary.actions,
 		Scenarios:        summary.scenarios,
@@ -189,6 +196,7 @@ func renderAndWriteSpec(ctx context.Context, opts generateOptions, spec *codegen
 		skipped:     conflictSummary.Skipped,
 		conflicted:  conflictSummary.Conflicted,
 		overwritten: conflictSummary.Overwritten,
+		warnings:    conflictSummary.Warnings,
 	}, nil
 }
 
@@ -243,6 +251,7 @@ type writeSummary struct {
 	Skipped     int
 	Conflicted  int
 	Overwritten int
+	Warnings    []string
 }
 
 func writeRenderedFiles(dest string, files []renderer.OutputFile, strategy string) (writeSummary, error) {
@@ -258,6 +267,9 @@ func writeRenderedFiles(dest string, files []renderer.OutputFile, strategy strin
 			summary.Written++
 		case codegen.ConflictStatusSkipped:
 			summary.Skipped++
+			if strategy == codegen.IfExistsSkip {
+				summary.Warnings = append(summary.Warnings, fmt.Sprintf("warning: skipped existing file %s", result.Path))
+			}
 		case codegen.ConflictStatusConflict:
 			summary.Conflicted++
 		case codegen.ConflictStatusOverwritten:
@@ -265,6 +277,15 @@ func writeRenderedFiles(dest string, files []renderer.OutputFile, strategy strin
 		}
 	}
 	return summary, nil
+}
+
+func writeGenerateWarnings(stderr io.Writer, warnings []string) error {
+	for _, warning := range warnings {
+		if _, err := fmt.Fprintln(stderr, warning); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resolveGenerateTemplateValues(opts generateOptions) (map[string]string, error) {

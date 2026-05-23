@@ -329,8 +329,11 @@ func TestGenerateSwaggerSkipLeavesOriginalUntouched(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("expected exit code %d, got %d, stderr %q", exitOK, code, stderr)
 	}
-	if stderr != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr)
+	if !strings.Contains(stderr, "warning: skipped existing file") {
+		t.Fatalf("expected skip warning in stderr, got %q", stderr)
+	}
+	if !strings.Contains(stderr, filepath.ToSlash(target)) && !strings.Contains(stderr, target) {
+		t.Fatalf("expected skipped file path in stderr, got %q", stderr)
 	}
 	if !strings.Contains(stdout, "skipped: 8") {
 		t.Fatalf("expected skip summary, got %q", stdout)

@@ -10,20 +10,21 @@ import (
 )
 
 type generateHAROutput struct {
-	Template         string `json:"template"`
-	Source           string `json:"source"`
-	Destination      string `json:"destination"`
-	Package          string `json:"package"`
-	IfExists         string `json:"ifExists"`
-	Init             bool   `json:"init"`
-	IncludeStatic    bool   `json:"includeStatic"`
-	Actions          int    `json:"actions"`
-	Scenarios        int    `json:"scenarios"`
-	BodyFiles        int    `json:"bodyFiles"`
-	FilesWritten     int    `json:"filesWritten"`
-	FilesSkipped     int    `json:"filesSkipped"`
-	FilesConflicted  int    `json:"filesConflicted"`
-	FilesOverwritten int    `json:"filesOverwritten"`
+	Template         string   `json:"template"`
+	Source           string   `json:"source"`
+	Destination      string   `json:"destination"`
+	Package          string   `json:"package"`
+	IfExists         string   `json:"ifExists"`
+	Warnings         []string `json:"warnings,omitempty"`
+	Init             bool     `json:"init"`
+	IncludeStatic    bool     `json:"includeStatic"`
+	Actions          int      `json:"actions"`
+	Scenarios        int      `json:"scenarios"`
+	BodyFiles        int      `json:"bodyFiles"`
+	FilesWritten     int      `json:"filesWritten"`
+	FilesSkipped     int      `json:"filesSkipped"`
+	FilesConflicted  int      `json:"filesConflicted"`
+	FilesOverwritten int      `json:"filesOverwritten"`
 }
 
 func newGenerateHARCommand(opts *generateOptions) *cobra.Command {
@@ -51,6 +52,9 @@ func newGenerateHARCommand(opts *generateOptions) *cobra.Command {
 			result, err := runGenerateHAR(cmd.Context(), *opts)
 			if err != nil {
 				return err
+			}
+			if err := writeGenerateWarnings(cmd.ErrOrStderr(), result.Warnings); err != nil {
+				return RuntimeError{Err: err}
 			}
 
 			if output == outputJSON {
@@ -112,6 +116,7 @@ func runGenerateHAR(ctx context.Context, opts generateOptions) (generateHAROutpu
 		Destination:      summary.destination,
 		Package:          opts.pkg,
 		IfExists:         opts.ifExists,
+		Warnings:         summary.warnings,
 		Init:             opts.init,
 		IncludeStatic:    opts.includeStatic,
 		Actions:          summary.actions,
