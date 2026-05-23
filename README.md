@@ -165,6 +165,7 @@ curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/i
 galaxio --help          # show commands and flags
 galaxio version         # print build info
 galaxio --verbose ...   # verbose diagnostic output
+galaxio --quiet ...     # suppress non-error output
 galaxio --no-color ...  # disable colour
 ```
 
