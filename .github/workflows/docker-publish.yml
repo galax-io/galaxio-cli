@@ -1,12 +1,11 @@
 name: docker-publish
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
+  workflow_run:
+    workflows:
+      - release
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -17,56 +16,33 @@ env:
 jobs:
   build-and-validate:
     name: build and validate image
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          fetch-tags: true
 
-      - name: Prepare build metadata
-        id: buildmeta
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          version="dev"
-
-          commit="$(git rev-parse --short=12 HEAD)"
-          date="$(git log -1 --format=%cI HEAD)"
-          image_tag="${IMAGE_NAME}:pr-${{ github.event.pull_request.number }}-${GITHUB_SHA::12}"
-
-          {
-            echo "build_args<<EOF"
-            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${version}" "${commit}" "${date}"
-            echo "EOF"
-            echo "image_tag=${image_tag}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Build image locally
-        uses: docker/build-push-action@v6
+      - name: Build and validate image
+        uses: ./.github/actions/docker-build-validate
         with:
-          context: .
-          file: ./Dockerfile
-          load: true
-          push: false
-          tags: ${{ steps.buildmeta.outputs.image_tag }}
-          build-args: ${{ steps.buildmeta.outputs.build_args }}
-          provenance: false
-
-      - name: Validate image with utility command
-        run: docker run --rm ${{ steps.buildmeta.outputs.image_tag }} version
+          image_name: galax-io/galaxio
 
   publish:
     name: publish image
-    if: github.event_name != 'pull_request'
+    needs: build-and-validate
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -74,37 +50,17 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract Docker metadata
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare release metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: ./.github/actions/docker-release-metadata
         with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-      - name: Prepare build metadata
-        id: buildmeta
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME}"
-          else
-            version="dev"
-          fi
-
-          commit="$(git rev-parse --short=12 HEAD)"
-          date="$(git log -1 --format=%cI HEAD)"
-
-          {
-            echo "build_args<<EOF"
-            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${version}" "${commit}" "${date}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+          image_name: ${{ env.IMAGE_NAME }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -114,6 +70,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ steps.buildmeta.outputs.build_args }}
+          build-args: ${{ steps.meta.outputs.build_args }}
           provenance: false

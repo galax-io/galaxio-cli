@@ -1,0 +1,47 @@
+name: docker-release-metadata
+description: Compute Docker build args and release tags from the current git tag.
+
+inputs:
+  image_name:
+    description: Docker image name without tag.
+    required: true
+
+outputs:
+  build_args:
+    description: Multiline build arguments for docker/build-push-action.
+    value: ${{ steps.meta.outputs.build_args }}
+  tags:
+    description: Multiline list of image tags to push.
+    value: ${{ steps.meta.outputs.tags }}
+  version:
+    description: Normalized semver version without the v prefix.
+    value: ${{ steps.meta.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare release metadata
+      id: meta
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        version="$(git describe --tags --exact-match HEAD)"
+        semver="${version#v}"
+        remainder="${semver#*.}"
+        minor="${semver%%.*}.${remainder%%.*}"
+        commit="$(git rev-parse --short=12 HEAD)"
+        date="$(git log -1 --format=%cI HEAD)"
+
+        {
+          echo "build_args<<EOF"
+          printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${semver}" "${commit}" "${date}"
+          echo "EOF"
+          echo "tags<<EOF"
+          printf '%s\n' \
+            "${{ inputs.image_name }}:${semver}" \
+            "${{ inputs.image_name }}:${minor}" \
+            "${{ inputs.image_name }}:latest"
+          echo "EOF"
+          echo "version=${semver}"
+        } >> "${GITHUB_OUTPUT}"

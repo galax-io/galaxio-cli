@@ -79,9 +79,12 @@ Archives are named `galaxio_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows).
 
 ### Option 4 — Docker image
 
-The image is published to Docker Hub as `galax-io/galaxio`.
+The image is published to Docker Hub as `galax-io/galaxio:<release-version>`,
+plus the alias `galax-io/galaxio:<major.minor>` and `galax-io/galaxio:latest`.
 
 ```sh
+docker pull galax-io/galaxio:0.1.1
+docker pull galax-io/galaxio:0.1
 docker pull galax-io/galaxio:latest
 docker run --rm galax-io/galaxio --help
 ```
