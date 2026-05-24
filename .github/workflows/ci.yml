@@ -76,30 +76,6 @@ jobs:
       - name: Integration tests
         run: go test -tags=integration -race -count=1 ./...
 
-  release-version:
-    name: release version
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs:
-      - test
-      - integration
-    outputs:
-      bump: ${{ steps.version.outputs.bump }}
-      version: ${{ steps.version.outputs.version }}
-      tag_name: ${{ steps.version.outputs.tag_name }}
-      minor_tag: ${{ steps.version.outputs.minor_tag }}
-      previous_tag: ${{ steps.version.outputs.previous_tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Compute release version
-        id: version
-        uses: ./.github/actions/release-version
-
   docker-image-pr:
     name: docker image
     runs-on: ubuntu-latest
@@ -128,7 +104,12 @@ jobs:
     needs:
       - test
       - integration
-      - release-version
+    outputs:
+      bump: ${{ steps.version.outputs.bump }}
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      minor_tag: ${{ steps.version.outputs.minor_tag }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,15 +118,19 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Compute release version
+        id: version
+        uses: ./.github/actions/release-version
+
       - name: Build and validate image
         uses: ./.github/actions/docker-build-validate
         with:
           image_name: galax-io/galaxio
-          version: ${{ needs.release-version.outputs.tag_name }}
-          image_tag: galax-io/galaxio:${{ needs.release-version.outputs.version }}
+          version: ${{ steps.version.outputs.tag_name }}
+          image_tag: galax-io/galaxio:${{ steps.version.outputs.version }}
 
       - name: Export validated image artifact
-        run: docker save --output /tmp/galaxio-image.tar galax-io/galaxio:${{ needs.release-version.outputs.version }}
+        run: docker save --output /tmp/galaxio-image.tar galax-io/galaxio:${{ steps.version.outputs.version }}
 
       - name: Upload validated image artifact
         uses: actions/upload-artifact@v4
@@ -161,7 +146,6 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - docker-image-main
-      - release-version
     permissions:
       contents: write
     steps:
@@ -180,7 +164,7 @@ jobs:
 
       - name: Create and push git tag
         env:
-          TAG_NAME: ${{ needs.release-version.outputs.tag_name }}
+          TAG_NAME: ${{ needs.docker-image-main.outputs.tag_name }}
         run: |
           set -euo pipefail
 
@@ -197,7 +181,7 @@ jobs:
       - name: Check existing GitHub release
         id: release_exists
         env:
-          TAG_NAME: ${{ needs.release-version.outputs.tag_name }}
+          TAG_NAME: ${{ needs.docker-image-main.outputs.tag_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -225,7 +209,6 @@ jobs:
     needs:
       - docker-image-main
       - release
-      - release-version
     steps:
       - name: Download validated image artifact
         uses: actions/download-artifact@v4
@@ -244,8 +227,8 @@ jobs:
 
       - name: Tag image for Docker Hub
         env:
-          VERSION: ${{ needs.release-version.outputs.version }}
-          MINOR_TAG: ${{ needs.release-version.outputs.minor_tag }}
+          VERSION: ${{ needs.docker-image-main.outputs.version }}
+          MINOR_TAG: ${{ needs.docker-image-main.outputs.minor_tag }}
         run: |
           set -euo pipefail
 
@@ -254,8 +237,8 @@ jobs:
 
       - name: Push image tags
         env:
-          VERSION: ${{ needs.release-version.outputs.version }}
-          MINOR_TAG: ${{ needs.release-version.outputs.minor_tag }}
+          VERSION: ${{ needs.docker-image-main.outputs.version }}
+          MINOR_TAG: ${{ needs.docker-image-main.outputs.minor_tag }}
         run: |
           set -euo pipefail
 
