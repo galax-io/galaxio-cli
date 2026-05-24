@@ -3,13 +3,11 @@
 [![CI](https://github.com/galax-io/galaxio-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/galax-io/galaxio-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/galax-io/galaxio-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/galax-io/galaxio-cli)
 [![Latest Release](https://img.shields.io/github/v/release/galax-io/galaxio-cli?sort=semver)](https://github.com/galax-io/galaxio-cli/releases)
-
-[![Docker Hub](https://shieldcn.dev/docker/v/galaxioteam/galaxio.svg)](https://hub.docker.com/r/galaxioteam/galaxio)
-[![Utility Size](https://shieldcn.dev/badge/utility%20size-5.8%20MB.svg)](https://github.com/galax-io/galaxio-cli/releases/latest)
-[![Image Size](https://shieldcn.dev/docker/size/galaxioteam/galaxio.svg)](https://hub.docker.com/r/galaxioteam/galaxio)
-
 [![Go Report Card](https://goreportcard.com/badge/github.com/galax-io/galaxio-cli)](https://goreportcard.com/report/github.com/galax-io/galaxio-cli)
-[![License](https://img.shields.io/github/license/galax-io/galaxio-cli)](https://github.com/galax-io/galaxio-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/galax-io/galaxio-cli)](https://github.com/galax-io/galaxio-cli/blob/main/LICENSE)<br>
+[![Docker Hub](https://shieldcn.dev/badge/dynamic/json.png?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fgalax-io%2Fgalaxio-cli%2Freleases%2Flatest&query=%24.tag_name&label=docker&logo=docker)](https://github.com/galax-io/galaxio-cli/releases)
+[![Utility Size](https://shieldcn.dev/badge/utility%20size-5.8%20MB.png)](https://github.com/galax-io/galaxio-cli/releases/latest)
+[![Image Size](https://shieldcn.dev/docker/size/galaxioteam/galaxio.png)](https://hub.docker.com/r/galaxioteam/galaxio)
 
 `galaxio` is a CLI for Gatling performance testing workflows. It scaffolds new
 load-test projects from templates and generates Gatling scripts from API
