@@ -59,7 +59,48 @@ jobs:
       - name: Build
         run: go build -trimpath -o dist/galaxio ./cmd/galaxio
 
-  docker-image:
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration tests
+        run: go test -tags=integration -race -count=1 ./...
+
+  release-version:
+    name: release version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - test
+      - integration
+    outputs:
+      bump: ${{ steps.version.outputs.bump }}
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      minor_tag: ${{ steps.version.outputs.minor_tag }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compute release version
+        id: version
+        uses: ./.github/actions/release-version
+
+  docker-image-pr:
     name: docker image
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
@@ -80,13 +121,56 @@ jobs:
           version: dev
           image_tag: galax-io/galaxio:pr-${{ github.event.pull_request.number }}-${{ github.sha }}
 
-  integration:
-    name: integration tests
+  docker-image-main:
+    name: docker image
     runs-on: ubuntu-latest
-    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - test
+      - integration
+      - release-version
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build and validate image
+        uses: ./.github/actions/docker-build-validate
+        with:
+          image_name: galax-io/galaxio
+          version: ${{ needs.release-version.outputs.tag_name }}
+          image_tag: galax-io/galaxio:${{ needs.release-version.outputs.version }}
+
+      - name: Export validated image artifact
+        run: docker save --output /tmp/galaxio-image.tar galax-io/galaxio:${{ needs.release-version.outputs.version }}
+
+      - name: Upload validated image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: galaxio-image-${{ github.sha }}
+          path: /tmp/galaxio-image.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - docker-image-main
+      - release-version
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -94,5 +178,87 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Integration tests
-        run: go test -tags=integration -race -count=1 ./...
+      - name: Create and push git tag
+        env:
+          TAG_NAME: ${{ needs.release-version.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Tag ${TAG_NAME} already exists on origin, skipping push."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG_NAME}" -m "Release ${TAG_NAME}"
+          git push origin "${TAG_NAME}"
+
+      - name: Check existing GitHub release
+        id: release_exists
+        env:
+          TAG_NAME: ${{ needs.release-version.outputs.tag_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Run GoReleaser
+        if: steps.release_exists.outputs.exists != 'true'
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+
+  publish-image:
+    name: publish image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - docker-image-main
+      - release
+      - release-version
+    steps:
+      - name: Download validated image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: galaxio-image-${{ github.sha }}
+          path: /tmp
+
+      - name: Load validated image
+        run: docker load --input /tmp/galaxio-image.tar
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Tag image for Docker Hub
+        env:
+          VERSION: ${{ needs.release-version.outputs.version }}
+          MINOR_TAG: ${{ needs.release-version.outputs.minor_tag }}
+        run: |
+          set -euo pipefail
+
+          docker tag "galax-io/galaxio:${VERSION}" "galax-io/galaxio:${MINOR_TAG}"
+          docker tag "galax-io/galaxio:${VERSION}" "galax-io/galaxio:latest"
+
+      - name: Push image tags
+        env:
+          VERSION: ${{ needs.release-version.outputs.version }}
+          MINOR_TAG: ${{ needs.release-version.outputs.minor_tag }}
+        run: |
+          set -euo pipefail
+
+          docker push "galax-io/galaxio:${VERSION}"
+          docker push "galax-io/galaxio:${MINOR_TAG}"
+          docker push "galax-io/galaxio:latest"
