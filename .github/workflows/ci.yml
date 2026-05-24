@@ -67,39 +67,13 @@ jobs:
       - test
       - integration
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Prepare build metadata
-        id: buildmeta
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          commit="$(git rev-parse --short=12 HEAD)"
-          date="$(git log -1 --format=%cI HEAD)"
-          image_tag="galax-io/galaxio:pr-${{ github.event.pull_request.number }}-${GITHUB_SHA::12}"
-
-          {
-            echo "build_args<<EOF"
-            printf 'VERSION=dev\nCOMMIT=%s\nDATE=%s\n' "${commit}" "${date}"
-            echo "EOF"
-            echo "image_tag=${image_tag}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Build image locally
-        uses: docker/build-push-action@v6
+      - name: Build and validate image
+        uses: ./.github/actions/docker-build-validate
         with:
-          context: .
-          file: ./Dockerfile
-          load: true
-          push: false
-          tags: ${{ steps.buildmeta.outputs.image_tag }}
-          build-args: ${{ steps.buildmeta.outputs.build_args }}
-          provenance: false
-
-      - name: Validate image with utility command
-        run: docker run --rm ${{ steps.buildmeta.outputs.image_tag }} version
+          ref: ${{ github.sha }}
+          image_name: galax-io/galaxio
+          version: dev
+          image_tag: galax-io/galaxio:pr-${{ github.event.pull_request.number }}-${{ github.sha }}
 
   integration:
     name: integration tests

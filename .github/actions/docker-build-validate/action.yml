@@ -1,0 +1,77 @@
+name: docker-build-validate
+description: Build a Docker image locally and validate it with a command.
+
+inputs:
+  ref:
+    description: Git ref to check out before building.
+    required: true
+  image_name:
+    description: Docker image name without tag.
+    required: true
+  image_tag:
+    description: Local tag to assign to the built image.
+    required: false
+    default: ""
+  version:
+    description: Version string embedded into the binary. Defaults to the exact git tag.
+    required: false
+    default: ""
+  validate_command:
+    description: Command to run inside the built container.
+    required: false
+    default: version
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Prepare build metadata
+      id: buildmeta
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        version='${{ inputs.version }}'
+        if [[ -z "${version}" ]]; then
+          version="$(git describe --tags --exact-match HEAD)"
+        fi
+
+        semver="${version#v}"
+        image_tag='${{ inputs.image_tag }}'
+        if [[ -z "${image_tag}" ]]; then
+          image_tag='${{ inputs.image_name }}:'"${semver}"
+        fi
+
+        commit="$(git rev-parse --short=12 HEAD)"
+        date="$(git log -1 --format=%cI HEAD)"
+
+        {
+          echo "build_args<<EOF"
+          printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${semver}" "${commit}" "${date}"
+          echo "EOF"
+          echo "image_tag=${image_tag}"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Build image locally
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        load: true
+        push: false
+        tags: ${{ steps.buildmeta.outputs.image_tag }}
+        build-args: ${{ steps.buildmeta.outputs.build_args }}
+        provenance: false
+
+    - name: Validate image with utility command
+      shell: bash
+      run: docker run --rm "${{ steps.buildmeta.outputs.image_tag }}" ${{ inputs.validate_command }}
