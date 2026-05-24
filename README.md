@@ -3,9 +3,11 @@
 [![CI](https://github.com/galax-io/galaxio-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/galax-io/galaxio-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/galax-io/galaxio-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/galax-io/galaxio-cli)
 [![Latest Release](https://img.shields.io/github/v/release/galax-io/galaxio-cli?sort=semver)](https://github.com/galax-io/galaxio-cli/releases)
+
 [![Docker Hub](https://shieldcn.dev/docker/v/galaxioteam/galaxio.svg)](https://hub.docker.com/r/galaxioteam/galaxio)
 [![Utility Size](https://shieldcn.dev/badge/utility%20size-5.8%20MB.svg)](https://github.com/galax-io/galaxio-cli/releases/latest)
 [![Image Size](https://shieldcn.dev/docker/size/galaxioteam/galaxio.svg)](https://hub.docker.com/r/galaxioteam/galaxio)
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/galax-io/galaxio-cli)](https://goreportcard.com/report/github.com/galax-io/galaxio-cli)
 [![License](https://img.shields.io/github/license/galax-io/galaxio-cli)](https://github.com/galax-io/galaxio-cli/blob/main/LICENSE)
 
