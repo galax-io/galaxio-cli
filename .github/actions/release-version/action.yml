@@ -1,0 +1,71 @@
+name: release-version
+description: Compute the next release version from conventional commits since the latest tag.
+
+outputs:
+  bump:
+    description: Version bump kind.
+    value: ${{ steps.version.outputs.bump }}
+  version:
+    description: Next semver without the v prefix.
+    value: ${{ steps.version.outputs.version }}
+  tag_name:
+    description: Next git tag with the v prefix.
+    value: ${{ steps.version.outputs.tag_name }}
+  minor_tag:
+    description: Major.minor Docker tag alias.
+    value: ${{ steps.version.outputs.minor_tag }}
+  previous_tag:
+    description: Previous git tag used as the release base.
+    value: ${{ steps.version.outputs.previous_tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute next version
+      id: version
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        previous_tag="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
+        if [[ -z "${previous_tag}" ]]; then
+          previous_tag="v0.0.0"
+          range="HEAD"
+        else
+          range="${previous_tag}..HEAD"
+        fi
+
+        bump="patch"
+        if git log --format='%s%n%b' "${range}" | grep -Eq 'BREAKING CHANGE|^[^[:space:]:]+(\([^)]+\))?!:'; then
+          bump="major"
+        elif git log --format='%s' "${range}" | grep -Eq '^feat(\([^)]+\))?: '; then
+          bump="minor"
+        fi
+
+        version_core="${previous_tag#v}"
+        IFS='.' read -r major minor patch <<< "${version_core}"
+
+        case "${bump}" in
+          major)
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+          minor)
+            minor=$((minor + 1))
+            patch=0
+            ;;
+          patch)
+            patch=$((patch + 1))
+            ;;
+        esac
+
+        version="${major}.${minor}.${patch}"
+
+        {
+          echo "bump=${bump}"
+          echo "version=${version}"
+          echo "tag_name=v${version}"
+          echo "minor_tag=${major}.${minor}"
+          echo "previous_tag=${previous_tag}"
+        } >> "${GITHUB_OUTPUT}"
