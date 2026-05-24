@@ -79,18 +79,18 @@ Archives are named `galaxio_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows).
 
 ### Option 4 — Docker image
 
-The image is published to Docker Hub as `galax-io/galaxio-cli`.
+The image is published to Docker Hub as `<docker-username>/galaxio`.
 
 ```sh
-docker pull galax-io/galaxio-cli:latest
-docker run --rm galax-io/galaxio-cli --help
+docker pull <docker-username>/galaxio:latest
+docker run --rm <docker-username>/galaxio --help
 ```
 
 For commands that create files, mount a working directory and set it as the
 container workdir:
 
 ```sh
-docker run --rm -v "$PWD":/work -w /work galax-io/galaxio-cli template list
+docker run --rm -v "$PWD":/work -w /work <docker-username>/galaxio template list
 ```
 
 ### Windows
