@@ -3,11 +3,9 @@ name: docker-publish
 on:
   workflow_run:
     workflows:
-      - ci
+      - release
     types:
       - completed
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -26,6 +24,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Prepare build metadata
         id: buildmeta
@@ -33,13 +32,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          version="$(git describe --tags --exact-match HEAD)"
           commit="$(git rev-parse --short=12 HEAD)"
           date="$(git log -1 --format=%cI HEAD)"
-          image_tag="${IMAGE_NAME}:main-${GITHUB_SHA::12}"
+          image_tag="${IMAGE_NAME}:${version}"
 
           {
             echo "build_args<<EOF"
-            printf 'VERSION=main\nCOMMIT=%s\nDATE=%s\n' "${commit}" "${date}"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${version}" "${commit}" "${date}"
             echo "EOF"
             echo "image_tag=${image_tag}"
           } >> "${GITHUB_OUTPUT}"
@@ -69,6 +69,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -82,12 +83,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          version="$(git describe --tags --exact-match HEAD)"
           commit="$(git rev-parse --short=12 HEAD)"
           date="$(git log -1 --format=%cI HEAD)"
 
           {
             echo "build_args<<EOF"
-            printf 'VERSION=main\nCOMMIT=%s\nDATE=%s\n' "${commit}" "${date}"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${version}" "${commit}" "${date}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
@@ -97,11 +99,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          version="$(git describe --tags --exact-match HEAD)"
+
           {
             echo "tags<<EOF"
             printf '%s\n' \
-              "${IMAGE_NAME}:latest" \
-              "${IMAGE_NAME}:main"
+              "${IMAGE_NAME}:${version}" \
+              "${IMAGE_NAME}:latest"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
