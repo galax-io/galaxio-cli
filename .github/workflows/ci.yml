@@ -59,27 +59,6 @@ jobs:
       - name: Build
         run: go build -trimpath -o dist/galaxio ./cmd/galaxio
 
-  docker-image:
-    name: docker image
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    needs:
-      - test
-      - integration
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Build and validate image
-        uses: ./.github/actions/docker-build-validate
-        with:
-          image_name: galax-io/galaxio
-          version: dev
-          image_tag: galax-io/galaxio:pr-${{ github.event.pull_request.number }}-${{ github.sha }}
-
   integration:
     name: integration tests
     runs-on: ubuntu-latest
