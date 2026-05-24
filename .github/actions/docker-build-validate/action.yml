@@ -2,9 +2,6 @@ name: docker-build-validate
 description: Build a Docker image locally and validate it with a command.
 
 inputs:
-  ref:
-    description: Git ref to check out before building.
-    required: true
   image_name:
     description: Docker image name without tag.
     required: true
@@ -24,13 +21,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ inputs.ref }}
-        fetch-depth: 0
-        fetch-tags: true
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 

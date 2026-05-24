@@ -19,10 +19,16 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Build and validate image
         uses: ./.github/actions/docker-build-validate
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
           image_name: galax-io/galaxio
 
   publish:
