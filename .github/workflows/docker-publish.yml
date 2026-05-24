@@ -34,7 +34,6 @@ jobs:
 
           version="$(git describe --tags --exact-match HEAD)"
           semver="${version#v}"
-          major="${semver%%.*}"
           remainder="${semver#*.}"
           minor="${semver%%.*}.${remainder%%.*}"
           commit="$(git rev-parse --short=12 HEAD)"
@@ -46,9 +45,6 @@ jobs:
             printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${semver}" "${commit}" "${date}"
             echo "EOF"
             echo "image_tag=${image_tag}"
-            echo "image_version=${semver}"
-            echo "image_major=${major}"
-            echo "image_minor=${minor}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Build image locally
@@ -109,7 +105,6 @@ jobs:
 
           version="$(git describe --tags --exact-match HEAD)"
           semver="${version#v}"
-          major="${semver%%.*}"
           remainder="${semver#*.}"
           minor="${semver%%.*}.${remainder%%.*}"
 
@@ -118,7 +113,6 @@ jobs:
             printf '%s\n' \
               "${IMAGE_NAME}:${semver}" \
               "${IMAGE_NAME}:${minor}" \
-              "${IMAGE_NAME}:${major}" \
               "${IMAGE_NAME}:latest"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
