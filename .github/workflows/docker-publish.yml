@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/galaxio
+  IMAGE_NAME: galax-io/galaxio
 
 jobs:
   build-and-validate:
@@ -53,8 +53,6 @@ jobs:
           push: false
           tags: ${{ steps.buildmeta.outputs.image_tag }}
           build-args: ${{ steps.buildmeta.outputs.build_args }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           provenance: false
 
       - name: Validate image with utility command
@@ -118,6 +116,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: ${{ steps.buildmeta.outputs.build_args }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           provenance: false
