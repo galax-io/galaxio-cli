@@ -33,15 +33,22 @@ jobs:
           set -euo pipefail
 
           version="$(git describe --tags --exact-match HEAD)"
+          semver="${version#v}"
+          major="${semver%%.*}"
+          remainder="${semver#*.}"
+          minor="${semver%%.*}.${remainder%%.*}"
           commit="$(git rev-parse --short=12 HEAD)"
           date="$(git log -1 --format=%cI HEAD)"
-          image_tag="${IMAGE_NAME}:${version}"
+          image_tag="${IMAGE_NAME}:${semver}"
 
           {
             echo "build_args<<EOF"
-            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${version}" "${commit}" "${date}"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${semver}" "${commit}" "${date}"
             echo "EOF"
             echo "image_tag=${image_tag}"
+            echo "image_version=${semver}"
+            echo "image_major=${major}"
+            echo "image_minor=${minor}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Build image locally
@@ -84,12 +91,13 @@ jobs:
           set -euo pipefail
 
           version="$(git describe --tags --exact-match HEAD)"
+          semver="${version#v}"
           commit="$(git rev-parse --short=12 HEAD)"
           date="$(git log -1 --format=%cI HEAD)"
 
           {
             echo "build_args<<EOF"
-            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${version}" "${commit}" "${date}"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${semver}" "${commit}" "${date}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
@@ -100,11 +108,17 @@ jobs:
           set -euo pipefail
 
           version="$(git describe --tags --exact-match HEAD)"
+          semver="${version#v}"
+          major="${semver%%.*}"
+          remainder="${semver#*.}"
+          minor="${semver%%.*}.${remainder%%.*}"
 
           {
             echo "tags<<EOF"
             printf '%s\n' \
-              "${IMAGE_NAME}:${version}" \
+              "${IMAGE_NAME}:${semver}" \
+              "${IMAGE_NAME}:${minor}" \
+              "${IMAGE_NAME}:${major}" \
               "${IMAGE_NAME}:latest"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
