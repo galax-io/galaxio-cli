@@ -77,6 +77,22 @@ Archives are named `galaxio_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows).
 3. Extract the `galaxio` binary (or `galaxio.exe` on Windows).
 4. Move it to a directory on your `PATH`.
 
+### Option 4 — Docker image
+
+The image is published to Docker Hub as `galax-io/galaxio-cli`.
+
+```sh
+docker pull galax-io/galaxio-cli:latest
+docker run --rm galax-io/galaxio-cli --help
+```
+
+For commands that create files, mount a working directory and set it as the
+container workdir:
+
+```sh
+docker run --rm -v "$PWD":/work -w /work galax-io/galaxio-cli template list
+```
+
 ### Windows
 
 Windows does not ship with a POSIX shell, so use one of:
