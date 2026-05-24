@@ -122,21 +122,44 @@ jobs:
         id: version
         uses: ./.github/actions/release-version
 
-      - name: Build and validate image
-        uses: ./.github/actions/docker-build-validate
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare image build metadata
+        id: buildmeta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit="$(git rev-parse --short=12 HEAD)"
+          date="$(git log -1 --format=%cI HEAD)"
+
+          {
+            echo "build_args<<EOF"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${{ steps.version.outputs.version }}" "${commit}" "${date}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build image locally with BuildKit cache
+        uses: docker/build-push-action@v6
         with:
-          image_name: galax-io/galaxio
-          version: ${{ steps.version.outputs.tag_name }}
-          image_tag: galax-io/galaxio:${{ steps.version.outputs.version }}
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: galax-io/galaxio:${{ steps.version.outputs.version }}
+          build-args: ${{ steps.buildmeta.outputs.build_args }}
+          cache-to: type=local,dest=/tmp/buildx-cache,mode=max
+          provenance: false
 
-      - name: Export validated image artifact
-        run: docker save --output /tmp/galaxio-image.tar galax-io/galaxio:${{ steps.version.outputs.version }}
+      - name: Validate image with utility command
+        run: docker run --rm galax-io/galaxio:${{ steps.version.outputs.version }} version
 
-      - name: Upload validated image artifact
+      - name: Upload BuildKit cache artifact
         uses: actions/upload-artifact@v4
         with:
-          name: galaxio-image-${{ github.sha }}
-          path: /tmp/galaxio-image.tar
+          name: buildx-cache-${{ github.sha }}
+          path: /tmp/buildx-cache
           if-no-files-found: error
           retention-days: 1
 
@@ -210,14 +233,24 @@ jobs:
       - docker-image-main
       - release
     steps:
-      - name: Download validated image artifact
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download BuildKit cache artifact
         uses: actions/download-artifact@v4
         with:
-          name: galaxio-image-${{ github.sha }}
-          path: /tmp
+          name: buildx-cache-${{ github.sha }}
+          path: /tmp/buildx-cache
 
-      - name: Load validated image
-        run: docker load --input /tmp/galaxio-image.tar
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -225,23 +258,35 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Tag image for Docker Hub
+      - name: Prepare image build metadata
+        id: buildmeta
         env:
           VERSION: ${{ needs.docker-image-main.outputs.version }}
-          MINOR_TAG: ${{ needs.docker-image-main.outputs.minor_tag }}
         run: |
           set -euo pipefail
 
-          docker tag "galax-io/galaxio:${VERSION}" "galax-io/galaxio:${MINOR_TAG}"
-          docker tag "galax-io/galaxio:${VERSION}" "galax-io/galaxio:latest"
+          commit="$(git rev-parse --short=12 HEAD)"
+          date="$(git log -1 --format=%cI HEAD)"
 
-      - name: Push image tags
-        env:
-          VERSION: ${{ needs.docker-image-main.outputs.version }}
-          MINOR_TAG: ${{ needs.docker-image-main.outputs.minor_tag }}
-        run: |
-          set -euo pipefail
+          {
+            echo "build_args<<EOF"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "${VERSION}" "${commit}" "${date}"
+            echo "EOF"
+            echo "tags<<EOF"
+            printf '%s\n' \
+              "galax-io/galaxio:${VERSION}" \
+              "galax-io/galaxio:${{ needs.docker-image-main.outputs.minor_tag }}" \
+              "galax-io/galaxio:latest"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
 
-          docker push "galax-io/galaxio:${VERSION}"
-          docker push "galax-io/galaxio:${MINOR_TAG}"
-          docker push "galax-io/galaxio:latest"
+      - name: Build and push image with BuildKit
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.buildmeta.outputs.tags }}
+          build-args: ${{ steps.buildmeta.outputs.build_args }}
+          cache-from: type=local,src=/tmp/buildx-cache
+          provenance: false
