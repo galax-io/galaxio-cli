@@ -93,9 +93,9 @@ jobs:
       - name: Build and validate image
         uses: ./.github/actions/docker-build-validate
         with:
-          image_name: galax-io/galaxio
+          image_name: galaxioteam/galaxio
           version: dev
-          image_tag: galax-io/galaxio:pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+          image_tag: galaxioteam/galaxio:pr-${{ github.event.pull_request.number }}-${{ github.sha }}
 
   docker-image-main:
     name: docker image
@@ -147,13 +147,13 @@ jobs:
           file: ./Dockerfile
           load: true
           push: false
-          tags: galax-io/galaxio:${{ steps.version.outputs.version }}
+          tags: galaxioteam/galaxio:${{ steps.version.outputs.version }}
           build-args: ${{ steps.buildmeta.outputs.build_args }}
           cache-to: type=local,dest=/tmp/buildx-cache,mode=max
           provenance: false
 
       - name: Validate image with utility command
-        run: docker run --rm galax-io/galaxio:${{ steps.version.outputs.version }} version
+        run: docker run --rm galaxioteam/galaxio:${{ steps.version.outputs.version }} version
 
       - name: Upload BuildKit cache artifact
         uses: actions/upload-artifact@v4
@@ -274,9 +274,9 @@ jobs:
             echo "EOF"
             echo "tags<<EOF"
             printf '%s\n' \
-              "galax-io/galaxio:${VERSION}" \
-              "galax-io/galaxio:${{ needs.docker-image-main.outputs.minor_tag }}" \
-              "galax-io/galaxio:latest"
+              "galaxioteam/galaxio:${VERSION}" \
+              "galaxioteam/galaxio:${{ needs.docker-image-main.outputs.minor_tag }}" \
+              "galaxioteam/galaxio:latest"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
