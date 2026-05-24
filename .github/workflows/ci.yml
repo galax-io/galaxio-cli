@@ -63,7 +63,9 @@ jobs:
     name: docker image
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    needs: test
+    needs:
+      - test
+      - integration
     steps:
       - name: Checkout
         uses: actions/checkout@v4
