@@ -1,0 +1,43 @@
+# Changes here will be overwritten by `copier update` — NEVER EDIT MANUALLY.
+# This file records the answers used to scaffold the project so the template
+# can be re-applied later.  Keep it committed.
+_commit: d8b7cd1
+_src_path: gh:galax-io/spec-kit-galaxio-bootstrap
+architecture: 'Each command is a thin cobra wrapper over a runX(ctx, opts) (XOutput,
+    error) function; human output goes to stdout and diagnostics to stderr; every
+    command offers -o text|json; usage errors exit 2 and runtime errors 1 via UsageError
+    and RuntimeError. Release is automatic from main: the version bump is computed
+    from conventional commits, so a feat commit publishes.'
+build_test_cmd: go build ./... && go test ./...
+commands: '# format      gofmt -w .
+
+    # verify      go vet ./... && go test ./...
+
+    # build/test  go build ./... && go test ./...
+
+    # integration go test -tags=integration ./...'
+dep_manifest: go.mod
+do_git: false
+org_repo: galax-io/galaxio-cli
+project_name: galaxio-cli
+project_tagline: 'Command-line interface for Galaxio: scaffolds load-test projects
+    from templates, generates Gatling scripts from API specifications, and reports
+    on finished runs; released automatically from main, so a feat commit cuts a minor
+    release'
+publish_mechanism: Go module proxy (tag-based)
+release_notes_tool: git-cliff
+role: 'Principal Engineer: Go, cobra command-line design, code generation from API
+    specifications, load-test result reporting'
+run_speckit: false
+stack: go
+stack_detail: Go 1.25, spf13/cobra, pb33f/libopenapi, gopkg.in/yaml.v3; standard-library
+    testing only, table-driven with golden files; goreleaser and a distroless image
+structure: cmd/galaxio/ -> one file per command, registered in root.go; internal/codegen/
+    -> parsers and Scala renderers for swagger, HAR and Postman; internal/templatecatalog/
+    -> template registry client; internal/featureflags/ -> environment gate for experimental
+    commands; internal/buildinfo/ -> version embedding
+test_model: Standard-library testing, no assertion library; table-driven subtests;
+    golden files under testdata; command-level tests drive execute() through runCLI
+    and assert exit codes; integration tests behind the integration build tag; coverage
+    gate 80 percent enforced in CI; race detector always on.
+
