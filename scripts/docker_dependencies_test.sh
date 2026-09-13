@@ -4,6 +4,8 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 dockerfile="$root/Dockerfile"
 dependabot="$root/.github/dependabot.yml"
+docker_action="$root/.github/actions/docker-build-validate/action.yml"
+release_workflow="$root/.github/workflows/release.yml"
 
 module_go=$(awk '$1 == "go" { print $2; exit }' "$root/go.mod")
 image_go=$(sed -nE 's/^FROM .*golang:([0-9]+\.[0-9]+\.[0-9]+)-bookworm AS build$/\1/p' "$dockerfile")
@@ -25,6 +27,16 @@ fi
 
 grep -Fq 'FROM --platform=$BUILDPLATFORM golang:' "$dockerfile"
 grep -Fq 'FROM gcr.io/distroless/static-debian12:nonroot' "$dockerfile"
+
+for action in docker/setup-buildx-action docker/build-push-action; do
+  composite_ref=$(sed -nE "s#^[[:space:]]*uses: ${action}@([^[:space:]]+).*#\1#p" "$docker_action")
+  release_ref=$(sed -nE "s#^[[:space:]]*uses: ${action}@([^[:space:]]+).*#\1#p" "$release_workflow")
+  if [[ -z "$composite_ref" || "$composite_ref" != "$release_ref" ]]; then
+    printf 'FAIL %s must use the same version in %s and %s\n' \
+      "$action" "$docker_action" "$release_workflow" >&2
+    exit 1
+  fi
+done
 
 if grep -Eq '^FROM .*\$\{' "$dockerfile"; then
   echo 'FAIL Docker base images must be literal so Dependabot can discover them' >&2
