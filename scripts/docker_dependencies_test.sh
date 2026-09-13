@@ -28,4 +28,21 @@ grep -Fq 'package-ecosystem: gomod' "$dependabot"
 grep -Fq 'package-ecosystem: docker' "$dependabot"
 grep -Fq 'gcr.io/distroless/static-debian12' "$dependabot"
 
+awk '
+  $0 == "  go-runtime:" { in_group = 1; next }
+  in_group && /^updates:/ { exit !found }
+  in_group && $0 == "    open-pull-requests-limit: 5" { found = 1 }
+  END { exit !found }
+' "$dependabot"
+
+if awk '
+  /^  - package-ecosystem: (gomod|docker)$/ { in_grouped_update = 1; next }
+  /^  - package-ecosystem:/ { in_grouped_update = 0 }
+  in_grouped_update && /open-pull-requests-limit:/ { found = 1 }
+  END { exit !found }
+' "$dependabot"; then
+  echo 'FAIL grouped updates must set open-pull-requests-limit on the multi-ecosystem group' >&2
+  exit 1
+fi
+
 echo 'PASS Docker dependency update policy checks'
