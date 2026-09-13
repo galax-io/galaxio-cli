@@ -25,6 +25,14 @@ check_hook 0 'git push origin chore/speckit-bootstrap'
 
 if [ -f "$root/scripts/lib/linkage.sh" ]; then
   source "$root/scripts/lib/linkage.sh"
+  is_dependabot_author app/dependabot \
+    || { echo 'FAIL GraphQL Dependabot identity rejected'; failures=$((failures + 1)); }
+  is_dependabot_author 'dependabot[bot]' \
+    || { echo 'FAIL webhook Dependabot identity rejected'; failures=$((failures + 1)); }
+  if is_dependabot_author dependabot || is_dependabot_author app/renovate; then
+    echo 'FAIL non-Dependabot identity accepted'
+    failures=$((failures + 1))
+  fi
   git -C "$tmp" init -q -b review-fixture
   git -C "$tmp" -c user.name=Review -c user.email=review@example.invalid commit -qm initial --allow-empty
   git -C "$tmp" tag v1.0.0

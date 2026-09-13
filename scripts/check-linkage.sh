@@ -14,12 +14,12 @@ check-linkage.sh — verify the issue <-> PR <-> milestone contract (see AGENTS.
 
 What each entity owes (this script enforces it):
   Issue      belongs to exactly one milestone; closed only when its fix is on main.
-  PR         carries its issue's milestone + a real closing link (Closes #<issue>);
-             the linked issue sits in the same milestone; one issue per PR.
+  PR         carries a milestone. Human PRs also carry a real closing link
+             (Closes #<issue>); verified Dependabot PRs may omit the issue.
   Milestone  one release (vX.Y.Z); tag only when every issue is closed and every PR merged.
 
 Usage:
-  scripts/check-linkage.sh --pr <N>          # GATE one PR: milestone + Closes #issue + same milestone
+  scripts/check-linkage.sh --pr <N>          # GATE one PR: milestone + human issue linkage
   scripts/check-linkage.sh --for-tag vX.Y.Z  # GATE a release: tag-readiness of that version's milestone
                                            # checks the existing tag, otherwise HEAD; fetch history/tags first
   scripts/check-linkage.sh [milestone]       # audit a milestone (default: lowest-numbered open)
@@ -58,12 +58,30 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-# Gate one PR (the merge gate). Fails if the PR is missing a milestone, closes no
-# issue, or closes an issue in a different milestone. Strict: requires a registered
-# GitHub closing link (no body-text fallback — that lenient path is audit-mode only).
+# Gate one PR (the merge gate). Every PR needs a milestone. Human-authored PRs
+# also need a registered GitHub closing link; verified Dependabot PRs are the
+# only exception because the bot cannot create repository issues.
 if [ -n "$PR_NUM" ]; then
-  pj=$(gh pr view "$PR_NUM" --repo "$REPO" --json number,title,state,milestone,closingIssuesReferences) \
+  read_pr() {
+    gh pr view "$PR_NUM" --repo "$REPO" \
+      --json number,title,state,author,milestone,closingIssuesReferences
+  }
+  pj=$(read_pr) \
     || { echo "error: PR #$PR_NUM not found in $REPO" >&2; exit 2; }
+  p_author=$(jq -r '.author.login // ""' <<<"$pj")
+  p_ms=$(jq -r '.milestone.title // ""' <<<"$pj")
+  if is_dependabot_author "$p_author" && [ -z "$p_ms" ]; then
+    printf 'PR #%s is waiting for automatic Dependabot milestone assignment' "$PR_NUM"
+    for wait_attempt in 1 2 3 4 5 6; do
+      sleep 5
+      printf '.'
+      pj=$(read_pr) \
+        || { echo; echo "error: PR #$PR_NUM not found in $REPO" >&2; exit 2; }
+      p_ms=$(jq -r '.milestone.title // ""' <<<"$pj")
+      [ -n "$p_ms" ] && break
+    done
+    printf '\n'
+  fi
   p_title=$(jq -r '.title' <<<"$pj")
   p_ms=$(jq -r '.milestone.title // ""' <<<"$pj")
   p_closes=$(jq -r '.closingIssuesReferences[]?.number' <<<"$pj")
@@ -72,7 +90,11 @@ if [ -n "$PR_NUM" ]; then
   if [ -z "$p_ms" ]; then printf '  ✗ no milestone — assign one (gh pr edit %s --milestone "…")\n' "$PR_NUM"; e=1
   else printf '  ✓ milestone: %s\n' "$p_ms"; fi
   if [ -z "$p_closes" ]; then
-    printf '  ✗ closes no issue — add "Closes #<issue>" to the PR body\n'; e=1
+    if is_dependabot_author "$p_author"; then
+      printf '  ✓ verified Dependabot PR — no issue required\n'
+    else
+      printf '  ✗ closes no issue — add "Closes #<issue>" to the PR body\n'; e=1
+    fi
   else
     for i in $p_closes; do
       i_ms=$(gh issue view "$i" --repo "$REPO" --json milestone -q '.milestone.title // ""' 2>/dev/null || echo "")
@@ -140,9 +162,10 @@ if [ -z "$pr_numbers" ]; then
   warn "no PRs carry milestone #$MS yet"
 fi
 for pr in $pr_numbers; do
-  pr_json=$(gh pr view "$pr" --repo "$REPO" --json number,title,state,milestone,closingIssuesReferences,body)
+  pr_json=$(gh pr view "$pr" --repo "$REPO" --json number,title,state,author,milestone,closingIssuesReferences,body)
   pr_state=$(jq -r '.state' <<<"$pr_json")
   pr_title=$(jq -r '.title' <<<"$pr_json")
+  pr_author=$(jq -r '.author.login // ""' <<<"$pr_json")
   pr_ms=$(jq -r '.milestone.title // ""' <<<"$pr_json")
   if [ "$pr_ms" != "$ms_title" ]; then
     err "PR #$pr is included in the release but its milestone is '${pr_ms:-none}', not '$ms_title'"
@@ -158,20 +181,24 @@ for pr in $pr_numbers; do
   fi
 
   if [ -z "$ref_nums" ]; then
-    err "PR #$pr ($pr_state) closes no issue — add 'Closes #<issue>': $pr_title"
-    continue
-  fi
-
-  for ri in $ref_nums; do
-    linked_issues="$linked_issues$ri "
-    ri_ms=$(gh issue view "$ri" --repo "$REPO" --json milestone -q '.milestone.title // ""' 2>/dev/null || echo "")
-    if [ "$ri_ms" != "$ms_title" ]; then
-      err "PR #$pr closes issue #$ri but that issue's milestone is '${ri_ms:-none}', not '$ms_title'"
+    if ! is_dependabot_author "$pr_author"; then
+      err "PR #$pr ($pr_state) closes no issue — add 'Closes #<issue>': $pr_title"
+      continue
     fi
-  done
+  else
+    for ri in $ref_nums; do
+      linked_issues="$linked_issues$ri "
+      ri_ms=$(gh issue view "$ri" --repo "$REPO" --json milestone -q '.milestone.title // ""' 2>/dev/null || echo "")
+      if [ "$ri_ms" != "$ms_title" ]; then
+        err "PR #$pr closes issue #$ri but that issue's milestone is '${ri_ms:-none}', not '$ms_title'"
+      fi
+    done
+  fi
 
   if [ "$TAG_MODE" = 1 ] && [ "$pr_state" != "MERGED" ]; then
     err "PR #$pr is $pr_state — must be MERGED before tagging: $pr_title"
+  elif [ -z "$ref_nums" ]; then
+    ok "PR #$pr ($pr_state) → verified Dependabot PR"
   else
     ok "PR #$pr ($pr_state) → closes #$(echo "$ref_nums" | paste -sd, -)"
   fi
