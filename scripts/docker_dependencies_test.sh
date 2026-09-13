@@ -8,9 +8,18 @@ dependabot="$root/.github/dependabot.yml"
 module_go=$(awk '$1 == "go" { print $2; exit }' "$root/go.mod")
 image_go=$(sed -nE 's/^FROM .*golang:([0-9]+\.[0-9]+\.[0-9]+)-bookworm AS build$/\1/p' "$dockerfile")
 
-if [[ -z "$module_go" || -z "$image_go" || "$module_go" != "$image_go" ]]; then
-  printf 'FAIL go.mod version %s does not match Docker builder version %s\n' \
+if [[ -z "$module_go" || -z "$image_go" ]]; then
+  printf 'FAIL could not read go.mod version %s or Docker builder version %s\n' \
     "${module_go:-missing}" "${image_go:-missing}" >&2
+  exit 1
+fi
+
+IFS=. read -r module_major module_minor module_patch <<< "$module_go"
+IFS=. read -r image_major image_minor image_patch <<< "$image_go"
+if [[ "$module_major" != "$image_major" || "$module_minor" != "$image_minor" ]] ||
+  ((image_patch < module_patch)); then
+  printf 'FAIL Docker builder %s must stay on Go %s.%s and be at least %s\n' \
+    "$image_go" "$module_major" "$module_minor" "$module_go" >&2
   exit 1
 fi
 
@@ -27,6 +36,9 @@ grep -Fq 'multi-ecosystem-group: go-runtime' "$dependabot"
 grep -Fq 'package-ecosystem: gomod' "$dependabot"
 grep -Fq 'package-ecosystem: docker' "$dependabot"
 grep -Fq 'gcr.io/distroless/static-debian12' "$dependabot"
+grep -Fq 'dependency-name: golang' "$dependabot"
+grep -Fq 'version-update:semver-major' "$dependabot"
+grep -Fq 'version-update:semver-minor' "$dependabot"
 
 awk '
   $0 == "  go-runtime:" { in_group = 1; next }
