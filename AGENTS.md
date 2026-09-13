@@ -64,7 +64,7 @@ Every piece of work is tied to a milestone. No exceptions unless explicitly told
 ## Commits & PRs
 
 - **Spec-first.** `specs/NNN-*/` artifacts → `docs(speckit): add NNN-<feature> spec/plan/tasks` commit BEFORE any `feat`/`fix`. Never folded into implementation.
-- **1 issue = 1 commit.** Each tracked GitHub issue maps to one semantic commit (`feat(scope): … (#NNN)`), green on its own (`go build ./... && go test ./...`). Docs, tweaks, and out-of-scope improvements go in separate PRs — never mixed with issue commits.
+- **1 issue = 1 commit.** Each tracked GitHub issue maps to one semantic commit (`feat(scope): … (#NNN)`), green on its own (`go build ./... && go test ./...`). Verified Dependabot PRs may omit an issue, but must carry the active milestone and remain green on their own. Docs, tweaks, and out-of-scope improvements go in separate PRs — never mixed with issue commits.
 - **Intent, not path.** No add-then-remove within a PR. Squash churn before review.
 - **1 concern per PR.** Feature ≠ docs/README. Stack dependent PRs; update with `--force-with-lease`.
 - **Idiomatic code.** Follow the language's idioms and the conventions already in the codebase; no control-flow-by-exception, no dead/duplicated code.

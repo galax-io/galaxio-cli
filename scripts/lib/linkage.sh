@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # Helpers shared by the release audit and its local regression checks.
 
+# GitHub exposes the Dependabot App as app/dependabot through GraphQL (`gh pr
+# view`) and as dependabot[bot] in webhook payloads. Accept only those exact
+# identities when applying dependency-bot linkage rules.
+is_dependabot_author() {
+  case "$1" in
+    app/dependabot|"dependabot[bot]") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # List commits since the preceding reachable release tag. Exclude the target tag
 # itself so auditing an already-created tag does not produce an empty range.
 release_commits() {

@@ -1,0 +1,75 @@
+name: dependabot metadata
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Existing Dependabot PR to reconcile
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-metadata-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  assign-milestone:
+    name: assign active milestone
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+    steps:
+      - name: Assign the lowest-numbered open milestone
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER)
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed(`invalid PR number: ${process.env.PR_NUMBER}`)
+              return
+            }
+
+            const { owner, repo } = context.repo
+            const { data: pull } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            })
+            if (pull.user?.login !== 'dependabot[bot]') {
+              core.setFailed(`PR #${prNumber} is authored by ${pull.user?.login}, not Dependabot`)
+              return
+            }
+            if (pull.milestone?.state === 'open') {
+              core.notice(`PR #${prNumber} already belongs to ${pull.milestone.title}`)
+              return
+            }
+
+            const milestones = await github.paginate(github.rest.issues.listMilestones, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            })
+            const active = milestones.sort((left, right) => left.number - right.number)[0]
+            if (!active) {
+              core.setFailed('no open milestone is available for the Dependabot PR')
+              return
+            }
+
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: prNumber,
+              milestone: active.number,
+            })
+            core.notice(`assigned PR #${prNumber} to milestone #${active.number}: ${active.title}`)
