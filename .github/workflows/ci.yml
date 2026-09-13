@@ -59,6 +59,53 @@ jobs:
       - name: Build
         run: go build -trimpath -o dist/galaxio ./cmd/galaxio
 
+  shell-suites:
+    name: shell suites
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run every shell suite
+        # The guard and the pre-push hook gate releases, and a suite that exists but is
+        # run by nothing is how the guard regressed twice (#62). Suites are discovered by
+        # glob, not listed: a suite added and not enrolled is a suite nobody runs.
+        # nullglob makes an unmatched pattern vanish instead of staying literal, and the
+        # floor is what stops the glob failing open on a typo that matches nothing.
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          suites=(scripts/*_test.sh .claude/hooks/*_test.sh .githooks/*_test.sh)
+          [ "${#suites[@]}" -ge 3 ] || { echo "found ${#suites[@]} shell suites, expected at least 3"; exit 1; }
+          for t in "${suites[@]}"; do
+            echo "--- $t"
+            bash "$t"
+          done
+
+  linkage:
+    name: linkage
+    runs-on: ubuntu-latest
+    # The merge gate: a milestone, a closing link, and the closed issue in the same
+    # milestone. Pull requests only: a push to main was gated by the pull request that
+    # produced it and carries no PR number. The read permissions are explicit because
+    # the workflow's top-level `contents: read` narrows GITHUB_TOKEN to what is listed.
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check issue, PR and milestone linkage
+        run: scripts/check-linkage.sh --pr "$PR_NUMBER"
+
   integration:
     name: integration tests
     runs-on: ubuntu-latest
@@ -83,6 +130,7 @@ jobs:
     needs:
       - test
       - integration
+      - shell-suites
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,6 +152,7 @@ jobs:
     needs:
       - test
       - integration
+      - shell-suites
     outputs:
       bump: ${{ steps.version.outputs.bump }}
       version: ${{ steps.version.outputs.version }}
