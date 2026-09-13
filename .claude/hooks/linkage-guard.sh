@@ -14,7 +14,7 @@ if printf '%s' "$cmd" | grep -qE '\bgit[[:space:]]+push\b' \
    && printf '%s' "$cmd" | grep -qE '(--tags|refs/tags/|[[:space:]](origin[[:space:]]+)?v[0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)|release/[0-9])'; then
   is_tag=1
 fi
-printf '%s' "$cmd" | grep -qE '\bgit[[:space:]]+(commit|log|show)\b' && is_tag=0
+# A read or commit elsewhere in a compound command must not cancel a release gate.
 [ "$is_tag" = 1 ] || exit 0
 [ -x "$checker" ] || block "checker missing ($checker) — release cannot be verified"
 ver=$(printf '%s' "$cmd" | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)

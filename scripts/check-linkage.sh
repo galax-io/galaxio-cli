@@ -4,6 +4,9 @@
 # Run `scripts/check-linkage.sh --help` for full usage.
 
 set -euo pipefail
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=scripts/lib/linkage.sh
+source "$SCRIPT_DIR/lib/linkage.sh"
 
 usage() {
   cat <<'EOF'
@@ -18,6 +21,7 @@ What each entity owes (this script enforces it):
 Usage:
   scripts/check-linkage.sh --pr <N>          # GATE one PR: milestone + Closes #issue + same milestone
   scripts/check-linkage.sh --for-tag vX.Y.Z  # GATE a release: tag-readiness of that version's milestone
+                                           # checks the existing tag, otherwise HEAD; fetch history/tags first
   scripts/check-linkage.sh [milestone]       # audit a milestone (default: lowest-numbered open)
   scripts/check-linkage.sh --tag [ms]        # also assert tag-readiness (all issues closed, all PRs merged)
   scripts/check-linkage.sh --help
@@ -117,6 +121,18 @@ items=$(gh api --paginate --slurp "repos/$REPO/issues?milestone=$MS&state=all&pe
 pr_numbers=$(jq -r '.[] | select(.pull_request != null) | .number' <<<"$items")
 issue_numbers=$(jq -r '.[] | select(.pull_request == null) | .number' <<<"$items")
 
+if [ "$TAG_MODE" = 1 ]; then
+  release_ref=HEAD
+  target_tag="v${FOR_TAG#v}"
+  if [ -n "$FOR_TAG" ] && git rev-parse --verify "refs/tags/$target_tag" >/dev/null 2>&1; then
+    release_ref="refs/tags/$target_tag"
+  fi
+  commits=$(release_commits "$release_ref" "$target_tag") || exit 2
+  release_prs=$(gh api --paginate --slurp "repos/$REPO/pulls?state=closed&base=main&per_page=100" \
+    | release_pr_numbers "$commits")
+  pr_numbers=$(printf '%s\n%s\n' "$pr_numbers" "$release_prs" | sed '/^$/d' | sort -nu)
+fi
+
 linked_issues=" "   # space-delimited set of issue numbers a PR points at
 
 printf 'Pull requests\n'
@@ -127,6 +143,10 @@ for pr in $pr_numbers; do
   pr_json=$(gh pr view "$pr" --repo "$REPO" --json number,title,state,milestone,closingIssuesReferences,body)
   pr_state=$(jq -r '.state' <<<"$pr_json")
   pr_title=$(jq -r '.title' <<<"$pr_json")
+  pr_ms=$(jq -r '.milestone.title // ""' <<<"$pr_json")
+  if [ "$pr_ms" != "$ms_title" ]; then
+    err "PR #$pr is included in the release but its milestone is '${pr_ms:-none}', not '$ms_title'"
+  fi
 
   # Real GitHub closing links, plus a text fallback for Closes/Fixes/Resolves #N in the body.
   ref_nums=$(jq -r '.closingIssuesReferences[]?.number' <<<"$pr_json")

@@ -9,7 +9,7 @@ layout: "nested"
 
 # Auto-create worktree after /speckit.specify without prompting.
 # Set to false to get a confirmation prompt instead.
-auto_create: true
+auto_create: false
 
 # Pattern for sibling-dir names. Available placeholders: {{repo}}, {{branch}}.
 sibling_pattern: "{{repo}}--{{branch}}"
