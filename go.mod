@@ -1,6 +1,6 @@
 module github.com/galax-io/galaxio-cli
 
-go 1.25.7
+go 1.27.1
 
 require (
 	github.com/pb33f/libopenapi v0.38.7
