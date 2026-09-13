@@ -87,4 +87,8 @@ Releases are automated from `main` by `.github/workflows/ci.yml`. A push to `mai
 - **Before tagging**: every PR merged since the previous tag must be assigned to the release milestone; every issue in the milestone whose fix is on `main` must be closed.
 - **Manual release audit:** fetch complete history and tags, then run `scripts/check-linkage.sh --for-tag vX.Y.Z`. It checks the existing target tag, or `HEAD` if the tag does not exist yet, against the preceding reachable release tag.
 
-The Claude `PreToolUse` hook runs the linkage check for detected manual release-tag operations. It does not run in GitHub Actions and does not enforce automatic CI releases; milestone assignment must be checked before merging. Changes to the publishing workflow require separate approval.
+The `linkage` CI job validates each PR's milestone and closing link before it reaches
+`main`; the `shell suites` job runs every `*_test.sh` suite under `scripts/`,
+`.claude/hooks/`, and `.githooks/`. The Claude `PreToolUse` hook and the optional
+`.githooks/pre-push` hook protect exceptional manual tags; `LINKAGE_OFF=1` is their
+sanctioned local bypass. Changes to the publishing workflow require separate approval.

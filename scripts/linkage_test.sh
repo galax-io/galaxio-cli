@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local regression checks; uses real Git and jq, with no GitHub writes or mocks.
 set -euo pipefail
-root=$(cd "$(dirname "$0")/../.." && pwd)
+root=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 failures=0
