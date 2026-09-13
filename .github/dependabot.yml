@@ -24,6 +24,11 @@ updates:
       - golang
       - gcr.io/distroless/static-debian12
     multi-ecosystem-group: go-runtime
+    ignore:
+      - dependency-name: golang
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
 
   - package-ecosystem: github-actions
     directory: /
