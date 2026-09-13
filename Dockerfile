@@ -1,9 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG GO_VERSION=1.25.0
-ARG DISTROLESS_BASE_IMAGE=gcr.io/distroless/static-debian12:nonroot
-
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.25.7-bookworm AS build
 
 WORKDIR /src
 
@@ -31,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -X github.com/galax-io/galaxio-cli/internal/buildinfo.Date=${DATE}" \
     -o /out/galaxio ./cmd/galaxio
 
-FROM ${DISTROLESS_BASE_IMAGE}
+FROM gcr.io/distroless/static-debian12:nonroot
 
 LABEL org.opencontainers.image.title="galaxio-cli"
 LABEL org.opencontainers.image.description="CLI for Gatling performance testing workflows."
