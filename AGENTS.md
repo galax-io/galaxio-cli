@@ -71,31 +71,20 @@ Every piece of work is tied to a milestone. No exceptions unless explicitly told
 
 ## Release Process (MANDATORY)
 
-Trunk-based with release branches. Trunk is `main`; `release/*` branches are cut from `main` for stabilization. Pushing a `vX.Y.Z` tag on `main` or a `release/*` branch triggers the release workflow (Go module proxy (tag-based)) and creates a GitHub Release (git-cliff).
+Releases are automated from `main` by `.github/workflows/ci.yml`. A push to `main` runs verification and image validation, computes the version from conventional commits, then creates the tag and GitHub Release with GoReleaser and publishes the Docker image.
 
-### Minor/Major release (e.g. 1.2.0, 2.0.0)
+### Preparing a release
 
-1. `git checkout -b release/X.Y.0 main` — cut release branch from `main`
-2. `git push -u origin release/X.Y.0`
-3. `git tag vX.Y.0` on the release branch
-4. `git push origin vX.Y.0` — triggers release workflow
-
-### Patch release (e.g. 1.2.1)
-
-1. Fix lands on `main` first (via PR as usual)
-2. `git cherry-pick <fix-sha>` onto `release/X.Y.0`
-3. `git tag vX.Y.1` on the release branch
-4. `git push origin vX.Y.1` — triggers release workflow
+1. Assign each PR to its active milestone before merging; link any fixed issues so GitHub closes them when the PR lands on `main`.
+2. Keep commit messages conventional: `feat` produces a minor bump; fixes use `fix`. The version calculation in CI is the source of truth.
+3. Merge through a green PR into `main`, then check the `release` and `publish-image` jobs in the `ci` workflow.
 
 ### Rules
 
-- **Every minor version gets its own `release/X.Y.0` branch** — no exceptions
-- **Tags ONLY on `release/*` branches or `main`** — `release.yml` validates this
-- **Branch name must match tag version**: `release/1.2.0` → `v1.2.0`, `v1.2.1`, etc.
-- **Never delete a release tag** after the registry deployment starts — creates stuck deployments
-- **Never reuse a version number** — most package registries reject duplicates permanently
-- **Before tagging**: every PR merged since the previous tag must be assigned to the milestone; every issue in the milestone whose fix is on `main` must be closed
+- **Do not create release branches or tags as the normal publishing procedure.** Pushes to `release/*` or tags do not trigger the current workflow. CI creates release tags on `main`.
+- **Never delete a release tag** after deployment starts.
+- **Never reuse a version number.**
+- **Before tagging**: every PR merged since the previous tag must be assigned to the release milestone; every issue in the milestone whose fix is on `main` must be closed.
+- **Manual release audit:** fetch complete history and tags, then run `scripts/check-linkage.sh --for-tag vX.Y.Z`. It checks the existing target tag, or `HEAD` if the tag does not exist yet, against the preceding reachable release tag.
 
-<!-- The issue↔PR↔milestone contract above is enforced mechanically by         -->
-<!-- scripts/check-linkage.sh + the .claude/hooks/linkage-guard.sh PreToolUse   -->
-<!-- hook (gates release tagging only; normal push/PR/merge untouched).         -->
+The Claude `PreToolUse` hook runs the linkage check for detected manual release-tag operations. It does not run in GitHub Actions and does not enforce automatic CI releases; milestone assignment must be checked before merging. Changes to the publishing workflow require separate approval.
