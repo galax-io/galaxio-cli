@@ -384,6 +384,24 @@ go build -o bin/galaxio ./cmd/galaxio
 go test ./...
 ```
 
+## Contributing
+
+Two guards protect release tags. Both call `scripts/check-linkage.sh`, which holds the
+issue ↔ PR ↔ milestone rules; the same script runs on every pull request as the `linkage`
+CI job.
+
+- **Enable the release-tag hook once per clone.** Without it `.githooks/pre-push` never
+  runs. CI still checks server-side either way; this is the local fast failure.
+
+  ```sh
+  git config core.hooksPath .githooks
+  ```
+
+- **Skipping the guard deliberately.** A release step that must proceed while its
+  milestone is still being closed is run as `LINKAGE_OFF=1 <command>`. That is the only
+  sanctioned bypass: a command is never rephrased to get past the guard. A block names the
+  version and the rule that failed, so fix the milestone rather than the wording.
+
 ## License
 
 This project is distributed under the terms described in [LICENSE](LICENSE).

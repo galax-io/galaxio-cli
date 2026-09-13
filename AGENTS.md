@@ -97,5 +97,10 @@ Trunk-based with release branches. Trunk is `main`; `release/*` branches are cut
 - **Before tagging**: every PR merged since the previous tag must be assigned to the milestone; every issue in the milestone whose fix is on `main` must be closed
 
 <!-- The issue↔PR↔milestone contract above is enforced mechanically by         -->
-<!-- scripts/check-linkage.sh + the .claude/hooks/linkage-guard.sh PreToolUse   -->
-<!-- hook (gates release tagging only; normal push/PR/merge untouched).         -->
+<!-- scripts/check-linkage.sh, called from three places: the `linkage` CI job   -->
+<!-- (--pr, every pull request), the .claude/hooks/linkage-guard.sh PreToolUse  -->
+<!-- hook (gates an agent's release tag or tag push only; commit/push/PR/merge  -->
+<!-- untouched; LINKAGE_OFF=1 is the sanctioned bypass) and .githooks/pre-push  -->
+<!-- (any client, opt-in once per clone: git config core.hooksPath .githooks).  -->
+<!-- Every *_test.sh under scripts/, .claude/hooks/ and .githooks/ is run by    -->
+<!-- the `shell suites` CI job.                                                 -->
