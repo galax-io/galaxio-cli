@@ -1,0 +1,254 @@
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: release guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout tag and branches
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag placement
+        env:
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "refusing non-semantic release tag: $TAG" >&2; exit 1; }
+          version="${TAG#v}"
+          release_branch="origin/release/${version%.*}.0"
+          branches="$(git branch -r --contains "$SHA" | sed 's/^[ *]*//' | grep -v '^origin/HEAD' || true)"
+          printf 'the tagged commit is contained in:\n%s\n' "$branches"
+          if grep -qx 'origin/main' <<<"$branches" || grep -qx "$release_branch" <<<"$branches"; then
+            exit 0
+          fi
+          echo "refusing $TAG: tag must be on main or $release_branch" >&2
+          exit 1
+
+      - name: Verify milestone linkage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: scripts/check-linkage.sh --for-tag "$TAG"
+
+      - name: Refuse an existing GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "refusing $TAG: GitHub Release already exists" >&2
+            exit 1
+          fi
+
+      - name: Expose release version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: release verification
+    runs-on: ubuntu-latest
+    needs: guard
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Check module tidiness
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Check coverage threshold
+        env:
+          COVERAGE_THRESHOLD: "80.0"
+        run: |
+          coverage=$(go tool cover -func=coverage.out | awk '/^total:/ { gsub("%", "", $3); print $3 }')
+          awk -v coverage="$coverage" -v threshold="$COVERAGE_THRESHOLD" 'BEGIN {
+            if (coverage + 0 < threshold + 0) {
+              printf "coverage %.1f%% is below required %.1f%%\n", coverage, threshold
+              exit 1
+            }
+            printf "coverage %.1f%% meets required %.1f%%\n", coverage, threshold
+          }'
+
+      - name: Build
+        run: go build -trimpath -o dist/galaxio ./cmd/galaxio
+
+      - name: Integration tests
+        run: go test -tags=integration -race -count=1 ./...
+
+  shell-suites:
+    name: release shell suites
+    runs-on: ubuntu-latest
+    needs: guard
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+
+      - name: Run every shell suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          suites=(scripts/*_test.sh .claude/hooks/*_test.sh .githooks/*_test.sh)
+          [ "${#suites[@]}" -ge 4 ] || { echo "found ${#suites[@]} shell suites, expected at least 4"; exit 1; }
+          for t in "${suites[@]}"; do
+            echo "--- $t"
+            bash "$t"
+          done
+
+  docker-image:
+    name: release docker image
+    runs-on: ubuntu-latest
+    needs:
+      - guard
+      - verify
+      - shell-suites
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and validate image
+        uses: ./.github/actions/docker-build-validate
+        with:
+          image_name: galaxioteam/galaxio
+          version: ${{ needs.guard.outputs.version }}
+          image_tag: galaxioteam/galaxio:verify-${{ github.sha }}
+
+  publish-release:
+    name: publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - guard
+      - verify
+      - shell-suites
+      - docker-image
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Refuse a GitHub Release created during verification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "refusing $TAG: GitHub Release already exists" >&2
+            exit 1
+          fi
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+
+  publish-image:
+    name: publish image
+    runs-on: ubuntu-latest
+    needs:
+      - guard
+      - publish-release
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Prepare image metadata
+        id: buildmeta
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse --short=12 HEAD)"
+          date="$(git log -1 --format=%cI HEAD)"
+          minor="${VERSION%.*}"
+          {
+            echo "build_args<<EOF"
+            printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\n' "$VERSION" "$commit" "$date"
+            echo "EOF"
+            echo "tags<<EOF"
+            printf '%s\n' \
+              "galaxioteam/galaxio:${VERSION}" \
+              "galaxioteam/galaxio:${minor}" \
+              'galaxioteam/galaxio:latest'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.buildmeta.outputs.tags }}
+          build-args: ${{ steps.buildmeta.outputs.build_args }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
