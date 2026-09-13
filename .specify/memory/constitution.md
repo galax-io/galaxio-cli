@@ -1,69 +1,45 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (template) → 1.0.0
-Bump rationale: first ratification. The file was the unfilled spec-kit template since the
-2026-09-02 scaffold (#60); nothing earlier existed to amend.
+Version change: 1.0.0 → 1.0.1
+Bump rationale: PATCH. No principle changes. The Quality Gates table and its additional
+constraints now describe what CI runs after galaxio-cli#62 (spec 001-harden-linkage-guard):
+the `linkage` job runs `scripts/check-linkage.sh --pr` on every pull request, and the
+`shell suites` job runs every `*_test.sh` under `scripts/`, `.claude/hooks/` and
+`.githooks/`. The linkage row no longer says "manual today", and the Development Workflow
+bullet no longer points at #62 for the guards, which now exist.
 
-Principles (all new):
-- I. Command Contract
-- II. Report Arithmetic Lives Here
-- III. Tests Land With The Change (NON-NEGOTIABLE)
-- IV. Minimal, Explicit Dependencies
-- V. Published Surfaces Are Compatibility-Sensitive
-- VI. Idiomatic, Simple Go
+Principles: unchanged (I–VI).
 
-Added sections: Quality Gates & Tooling; Engineering Guidance (Skills); Development Workflow &
-Release Process; Governance.
+Added sections: none. Removed sections: none.
 
-Removed sections: none (template placeholders only).
+Modified:
+- Quality Gates table: Linkage row's CI job `(manual today — see #62)` → `linkage`; new row
+  "Shell suites" → `shell suites`.
+- Additional constraints: the paragraph saying the `--pr` gate is not run by CI is replaced
+  by the sentence that names the two jobs.
+- Development Workflow, Milestones bullet: `(#62)` dropped after `.githooks/pre-push`.
 
-Decisions taken here rather than inferred, so they are visible for review:
-- Releases are automatic from `main`. `.github/workflows/ci.yml` computes the bump from
-  conventional commits on every push to `main` and tags it (patch by default, minor on `feat`,
-  major on `!`/`BREAKING CHANGE`). The bootstrap merge #60 cut `v0.10.6` this way. There is no
-  `release/*` branch and no `release.yml` in this repository. The Release section below describes
-  what runs; the generic release-branch procedure in `AGENTS.md` does not apply here (see ⚠ below).
-- Statistics for `galaxio report` are computed in this repository. `parsec` (MIT) decodes and
-  offers primitives and exports no statistic — its constitution v2.0.0 and parsec#8; galaxio-cli#51
-  and #61 were amended to match on 2026-09-05. Principle II records that boundary from this side.
-- The licence is GPL-2.0-only today. Importing `parsec` (MIT) is compatible; importing the OpenNFR
-  Go SDK (Apache-2.0) is not. Principle IV names the constraint; the relicensing decision itself is
-  galaxio-cli#48 (milestone v0.12.0) and is not taken by this document.
+Templates: no template text depends on the changed lines; none touched.
+- ✅ .specify/templates/plan-template.md — Constitution Check gates unchanged.
+- ✅ .specify/templates/tasks-template.md — unchanged.
+- ✅ .specify/templates/spec-template.md — unchanged.
+- ⚠ AGENTS.md — the shared "Release Process (MANDATORY)" section still describes release
+  branches this repository does not have (carried from 1.0.0; belongs to
+  `spec-kit-galaxio-bootstrap`). The enforcement comment under it now names all three
+  callers of `check-linkage.sh` (#62).
 
-Templates:
-- ✅ .specify/templates/plan-template.md — Constitution Check placeholder replaced by the six
-  gates a plan answers.
-- ✅ .specify/templates/tasks-template.md — "Tests … (OPTIONAL - only if tests requested)" is
-  contradicted by Principle III; the three headings now read "(REQUIRED)" and the note says tests
-  land with the change.
-- ✅ .specify/templates/spec-template.md — mandatory sections (User Scenarios & Testing,
-  Requirements, Success Criteria) already match; no change.
-- ✅ .specify/templates/checklist-template.md — no principle-bearing text; no change.
-- ⚠ AGENTS.md — the section above the `---` already says "released automatically from main". The
-  section below it ("Release Process (MANDATORY)": `release/X.Y.0` branches, manual tags,
-  `release.yml`) is org boilerplate "reused verbatim across all projects" and does not describe
-  this repository. Governance requires AGENTS.md to agree with this document; the correction is
-  left to the maintainer because that section is shared text and the fix may belong in
-  `spec-kit-galaxio-bootstrap` rather than here.
-- ⚠ .copier-answers.yml — records the scaffold answers, forbids manual edits, and is rewritten by
-  `copier update`; not touched.
-
-Follow-up TODOs:
-- galaxio-cli#62 (milestone v0.11.0): `.claude/hooks/linkage-guard.sh` is the pre-port raw-text
-  version; `.githooks/pre-push` does not exist; no shell suite runs in CI. Note for scoping: in
-  this repository tags are pushed by `ci.yml`, not by people, so the merge gate
-  (`check-linkage.sh --pr N`) is the one that protects a release, and nothing runs it in CI today.
-- `scripts/check-linkage.sh --for-tag` and the milestone-per-version convention assume a human
-  decides the version. Here the version is computed from commits, so a milestone title such as
-  `v0.13.0 Report dump` is a plan, not a promise: whichever `feat` merges first takes the number.
-  Either the titles stop carrying versions or the release job learns to read the milestone.
-  Decision deferred; recorded so it is not rediscovered.
-- `.claude/skills/speckit-tasks/SKILL.md` (spec-kit managed, reinstalled on upgrade) still
-  generates "OPTIONAL" test headings; the template is corrected, the generator is not ours.
-- The skills classification is pinned to `samber/cc-skills-golang` 2.0.1 and
+Follow-up TODOs (carried from 1.0.0 unless noted):
+- NEW: `scripts/check-linkage.sh` has no `*_test.sh` suite, which the shell-suite rule
+  requires of every script under `scripts/`; it needs a `gh` stub and is its own issue. The
+  `shell suites` job will pick it up with no change once it exists.
+- `scripts/check-linkage.sh --for-tag` and the milestone-per-version convention assume a
+  human decides the version; here the version is computed from commits, so a milestone
+  title's version is a plan. Decision still deferred.
+- `.claude/skills/speckit-tasks/SKILL.md` (spec-kit managed) still generates "OPTIONAL" test
+  headings; the template is corrected, the generator is not ours.
+- Skills classification pinned to `samber/cc-skills-golang` 2.0.1 and
   `galaxio/galaxio-gatling` 2.4.0 as installed on 2026-09-13; re-read on every plugin update.
-- Ratification date is the scaffold date (2026-09-02); no earlier constitution existed.
 -->
 # galaxio-cli Constitution
 
@@ -213,7 +189,8 @@ Every PR MUST be green on all CI jobs before merge:
 | Build | `go build -trimpath -o dist/galaxio ./cmd/galaxio` | test |
 | Integration | `go test -tags=integration -race -count=1 ./...` | integration tests |
 | Image | build from `Dockerfile`, run `galaxio version` | docker image |
-| Linkage | `scripts/check-linkage.sh --pr N` before merge | (manual today — see #62) |
+| Linkage | `scripts/check-linkage.sh --pr N` | linkage |
+| Shell suites | every `*_test.sh` under `scripts/`, `.claude/hooks/`, `.githooks/` | shell suites |
 
 Local equivalents: `gofmt -w .` before every commit; `go vet ./... && go test ./...` to
 verify; `go build ./... && go test ./...` is the definition of a green commit;
@@ -224,8 +201,10 @@ Additional constraints:
 - CI has no `paths-ignore`: a docs-only merge still runs every job and still cuts a patch
   release. That is the current design, not an accident; changing it is a release-workflow
   change and is asked for first.
-- The `--pr` linkage gate is not run by CI. Until it is, the author runs it before requesting
-  review and the reviewer checks the milestone by hand. Wiring it into CI is part of #62.
+- The `linkage` job runs `check-linkage.sh --pr` on every pull request, and the `shell suites`
+  job runs every `*_test.sh` suite under `scripts/`, `.claude/hooks/` and `.githooks/` on every
+  pull request and push to `main`. Both stay red until fixed; a reviewer relies on them
+  instead of checking the milestone by hand.
 - Shell scripts under `scripts/`, `.claude/hooks/` and `.githooks/` ship with a `*_test.sh`
   suite, and every such suite MUST be run by a CI job. Two repositories regressed the guard
   twice because a suite existed and nothing ran it.
@@ -300,7 +279,7 @@ contradict.
   milestone matching the current spec) before merge; no milestone, no merge. Every issue a
   PR fixes MUST be closed when the PR lands on `main`. `scripts/check-linkage.sh --pr N` is
   the merge gate. Because tags here are cut by CI, the merge gate is the one that protects a
-  release; `.claude/hooks/linkage-guard.sh` and `.githooks/pre-push` (#62) guard the rare
+  release; `.claude/hooks/linkage-guard.sh` and `.githooks/pre-push` guard the rare
   manual tag.
 - **Commits.** Semantic messages (`feat(scope): … (#NNN)`); one tracked issue per commit;
   every commit green on its own; format before commit; intent, not path: squash churn
@@ -350,4 +329,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-13
+**Version**: 1.0.1 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-13
