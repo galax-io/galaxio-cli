@@ -1,39 +1,35 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.0 → 1.0.1
-Bump rationale: PATCH. No principle changes. The Quality Gates table and its additional
-constraints now describe what CI runs after galaxio-cli#62 (spec 001-harden-linkage-guard):
-the `linkage` job runs `scripts/check-linkage.sh --pr` on every pull request, and the
-`shell suites` job runs every `*_test.sh` under `scripts/`, `.claude/hooks/` and
-`.githooks/`. The linkage row no longer says "manual today", and the Development Workflow
-bullet no longer points at #62 for the guards, which now exist.
+Version change: 1.0.1 → 1.1.0
+Bump rationale: MINOR. galaxio-cli#71 restores the organisation's release contract:
+one completed milestone produces one deliberate version tag. `ci.yml` verifies PRs and
+main pushes only; `release.yml` is triggered by `vX.Y.Z`, checks tag placement and
+`scripts/check-linkage.sh --for-tag`, reruns every release gate, then publishes through
+GoReleaser and Docker Hub in that order.
 
 Principles: unchanged (I–VI).
 
 Added sections: none. Removed sections: none.
 
 Modified:
-- Quality Gates table: Linkage row's CI job `(manual today — see #62)` → `linkage`; new row
-  "Shell suites" → `shell suites`.
-- Additional constraints: the paragraph saying the `--pr` gate is not run by CI is replaced
-  by the sentence that names the two jobs.
-- Development Workflow, Milestones bullet: `(#62)` dropped after `.githooks/pre-push`.
+- Quality Gates: docs-only merges still run verification, but only a tag starts publication.
+- Development Workflow: the release rule and hotfix path are tag-triggered and permit the
+  shared `release/X.Y.0` branch convention.
+- AGENTS.md: now states the same milestone-to-tag procedure and release workflow.
 
 Templates: no template text depends on the changed lines; none touched.
 - ✅ .specify/templates/plan-template.md — Constitution Check gates unchanged.
 - ✅ .specify/templates/tasks-template.md — unchanged.
 - ✅ .specify/templates/spec-template.md — unchanged.
-- ✅ AGENTS.md — the release process now matches this repository's automatic publishing
-  from `main`, and its enforcement text names the CI, Claude, and optional Git hooks.
+- ✅ AGENTS.md — release instructions match `.github/workflows/release.yml`.
 
 Follow-up TODOs (carried from 1.0.0 unless noted):
 - `scripts/linkage_test.sh` covers the release-range helpers used by
   `scripts/check-linkage.sh`. A direct suite for its `gh` calls still needs a `gh` stub
   and remains a follow-up; the `shell suites` job discovers the existing helper suite.
-- `scripts/check-linkage.sh --for-tag` and the milestone-per-version convention assume a
-  human decides the version; here the version is computed from commits, so a milestone
-  title's version is a plan. Decision still deferred.
+- The release workflow has no end-to-end test against a disposable GitHub repository; its
+  local regression suite checks trigger, guard, verification, and publication ordering.
 - `.claude/skills/speckit-tasks/SKILL.md` (spec-kit managed) still generates "OPTIONAL" test
   headings; the template is corrected, the generator is not ours.
 - Skills classification pinned to `samber/cc-skills-golang` 2.0.1 and
@@ -196,9 +192,9 @@ verify; `go build ./... && go test ./...` is the definition of a green commit;
 
 Additional constraints:
 
-- CI has no `paths-ignore`: a docs-only merge still runs every job and still cuts a patch
-  release. That is the current design, not an accident; changing it is a release-workflow
-  change and is asked for first.
+- CI has no `paths-ignore`: a docs-only merge still runs every verification job, but it does
+  not publish. Publication is the tag-triggered `release.yml` workflow and remains an
+  ask-first release-workflow change.
 - The `linkage` job runs `check-linkage.sh --pr` on every pull request, and the `shell suites`
   job runs every `*_test.sh` suite under `scripts/`, `.claude/hooks/` and `.githooks/` on every
   pull request and push to `main`. Both stay red until fixed; a reviewer relies on them
@@ -276,14 +272,13 @@ contradict.
 - **Milestones.** Every PR MUST carry the active milestone (the lowest-numbered open
   milestone matching the current spec) before merge; no milestone, no merge. Every issue a
   PR fixes MUST be closed when the PR lands on `main`. `scripts/check-linkage.sh --pr N` is
-  the merge gate. Because tags here are cut by CI, the merge gate is the one that protects a
-  release; `.claude/hooks/linkage-guard.sh` and `.githooks/pre-push` guard the rare
-  manual tag.
+  the merge gate. A completed milestone is released by one `vX.Y.Z` tag; before pushing it,
+  `scripts/check-linkage.sh --for-tag vX.Y.Z` must pass. `.claude/hooks/linkage-guard.sh`
+  and `.githooks/pre-push` protect that irreversible tag push.
 - **Commits.** Semantic messages (`feat(scope): … (#NNN)`); one tracked issue per commit;
   every commit green on its own; format before commit; intent, not path: squash churn
-  before review. The commit type is a release decision (below), so it MUST be chosen
-  deliberately: `feat` for a user-visible capability, `fix` for a defect, `docs`/`ci`/
-  `chore`/`test`/`refactor` for everything else.
+  before review. The type records intent for the changelog: `feat` for a user-visible
+  capability, `fix` for a defect, `docs`/`ci`/`chore`/`test`/`refactor` for everything else.
 - **Branches and PRs.** Branch from `main`. One concern per PR (feature ≠ docs). Rebase
   only: no merge commits in PR branches; stacked PRs are updated with `--force-with-lease`.
   Never force-push to `main`, never commit to `main` directly.
@@ -292,16 +287,14 @@ contradict.
   publish workflow changes; a licence change.
 - **Never.** Commit broken code; refactor outside the issue's scope; mock an external system
   where a real integration path exists; phrase a command to evade a guard.
-- **Releases are automatic from `main`.** On every push to `main`, `ci.yml` computes the next
-  version from conventional commits since the latest `v*` tag — `patch` by default, `minor`
-  when any commit is `feat`, `major` when any carries `!` or `BREAKING CHANGE` — tags it,
-  runs GoReleaser and publishes the image. There is no release branch and no manual tag in
-  the normal path. Consequences that MUST be understood before merging: a merge is a
-  release; a `feat` in a PR is a minor bump for everyone; a milestone title's version is a
-  plan, and the version actually cut is whatever the commits say. Never delete a release tag
-  once the job has started; never reuse a version number.
-- **Hotfix.** A fix lands on `main` through a PR like any other change and is released by the
-  same job. There is no cherry-pick path because there is no release branch.
+- **Releases are tag-triggered.** Merges run `ci.yml` verification and never create a tag,
+  GitHub Release, or published image. One completed `vX.Y.0` milestone is released by one
+  deliberate `vX.Y.Z` tag on `main` or `release/X.Y.0`. `release.yml` first validates the
+  tag's branch and the complete release range through `check-linkage.sh --for-tag`, reruns
+  all Go, shell, and image gates, then runs GoReleaser and publishes the Docker image. Never
+  delete a release tag once the job has started; never reuse a version number.
+- **Hotfix.** A fix lands on `main` through a PR. Cherry-pick it to the matching release
+  branch when required, then create the next patch tag after its milestone audit passes.
 
 ## Governance
 
@@ -327,4 +320,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 1.0.1 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-13
+**Version**: 1.1.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-13

@@ -1,6 +1,6 @@
 # galaxio-cli — Agent Guide
 
-Command-line interface for Galaxio: scaffolds load-test projects from templates, generates Gatling scripts from API specifications, and reports on finished runs; released automatically from main, so a feat commit cuts a minor release
+Command-line interface for Galaxio: scaffolds load-test projects from templates, generates Gatling scripts from API specifications, and reports on finished runs; one completed milestone is released by one deliberate version tag
 
 > The sections above the `---` are **project-specific** — fill them in for each new
 > project. Everything below the `---` is the **stack-agnostic development process**
@@ -32,7 +32,7 @@ cmd/galaxio/ -> one file per command, registered in root.go; internal/codegen/ -
 
 ## Architecture
 
-Each command is a thin cobra wrapper over a runX(ctx, opts) (XOutput, error) function; human output goes to stdout and diagnostics to stderr; every command offers -o text|json; usage errors exit 2 and runtime errors 1 via UsageError and RuntimeError. Release is automatic from main: the version bump is computed from conventional commits, so a feat commit publishes.
+Each command is a thin cobra wrapper over a runX(ctx, opts) (XOutput, error) function; human output goes to stdout and diagnostics to stderr; every command offers -o text|json; usage errors exit 2 and runtime errors 1 via UsageError and RuntimeError. CI verifies merges; a version tag for a completed milestone starts the release.
 
 ## Test Model
 
@@ -71,24 +71,27 @@ Every piece of work is tied to a milestone. No exceptions unless explicitly told
 
 ## Release Process (MANDATORY)
 
-Releases are automated from `main` by `.github/workflows/ci.yml`. A push to `main` runs verification and image validation, computes the version from conventional commits, then creates the tag and GitHub Release with GoReleaser and publishes the Docker image.
+Merges to `main` run verification only. Pushing a `vX.Y.Z` tag on `main` or the matching `release/X.Y.0` branch starts `.github/workflows/release.yml`: it checks the milestone, reruns the release gates, creates the GitHub Release with GoReleaser, then publishes the Docker image.
 
 ### Preparing a release
 
 1. Assign each PR to its active milestone before merging; link any fixed issues so GitHub closes them when the PR lands on `main`.
-2. Keep commit messages conventional: `feat` produces a minor bump; fixes use `fix`. The version calculation in CI is the source of truth.
-3. Merge through a green PR into `main`, then check the `release` and `publish-image` jobs in the `ci` workflow.
+2. When the milestone is complete, fetch complete history and tags, then run `scripts/check-linkage.sh --for-tag vX.Y.Z` from its release commit.
+3. Create and push the annotated tag only after the audit passes: `git tag -a vX.Y.Z -m "Release vX.Y.Z"` followed by `git push origin vX.Y.Z`.
+4. Check the `release` and `publish image` jobs in `release.yml`.
 
 ### Rules
 
-- **Do not create release branches or tags as the normal publishing procedure.** Pushes to `release/*` or tags do not trigger the current workflow. CI creates release tags on `main`.
+- **One completed milestone produces one release.** A version tag maps to the `vX.Y.0` milestone and is only pushed after its PRs are merged and issues closed.
+- **Tags only on `main` or the matching `release/X.Y.0` branch.** The release workflow rejects any other location.
 - **Never delete a release tag** after deployment starts.
 - **Never reuse a version number.**
 - **Before tagging**: every PR merged since the previous tag must be assigned to the release milestone; every issue in the milestone whose fix is on `main` must be closed.
-- **Manual release audit:** fetch complete history and tags, then run `scripts/check-linkage.sh --for-tag vX.Y.Z`. It checks the existing target tag, or `HEAD` if the tag does not exist yet, against the preceding reachable release tag.
+- **Release audit:** fetch complete history and tags, then run `scripts/check-linkage.sh --for-tag vX.Y.Z`. It checks the existing target tag, or `HEAD` if the tag does not exist yet, against the preceding reachable release tag.
 
 The `linkage` CI job validates each PR's milestone and closing link before it reaches
 `main`; the `shell suites` job runs every `*_test.sh` suite under `scripts/`,
-`.claude/hooks/`, and `.githooks/`. The Claude `PreToolUse` hook and the optional
-`.githooks/pre-push` hook protect exceptional manual tags; `LINKAGE_OFF=1` is their
+`.claude/hooks/`, and `.githooks/`. The tag-triggered `release` workflow repeats the
+linkage audit and all release gates. The Claude `PreToolUse` hook and the optional
+`.githooks/pre-push` hook protect the irreversible tag push; `LINKAGE_OFF=1` is their
 sanctioned local bypass. Changes to the publishing workflow require separate approval.
