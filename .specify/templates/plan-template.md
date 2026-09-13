@@ -40,7 +40,16 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Answer each gate PASS or FAIL with one line of evidence. A FAIL needs a Complexity Tracking row.
+
+| # | Gate (constitution principle) | Status |
+|---|---|---|
+| I | Command Contract — every new command is a thin cobra wrapper over `runX(ctx, opts)`; offers `-o text\|json` with a documented JSON structure; exits 0/1/2 via `UsageError`/`RuntimeError`; honours `--verbose`/`--quiet`/`--no-color`; experimental commands sit behind `internal/featureflags`. | |
+| II | Report Arithmetic Lives Here — (report features only) statistics are computed in `internal/report/` over `parsec` primitives, not requested from the library; success and failure accumulated separately; one pass, bounded memory, with the peak-memory goal stated in Technical Context; absence reported as absent; source detected by content. Mark N/A for non-report features. | |
+| III | Tests Land With The Change — stdlib `testing`, table-driven, golden files under `testdata/`; command-level tests through `runCLI` asserting exit code and output; integration tests behind the `integration` tag on real packs/registries/specs; race on; coverage stays ≥ 80%; every fix carries a regression test; test tasks are never optional. | |
+| IV | Minimal, Explicit Dependencies — no new module unless named here with the reason the standard library or an existing dependency is insufficient, recorded in `research.md`, licence-compatible with GPL-2.0-only, and asked for first. | |
+| V | Published Surfaces — any change to a command, flag, default, exit code, `-o json` structure, manifest/registry schema or generated output is listed; breaking ones are approved before implementation and will be committed with `!`; README updated in the same PR; deprecations keep working one minor release. | |
+| VI | Idiomatic, Simple Go — gofmt/vet clean; errors as values wrapped into `UsageError`/`RuntimeError` at the boundary; no panic control flow; no dead or duplicated code; no refactor outside this issue's scope. | |
 
 ## Project Structure
 
