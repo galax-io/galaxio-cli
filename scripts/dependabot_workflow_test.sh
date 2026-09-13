@@ -16,6 +16,7 @@ require_text() {
 require_text 'pull_request_target:'
 require_text "github.event.pull_request.user.login == 'dependabot[bot]'"
 require_text 'issues: write'
+require_text 'pull-requests: write'
 require_text "state: 'open'"
 require_text 'left.number - right.number'
 require_text 'github.rest.issues.update'
