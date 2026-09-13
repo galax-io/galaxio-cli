@@ -12,7 +12,7 @@ Principal Engineer: Go, cobra command-line design, code generation from API spec
 
 ## Stack
 
-Go 1.25, spf13/cobra, pb33f/libopenapi, gopkg.in/yaml.v3; standard-library testing only, table-driven with golden files; goreleaser and a distroless image
+Go 1.27, spf13/cobra, pb33f/libopenapi, gopkg.in/yaml.v3; standard-library testing only, table-driven with golden files; goreleaser and a distroless image
 
 ## Commands
 

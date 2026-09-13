@@ -166,7 +166,7 @@ debugs one; predictable Go keeps both fast.
 
 ## Quality Gates & Tooling
 
-Toolchain: Go 1.25 (`go.mod`), used by CI through `go-version-file`. The `toolchain`
+Toolchain: Go 1.27 (`go.mod`), used by CI through `go-version-file`. The `toolchain`
 directive, when set, is bumped in a dedicated PR. Release binaries are built by GoReleaser
 (`.goreleaser.yaml`) with `CGO_ENABLED=0`; the image is built from `Dockerfile` and
 validated by running `galaxio version` inside it.

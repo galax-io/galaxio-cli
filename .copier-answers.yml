@@ -30,7 +30,7 @@ role: 'Principal Engineer: Go, cobra command-line design, code generation from A
     specifications, load-test result reporting'
 run_speckit: false
 stack: go
-stack_detail: Go 1.25, spf13/cobra, pb33f/libopenapi, gopkg.in/yaml.v3; standard-library
+stack_detail: Go 1.27, spf13/cobra, pb33f/libopenapi, gopkg.in/yaml.v3; standard-library
     testing only, table-driven with golden files; goreleaser and a distroless image
 structure: cmd/galaxio/ -> one file per command, registered in root.go; internal/codegen/
     -> parsers and Scala renderers for swagger, HAR and Postman; internal/templatecatalog/
