@@ -77,6 +77,7 @@ func newRootCommand() *cobra.Command {
 
 	cmd.AddCommand(newDoctorCommand())
 	cmd.AddCommand(newGenerateCommand())
+	cmd.AddCommand(newReportCommand())
 	cmd.AddCommand(newTemplateCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newVersionCommand())

@@ -31,10 +31,63 @@ func TestHelpPrintsMinimalUsage(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "doctor", "generate", "template", "update", "version"} {
+	for _, want := range []string{"Enterprise command-line toolkit", "Usage:", "galaxio [flags]", "completion", "doctor", "generate", "report", "template", "update", "version"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("expected help output to contain %q, got %q", want, stdout)
 		}
+	}
+}
+
+func TestReportCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "direct invocation",
+			args: []string{"report"},
+		},
+		{
+			name: "explicit help",
+			args: []string{"report", "--help"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, stdout, stderr := runCLI(tt.args...)
+
+			if code != exitOK {
+				t.Fatalf("expected exit code %d, got %d", exitOK, code)
+			}
+			if stderr != "" {
+				t.Fatalf("expected empty stderr, got %q", stderr)
+			}
+			for _, want := range []string{
+				"Report on finished load-test runs.",
+				"Operational subcommands are introduced separately.",
+				"Usage:",
+				"galaxio report [flags]",
+			} {
+				if !strings.Contains(stdout, want) {
+					t.Fatalf("expected report help to contain %q, got %q", want, stdout)
+				}
+			}
+		})
+	}
+}
+
+func TestReportCommandRejectsArguments(t *testing.T) {
+	code, stdout, stderr := runCLI("report", "unexpected")
+
+	if code != exitUsage {
+		t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "unknown command") && !strings.Contains(stderr, "accepts 0 arg") {
+		t.Fatalf("expected argument validation error, got %q", stderr)
 	}
 }
 
