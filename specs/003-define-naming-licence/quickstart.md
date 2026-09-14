@@ -1,7 +1,7 @@
 # Quickstart: Verify Ecosystem Naming and Licensing
 
-Run from the repository root on branch `003-define-naming-licence` after the implementation
-PRs have been applied. GitHub checks require an authenticated `gh` session.
+Run from the repository root on branch `galaxio/109-restore-review-workflow` while preparing
+milestone PR #110. GitHub checks require an authenticated `gh` session.
 
 ## 1. Verify the public command namespace
 
@@ -83,26 +83,31 @@ go test -tags=integration -race -count=1 ./...
 Expected: all commands pass, `go mod tidy` changes nothing, and CI confirms total coverage
 is at least 80%. The feature adds no dependency and no new integration fixture.
 
-## 5. Verify issue and milestone closure
+## 5. Verify the milestone review boundary
 
-Before merge, each implementation PR must be assigned to milestone 1 and carry only its
-own closing reference:
+Before merge, the one milestone PR must be assigned to milestone 1 and carry every closing
+reference for the work it contains:
 
 ```sh
-scripts/check-linkage.sh --pr <PR_NUMBER>
+scripts/check-linkage.sh --pr 110
 ```
 
-After both implementation PRs land on `main`:
+Expected before review: PR #110 is open, its checks pass, and linked issues remain open.
+The agent does not merge or close the PR. After the maintainer reviews and explicitly merges
+PR #110:
 
 ```sh
 gh issue view 47 --repo galax-io/galaxio-cli --json number,state,milestone,url
 gh issue view 48 --repo galax-io/galaxio-cli --json number,state,milestone,url
+gh issue view 104 --repo galax-io/galaxio-cli --json number,state,milestone,url
 gh issue view 107 --repo galax-io/galaxio-cli --json number,state,milestone,url
+gh issue view 109 --repo galax-io/galaxio-cli --json number,state,milestone,url
 gh api repos/galax-io/galaxio-cli/milestones/1
 ```
 
-Expected: #47, #48, and #107 are closed, all remain attached to
-`v0.12.0 Naming and licence`, and the milestone reports zero open issues.
+Expected after merge: #47, #48, #104, #107, and #109 are closed, all remain attached to
+`v0.12.0 Naming and licence`, and the milestone reports zero open issues. Until that event,
+the decision record status is `in-review`, not `verified`.
 
 Release tagging is deliberately not part of this quickstart. Once the milestone is complete,
 the maintainer follows the separate release procedure, beginning with

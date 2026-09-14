@@ -97,21 +97,22 @@ Links selections to delivery evidence.
 | `selectedAlternatives` | Component Identity / Licence Posture references | Required |
 | `rejectedAlternatives` | list with rationale | Required; never promoted as aliases |
 | `evidence` | list | Repository ownership, CLI help, licence surfaces, compatibility sources |
-| `status` | enum | `draft`, `approved`, `implemented`, `verified` |
-| `verifiedAt` | date, optional | Set only when all evidence is current and both issue fixes are on `main` |
+| `status` | enum | `draft`, `implemented`, `in-review`, `verified` |
+| `verifiedAt` | date, optional | Set only after the reviewed milestone PR lands and all linked issues close |
 
 ### State transitions
 
 ```text
-draft -> approved -> implemented -> verified
+draft -> implemented -> in-review -> verified
 ```
 
-- `draft -> approved`: maintainer approves the observable command addition and retained
-  licence posture.
-- `approved -> implemented`: #47 and #48 changes land in dependency order and the #107
-  scope correction follows.
-- `implemented -> verified`: root help, licence audit, test gates, issue closure, and
-  milestone state all satisfy [quickstart.md](quickstart.md).
+- `draft -> implemented`: task commits implement the command namespace, licence posture,
+  and scope corrections without claiming review approval.
+- `implemented -> in-review`: one complete milestone PR has current evidence and green
+  checks and is left open for maintainer review.
+- `in-review -> verified`: the maintainer approves and explicitly merges the PR; root help,
+  licence audit, issue closure, and milestone state then satisfy
+  [quickstart.md](quickstart.md).
 - Any missing/inconsistent surface keeps the record at its current state; no value is
   inferred from a different surface.
 

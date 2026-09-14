@@ -1,6 +1,6 @@
 # Implementation Plan: Define Ecosystem Naming and Licensing
 
-**Branch**: `003-define-naming-licence` | **Date**: 2026-09-14 | **Spec**: [spec.md](spec.md)
+**Branch**: `galaxio/109-restore-review-workflow` | **Date**: 2026-09-14 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `/specs/003-define-naming-licence/spec.md`
 (milestone [`v0.12.0 Naming and licence`](https://github.com/galax-io/galaxio-cli/milestone/1),
@@ -55,17 +55,17 @@ two focused README additions, and the spec/plan/research/contracts/quickstart ar
 
 | # | Gate (constitution principle) | Status |
 |---|---|---|
-| I | Command Contract — every new command is a thin cobra wrapper over `runX(ctx, opts)`; offers `-o text\|json` with a documented JSON structure; exits 0/1/2 via `UsageError`/`RuntimeError`; honours `--verbose`/`--quiet`/`--no-color`; experimental commands sit behind `internal/featureflags`. | PASS — `report` is a presentation-only namespace, not an operation: like existing `generate` and `template` parents, it validates `NoArgs`, maps misuse to `UsageError`, inherits root flags, and returns help with exit 0. It has no result to send through `runX` or `-o`; the first operational report subcommand must define both in its own specification. |
+| I | Command Contract — operational commands use `runX(ctx, opts)` and `-o text\|json`; help-only namespace parents may route to help without either; all commands honour the root flags and 0/1/2 exit contract. | PASS — `report` is a help-only namespace like `generate` and `template`: it validates `NoArgs`, maps misuse to `UsageError`, inherits `--verbose`/`--quiet`/`--no-color`, and returns help with exit 0. It has no result to send through `runX` or `-o`; the first operational report subcommand must define both in its own specification. |
 | II | Report Arithmetic Lives Here — statistics are computed in `internal/report/` over `parsec` primitives; one pass and bounded memory; absence stays absent; sources are detected by content. | PASS — this milestone reserves the public name only. It performs no arithmetic, reads no source, imports no `parsec`, and creates no `internal/report/`; Principle II becomes actionable in the later operational report feature. |
 | III | Tests Land With The Change — stdlib `testing`, table-driven, command tests through `runCLI`, integration tags, race on, coverage ≥ 80%, regression tests mandatory. | PASS — root visibility and both direct help paths are asserted through `runCLI`; invalid arguments assert exit 2 and stderr. Substring assertions match the repository's help-test convention; no generated output or integration path exists, so no golden or integration fixture is warranted. Full race and coverage gates still run. |
 | IV | Minimal, Explicit Dependencies — no new module without rationale, compatibility review, and approval. | PASS — no dependency changes. Cobra is already direct dependency truth; the pre-existing Apache-2.0/GPL-2.0-only tension is recorded in [research.md](research.md) rather than expanded by this feature. |
-| V | Published Surfaces — list command/flag/output changes; approve breaking changes; update README in the same PR; preserve deprecations. | PASS — the only binary surface is the additive, non-breaking `report` parent name and help text. No existing command, flag, default, exit code, JSON structure, schema, or generated output changes. README documentation lands with #47; licence wording lands with #48. The observable command addition still requires maintainer approval before implementation under the project ask-first rule. |
+| V | Published Surfaces — list command/flag/output changes; approve breaking changes; update README in the same PR; preserve deprecations. | PASS — the only binary surface is the additive, non-breaking `report` parent name and help text. No existing command, flag, default, exit code, JSON structure, schema, or generated output changes. README documents both the namespace and licence posture. The completed milestone remains pending maintainer review in PR #110. |
 | VI | Idiomatic, Simple Go — gofmt/vet clean; errors as values; no panic flow, duplication, speculative abstraction, or out-of-scope refactor. | PASS — the design mirrors the existing parent-command constructor, adds no fake runner or premature abstraction, and confines code changes to `cmd/galaxio/report.go`, root registration, and behavior tests. |
 
 **Post-design re-check**: all gates remain PASS. The CLI contract and licence-posture
 contracts narrow the feature to observable help and auditable metadata; they do not add
-report behavior or a new dependency. The apparent global `-o` mismatch is an existing
-root/parent-command convention and is explicitly deferred rather than silently broadened.
+report behavior or a new dependency. Constitution v2.0.0 now states the existing help-only
+namespace convention directly, so there is no `runX` or `-o` exception hidden in the plan.
 
 ## Project Structure
 
@@ -117,20 +117,14 @@ No constitution violations; table intentionally empty.
 The dirty worktree contains Spec Kit installation changes. They remain a separate concern
 and MUST NOT be swept into the feature's spec or implementation commits.
 
-1. Land the complete `specs/003-define-naming-licence/` artifact set first as
-   `docs(speckit): add 003-define-naming-licence spec/plan/tasks`, assigned to milestone
-   `v0.12.0`. Reference #47 and #48 but do not close either issue with the planning PR.
-2. After explicit approval of the additive public command, land one #47 PR/commit such as
-   `feat(cli): reserve report command group (#47)`. Include `report.go`, root registration,
-   all command-level tests, and the required README naming/usage entry; the PR body carries
-   `Closes #47` and milestone 1.
-3. After #47 lands, obtain the licence-sensitive approval and land one #48 PR/commit such
-   as `docs(licence): record compatible ecosystem boundary (#48)`. Make README state
-   `GPL-2.0-only` explicitly and add the approved project-selection notice to `LICENSE`
-   without editing the verbatim GPL terms. Document GitHub's legacy
-   `GPL-2.0` classifier as the platform representation of the v2-only file; the PR body
-   carries `Closes #48` and milestone 1.
-4. Do not import or modify `parsec`, change a release workflow, close the milestone, or
-   create/push `v0.12.0` in these PRs. Once both fixes and the #107 scope correction are on
-   `main` and their issues are closed, the separate release procedure begins with the
-   mandated linkage audit.
+1. Keep specification, implementation, correction, and validation work in milestone PR
+   #110. Do not open a replacement, documentation-only, or stacked PR.
+2. Preserve one task per green commit. The already-merged milestone commits are historical
+   evidence; corrective tasks T024–T027 each receive exactly one commit in PR #110.
+3. Keep `Closes #47`, `Closes #48`, `Closes #104`, `Closes #107`, and `Closes #109` on the
+   milestone PR so GitHub closes them only when the reviewed PR lands on `main`. Until then,
+   the issues and the milestone remain open.
+4. The agent may update PR #110 and its evidence but MUST leave it open. Only explicit
+   maintainer instruction after review authorizes merge or PR closure.
+5. Do not import or modify `parsec`, change a release workflow, close the milestone, run a
+   release audit, or create/push `v0.12.0` while preparing this PR.
