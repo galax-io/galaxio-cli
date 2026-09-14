@@ -188,6 +188,7 @@ curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/i
 ```sh
 galaxio --help          # show commands and flags
 galaxio version         # print build info
+galaxio report gatling  # write the latest Gatling run as JSON Lines
 galaxio --verbose ...   # verbose diagnostic output
 galaxio --quiet ...     # suppress non-error output
 galaxio --no-color ...  # disable colour
@@ -221,16 +222,75 @@ Galaxio uses one canonical name for each reporting component:
   [`github.com/galax-io/parsec`](https://github.com/galax-io/parsec).
 - `galaxio report` is the CLI namespace for finished-run reporting.
 
-This milestone exposes the namespace and its help only. Operational report
-subcommands are introduced separately.
-
-```sh
-galaxio report
-galaxio report --help
-```
-
 See the [naming and licence decision record](specs/003-define-naming-licence/research.md)
 for the selected identities and rejected alternatives.
+
+### Write a run as records
+
+`galaxio report <tool> [PATH]` turns a finished run into a stream of records on standard
+output: one JSON object per line, the run header first, then every request, group
+traversal, virtual-user event and run-level error in the order the log recorded them. It
+computes nothing; statistics and report formats follow in later releases.
+
+```sh
+galaxio report gatling                               # the latest run under target/gatling
+galaxio report gatling target/gatling/mysim-20260906044741110
+galaxio report gatling path/to/simulation.log
+galaxio report gatling build/reports/gatling         # a results root: lastRun.txt, else the newest run
+galaxio report gatling --quiet | jq -c 'select(.kind=="request")'
+galaxio report                                       # help
+```
+
+**Tool.** The first argument names the tool that produced the run. `gatling` is the only
+tool this release reads: text logs from Gatling 3.11.5 through 3.12.0 and binary logs from
+3.13.1 through 3.15.1, identified from the log's content, never its name. A version below
+that range, and 3.13.0, are refused with a message naming the version and the range; a
+newer version is read and a warning goes to standard error and into the header.
+
+**PATH.** A run directory, its `simulation.log`, or a results root holding run directories.
+With no path the Maven and sbt results root `target/gatling` is searched (Gradle writes to
+`build/reports/gatling`; pass it). In a results root the run named by `lastRun.txt` wins
+if it still exists, otherwise the most recently modified run. Standard error says which run
+was read and by which rule; `--quiet` silences that line, `--verbose` adds the log format,
+version and a count of records per kind after the stream.
+
+**`-o`.** Reserved for report formats that later releases produce: `stats` and
+`global_stats` (Gatling's legacy `js/stats.json` and `js/global_stats.json`) and `yml`
+(the OpenNFR YAML report). Passing any of them exits 2 naming the release that delivers
+it; without `-o` the record stream is written.
+
+**Exit codes.** `0` when the whole log was written; `1` for a runtime failure — no run under
+the directory, a path that cannot be read, a log that is not a Gatling `simulation.log`, an
+unsupported version, a log cut short (every record it held is still written, so a script
+cannot mistake a partial run for a complete one), a damaged log, or a failed write; `2` for
+a usage error — an unsupported tool, a third argument, an unknown flag, or any `-o`. When
+the reader closes the pipe the process ends quietly, as any Unix filter does.
+
+**Records.** Every line carries `kind`. Instants are milliseconds since the Unix epoch;
+durations are milliseconds. A value the source did not record is omitted, never written as
+zero; what the source can never record is listed in the header's `absent`.
+
+| `kind` | Keys |
+|---|---|
+| `run` | `id`, `name`, `description`, `start`, `tool`, `toolVersion`, `absent`, `warnings`, `assertions` (base64, opaque) |
+| `request` | `groups`, `name`, `start`, `duration`, `outcome`, `failure` (`type`, `message`), `scenario`, `responseCode`, `bytesSent`, `bytesReceived` |
+| `group` | `groups`, `start`, `duration`, `cumulatedDuration`, `outcome` |
+| `user` | `scenario`, `event` (`start`/`end`), `at` |
+| `error` | `message`, `at` |
+| `assertion` | `payload` (base64, opaque; never produced for a Gatling log) |
+
+```json
+{"kind":"run","id":"corpussimulation","name":"io.galaxio.parsec.corpus.CorpusSimulation","start":1788379676999,"tool":"gatling","toolVersion":"3.12.0","absent":["sample.scenario","sample.responseCode","sample.bytesSent","sample.bytesReceived","sample.failureType","sample.userIdentity","timing.connect","timing.dns","timing.tls","requirements","intervalSeries"],"assertions":["…"]}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379677532}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379677646,"duration":1501,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379679147,"duration":1,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379677645,"duration":1515,"cumulatedDuration":1502,"outcome":"failure"}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379679269}
+```
+
+The schema is a published surface: a key is never removed, renamed or re-encoded without a
+major version. The full contract, with the presence rule of every key, is
+[specs/004-report-records/contracts/records.md](specs/004-report-records/contracts/records.md).
 
 ## Template Workflow
 
