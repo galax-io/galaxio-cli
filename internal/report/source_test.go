@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/galax-io/parsec/gatling"
 	"github.com/galax-io/parsec/gatling/run"
 )
 
@@ -251,5 +252,211 @@ func TestLocateDefaultRoot(t *testing.T) {
 	}
 	if loc.Found != run.FoundByNewest {
 		t.Errorf("Found = %v, want %v", loc.Found, run.FoundByNewest)
+	}
+}
+
+// writeLog writes a synthetic log into a fresh directory and returns its
+// location, so that a test can exercise parsec's version gate without a
+// recording for every version.
+func writeLog(t *testing.T, data []byte) run.Location {
+	t.Helper()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "simulation.log"), data, 0o644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	loc, err := Locate(dir)
+	if err != nil {
+		t.Fatalf("Locate: %v", err)
+	}
+	return loc
+}
+
+// textHeader is the RUN line of a text log claiming the given version, with
+// nothing after it.
+func textHeader(version string) []byte {
+	return []byte("RUN\tio.x.Sim\tsim\t1700000000000\t \t" + version + "\n")
+}
+
+// patchedBinaryLog returns the 3.13.1 corpus log with the six version bytes at
+// offset 5 replaced, which is exactly what parsec's gate reads first.
+func patchedBinaryLog(t *testing.T, version string) []byte {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(corpusDir, "3.13.1", "simulation.log"))
+	if err != nil {
+		t.Fatalf("read corpus log: %v", err)
+	}
+	if got := string(data[5:11]); got != "3.13.1" {
+		t.Fatalf("corpus log carries version %q at offset 5, want 3.13.1", got)
+	}
+	if len(version) != 6 {
+		t.Fatalf("patch version %q must be six bytes", version)
+	}
+	patched := append([]byte(nil), data...)
+	copy(patched[5:11], version)
+	return patched
+}
+
+func TestOpen(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		version string
+		format  gatling.Format
+	}{
+		{version: "3.11.5", format: gatling.FormatText},
+		{version: "3.12.0", format: gatling.FormatText},
+		{version: "3.13.1", format: gatling.FormatBinary},
+		{version: "3.14.9", format: gatling.FormatBinary},
+		{version: "3.15.1", format: gatling.FormatBinary},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.version, func(t *testing.T) {
+			t.Parallel()
+
+			loc, err := Locate(filepath.Join(corpusDir, tt.version))
+			if err != nil {
+				t.Fatalf("Locate: %v", err)
+			}
+			src, err := Open(loc)
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer src.Close()
+
+			if src.Location != loc {
+				t.Errorf("Location = %+v, want %+v", src.Location, loc)
+			}
+			if src.Format != tt.format {
+				t.Errorf("Format = %v, want %v", src.Format, tt.format)
+			}
+			run := src.Reader.Run()
+			if run.ToolVersion != tt.version {
+				t.Errorf("ToolVersion = %q, want %q", run.ToolVersion, tt.version)
+			}
+			if len(run.Warnings) != 0 {
+				t.Errorf("a recorded version must raise no warning, got %v", run.Warnings)
+			}
+		})
+	}
+}
+
+func TestOpenRefuses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		log      func(t *testing.T) []byte
+		wraps    func(error) bool
+		contains []string
+	}{
+		{
+			name:     "not a Gatling log",
+			log:      func(*testing.T) []byte { return []byte("<!DOCTYPE html>\n<html><body>report</body></html>\n") },
+			wraps:    func(err error) bool { var e *gatling.FormatError; return errors.As(err, &e) },
+			contains: []string{"not a Gatling simulation.log"},
+		},
+		{
+			name:     "a text version below the supported range",
+			log:      func(*testing.T) []byte { return textHeader("3.10.0") },
+			wraps:    func(err error) bool { var e *gatling.VersionError; return errors.As(err, &e) },
+			contains: []string{"3.10.0", "3.11.5 through 3.12.0"},
+		},
+		{
+			name:     "3.13.0 is refused although the format is readable",
+			log:      func(t *testing.T) []byte { return patchedBinaryLog(t, "3.13.0") },
+			wraps:    func(err error) bool { var e *gatling.VersionError; return errors.As(err, &e) },
+			contains: []string{"3.13.0", "3.13.1"},
+		},
+		{
+			name:     "a header cut short",
+			log:      func(*testing.T) []byte { return []byte("RUN\tio.x.Sim\tsim") },
+			wraps:    func(err error) bool { var e *gatling.TruncationError; return errors.As(err, &e) },
+			contains: []string{"cut short"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			loc := writeLog(t, tt.log(t))
+			src, err := Open(loc)
+			if err == nil {
+				src.Close()
+				t.Fatalf("Open succeeded, want a refusal")
+			}
+
+			var openErr *OpenError
+			if !errors.As(err, &openErr) {
+				t.Fatalf("Open = %v (%T), want *OpenError", err, err)
+			}
+			if openErr.Path != loc.Log {
+				t.Errorf("OpenError.Path = %q, want %q", openErr.Path, loc.Log)
+			}
+			if !tt.wraps(err) {
+				t.Errorf("error %v does not wrap the parsec error the case expects", err)
+			}
+			for _, want := range append(tt.contains, loc.Log) {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not mention %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestOpenWarnsAboveRange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		log  func(t *testing.T) []byte
+	}{
+		{name: "text 3.99.0", log: func(*testing.T) []byte { return textHeader("3.99.0") }},
+		{name: "binary 3.99.9", log: func(t *testing.T) []byte { return patchedBinaryLog(t, "3.99.9") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			src, err := Open(writeLog(t, tt.log(t)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer src.Close()
+
+			warnings := src.Reader.Run().Warnings
+			if len(warnings) != 1 {
+				t.Fatalf("Warnings = %v, want exactly one", warnings)
+			}
+			if !strings.HasPrefix(warnings[0].Version, "3.99.") {
+				t.Errorf("Warning.Version = %q, want the unverified version", warnings[0].Version)
+			}
+			if warnings[0].Reason == "" {
+				t.Errorf("Warning.Reason is empty")
+			}
+		})
+	}
+}
+
+func TestOpenMissingLog(t *testing.T) {
+	t.Parallel()
+
+	loc := writeLog(t, textHeader("3.12.0"))
+	if err := os.Remove(loc.Log); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	_, err := Open(loc)
+	var readErr *ReadError
+	if !errors.As(err, &readErr) {
+		t.Fatalf("Open(missing log) = %v, want *ReadError", err)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("error %v does not wrap fs.ErrNotExist", err)
 	}
 }

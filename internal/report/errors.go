@@ -16,3 +16,19 @@ func (e *ReadError) Error() string {
 func (e *ReadError) Unwrap() error {
 	return e.Err
 }
+
+// OpenError is parsec's refusal to read a log, with the path it refused.
+// parsec's own message names the version and range, the bytes it found, or
+// where the log was cut; this type only adds the path.
+type OpenError struct {
+	Path string
+	Err  error
+}
+
+func (e *OpenError) Error() string {
+	return e.Path + ": " + e.Err.Error()
+}
+
+func (e *OpenError) Unwrap() error {
+	return e.Err
+}
