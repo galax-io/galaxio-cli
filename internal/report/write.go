@@ -48,6 +48,9 @@ func (s Summary) Records() int {
 // encoded before the next is read, so memory does not grow with the log and
 // parsec's reused group slice is never aliased.
 //
+// The header is flushed before the first item is read; records follow in
+// 64 KiB chunks and the rest is flushed at the end.
+//
 // The endings: io.EOF from rd is a clean end and returns nil; a
 // *gatling.TruncationError returns a *TruncatedError after every record the
 // log held has been written; any other read failure returns an
@@ -64,6 +67,13 @@ func Write(ctx context.Context, rd simlog.RunReader, w io.Writer) (Summary, erro
 
 	header := headerFrom(rd.Run())
 	if err := enc.Encode(&header); err != nil {
+		return sum, &WriteError{Err: err}
+	}
+	// The header goes out at once, before the first item is read: a consumer
+	// on a pipe sees the run's identity, capabilities and warnings
+	// immediately, however large the log or slow the read. One extra write
+	// per run is the whole cost.
+	if err := bw.Flush(); err != nil {
 		return sum, &WriteError{Err: err}
 	}
 

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -103,4 +104,48 @@ func TestReportIntegrationDeterministic(t *testing.T) {
 	if strings.Count(string(first), "\n") != 1+102+12+12+6 {
 		t.Errorf("expected header plus 132 records, got %d lines", strings.Count(string(first), "\n"))
 	}
+}
+
+// maxFirstLineLatency is SC-003's bound on when the first record reaches a
+// reader, measured here from process start on a 14 MB run.
+const maxFirstLineLatency = time.Second
+
+func TestReportIntegrationFirstLineLatency(t *testing.T) {
+	bin := buildGalaxio(t)
+	dir := writeLargeRun(t)
+
+	// The first execution of a freshly built binary is the operating
+	// system's, not the command's: on macOS it costs about a second while the
+	// new executable is scanned, and every later run starts in milliseconds.
+	// One throwaway run keeps the measurement about the command.
+	if err := exec.Command(bin, "version").Run(); err != nil {
+		t.Fatalf("warm-up run: %v", err)
+	}
+
+	cmd := exec.Command(bin, "report", "gatling", dir, "--quiet")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("StdoutPipe: %v", err)
+	}
+	started := time.Now()
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+
+	first, err := bufio.NewReader(stdout).ReadString('\n')
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("reading the first line: %v", err)
+	}
+	if !strings.Contains(first, `"kind":"run"`) {
+		t.Errorf("first line is not the header: %q", first)
+	}
+	if elapsed > maxFirstLineLatency {
+		t.Errorf("first line arrived after %v, want under %v", elapsed, maxFirstLineLatency)
+	}
+	t.Logf("first line after %v", elapsed)
 }

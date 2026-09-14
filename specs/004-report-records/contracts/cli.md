@@ -73,8 +73,9 @@ partial run for a complete one. When the reader closes the pipe, the process end
 
 ## Behavioural guarantees
 
-- Streaming: the header is written before the second item is read; memory does not grow
-  with the log (goal: < 32 MiB heap in use, ≤ 4 allocations per record).
+- Streaming: the header is flushed to the reader before the first item is read; records
+  follow in 64 KiB chunks; memory does not grow with the log (goal: < 32 MiB heap in use,
+  ≤ 4 allocations per record).
 - Determinism: two runs of the command on the same log are byte-identical.
 - Version range: taken from the library at run time (`simlog.Supported()`), never
   hard-coded; the error for an unsupported version quotes that range.

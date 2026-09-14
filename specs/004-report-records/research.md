@@ -185,7 +185,9 @@ truncation probe (3.15.1 log cut at 2000 bytes) delivered 62 items before the er
 **Decision**: `Write` loops `Next`, converts each `model.Item` into the record struct for
 its kind, and encodes it before calling `Next` again; parsec's reused
 `Groups` slice is therefore never aliased across calls and needs no copy. Stdout is
-wrapped in a 64 KiB `bufio.Writer` flushed at the end and before any error return. The
+wrapped in a 64 KiB `bufio.Writer` flushed once right after the header — so a reader sees
+the run's identity and warnings before the log is read, at the cost of one write per run —
+then at the end and before any error return. The
 JSON encoder is one `json.Encoder` with `SetEscapeHTML(false)`. **Goal: heap in use under
 32 MiB regardless of log size; ≤ 4 allocations per record.**
 

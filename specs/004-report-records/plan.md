@@ -51,9 +51,9 @@ amd64/arm64) and the distroless image. parsec is pure Go, so `CGO_ENABLED=0` sti
 **Project Type**: Go CLI; one new command file, one new internal package, versioned spec
 artifacts.
 
-**Performance Goals**: The header and first record are written before the second item is
-read from the log, so the first line reaches a pipe well inside the one second SC-003 asks
-for. Throughput is measured, not gated: the benchmark records records/s and MB/s on the
+**Performance Goals**: The header is flushed to the reader before the first item is read
+from the log, so the first line reaches a pipe well inside the one second SC-003 asks for
+whatever the log's size; records follow in 64 KiB chunks. Throughput is measured, not gated: the benchmark records records/s and MB/s on the
 synthetic log and the figure goes into `quickstart.md`.
 
 **Constraints**: **Peak memory goal (Principle II): heap in use stays under 32 MiB for a

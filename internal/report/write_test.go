@@ -426,3 +426,42 @@ func TestWriteAllocations(t *testing.T) {
 		t.Fatalf("%.2f allocations per record exceeds the goal of %d", perRecord, maxAllocsPerRecord)
 	}
 }
+
+// headerProbe is a reader that records what the writer had received by the
+// time Next was first called.
+type headerProbe struct {
+	out             *bytes.Buffer
+	seenAtFirstNext []byte
+}
+
+func (p *headerProbe) Run() model.Run {
+	return model.Run{ID: "probe", Name: "probe", Tool: "stub", ToolVersion: "0"}
+}
+
+func (p *headerProbe) Next() (model.Item, error) {
+	if p.seenAtFirstNext == nil {
+		p.seenAtFirstNext = bytes.Clone(p.out.Bytes())
+	}
+	return model.Item{}, io.EOF
+}
+
+func TestWriteFlushesHeaderBeforeReading(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	probe := &headerProbe{out: &out}
+	if _, err := Write(context.Background(), probe, &out); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if probe.seenAtFirstNext == nil {
+		t.Fatalf("Next was never called")
+	}
+	kinds := parseLines(t, probe.seenAtFirstNext)
+	if len(kinds) != 1 || kinds[0] != "run" {
+		t.Fatalf("the writer had received %q before the first Next, want the complete header line", probe.seenAtFirstNext)
+	}
+	if !bytes.Equal(probe.seenAtFirstNext, out.Bytes()) {
+		t.Errorf("output after the run differs from the header seen at the first Next: %q vs %q", out.Bytes(), probe.seenAtFirstNext)
+	}
+}

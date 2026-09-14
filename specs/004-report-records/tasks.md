@@ -136,6 +136,12 @@ or format.
 
 ---
 
+## Phase 8: Review Follow-ups (from `/speckit-spectest-gaps`)
+
+- [X] T018 Flush the header before the first item is read in `internal/report/write.go` (one extra write per run, so a reader on a pipe sees the run's identity and warnings immediately whatever the log's size); add `TestWriteFlushesHeaderBeforeReading` in `internal/report/write_test.go` with a reader that records what the writer had received at its first `Next`, and `TestReportIntegrationFirstLineLatency` in `cmd/galaxio/report_integration_test.go` measuring the first line from process start against SC-003's one second on a 14 MB replay; update the streaming guarantee in `contracts/cli.md`, `plan.md` and `research.md` §9 → commit `feat(report): flush the header before reading the log (#50)`
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
