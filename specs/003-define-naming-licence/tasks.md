@@ -62,8 +62,8 @@ PR #110.
 
 **Independent Test**: Root help lists `report`; `galaxio report` and
 `galaxio report --help` return help on stdout with exit 0; an unexpected report argument
-returns exit 2 on stderr; the decision record and README map the two repositories and CLI
-namespace to one canonical name each.
+returns exit 2 on stderr; the decision record and README map the public library repository
+and CLI namespace to one canonical name each.
 
 ### Tests for User Story 1
 
@@ -226,7 +226,7 @@ then leave one green milestone PR open for maintainer review.
 
 - [X] T024 **CRITICAL** Restore the byte-for-byte canonical GNU GPL Version 2 text in `LICENSE`, keep the exact `GPL-2.0-only` project selection in `README.md` and `Dockerfile`, add a deterministic `scripts/license_surface_test.sh` regression suite, and align `specs/003-define-naming-licence/{plan.md,research.md,data-model.md,contracts/licence-posture.md,quickstart.md}` with machine-detectable licence metadata per FR-008, SC-004, and Constitution III (contradicts)
 - [X] T025 **CRITICAL** Reconcile `specs/003-define-naming-licence/{plan.md,research.md,data-model.md,quickstart.md,tasks.md}` with one milestone PR, exactly one task per green commit, maintainer-owned review/merge/closure, the Constitution I help-only namespace exception, and truthful completion states per Constitution I and Development Workflow (contradicts)
-- [ ] T026 Remove remaining second-repository semantics from `specs/003-define-naming-licence/{spec.md,tasks.md,research.md}` and the in-scope GitHub issue #104, while retaining only the `galaxio-cli`/`parsec` boundary and recording the issue update in the decision evidence per FR-006 and US3/AC1 (partial)
+- [X] T026 Correct stale repository-count wording in `specs/003-define-naming-licence/{spec.md,tasks.md,research.md}` and the in-scope GitHub issue #104, while retaining only the `galaxio-cli`/`parsec` boundary and recording the issue update in the decision evidence per FR-006 and US3/AC1 (partial)
 - [ ] T027 Run every local quality gate and external naming/licence/linkage check, append reproducible evidence to `specs/003-define-naming-licence/research.md`, leave review-dependent issue and milestone closure explicitly pending, update completion boxes in `specs/003-define-naming-licence/tasks.md`, and perform no merge, issue closure, release audit, or tag per FR-013–FR-015 and SC-006–SC-007 (partial)
 
 **Checkpoint**: PR #110 contains one commit for each convergence task, is green, and remains

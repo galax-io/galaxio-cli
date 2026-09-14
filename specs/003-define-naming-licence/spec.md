@@ -9,9 +9,11 @@
 **Input**: User description: "https://github.com/galax-io/galaxio-cli/milestone/1"
 
 **Tracking**: [milestone `v0.12.0 Naming and licence`](https://github.com/galax-io/galaxio-cli/milestone/1);
-[galax-io/galaxio-cli#47](https://github.com/galax-io/galaxio-cli/issues/47) and
-[galax-io/galaxio-cli#48](https://github.com/galax-io/galaxio-cli/issues/48), with the
-[scope correction #107](https://github.com/galax-io/galaxio-cli/issues/107)
+[galax-io/galaxio-cli#47](https://github.com/galax-io/galaxio-cli/issues/47),
+[#48](https://github.com/galax-io/galaxio-cli/issues/48),
+[#104](https://github.com/galax-io/galaxio-cli/issues/104), and
+[#107](https://github.com/galax-io/galaxio-cli/issues/107), with review remediation tracked
+in [#109](https://github.com/galax-io/galaxio-cli/issues/109)
 
 ## Background
 
@@ -48,9 +50,9 @@ roles.
 for later milestones. Settling them first prevents redirects, import-path churn, and two
 names for the same capability.
 
-**Independent Test**: Review the authoritative decision record, organization repositories,
-active planning documents, and root command help; each of the two roles resolves to
-exactly one canonical name and no active placeholder remains.
+**Independent Test**: Review the authoritative decision record, the public `parsec`
+repository, active planning documents, and root command help; each role resolves to exactly
+one canonical name and no active placeholder remains.
 
 **Acceptance Scenarios**:
 
@@ -111,8 +113,9 @@ evidence sufficient to close them when the specification work lands.
 
 **Acceptance Scenarios**:
 
-1. **Given** issue #47, **When** its acceptance evidence is reviewed, **Then** it shows both
-   selected repository names and the `report` command name without unresolved alternatives.
+1. **Given** issue #47, **When** its acceptance evidence is reviewed, **Then** it shows the
+   selected `parsec` repository identity and the `report` command name without unresolved
+   alternatives.
 2. **Given** issue #48, **When** its acceptance evidence is reviewed, **Then** it shows
    consistent CLI licensing and a compatible permissive licence for the shared library.
 3. **Given** both issue fixes and the scope correction are on the milestone's release

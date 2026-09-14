@@ -2,9 +2,11 @@
 
 Evidence was checked on 2026-09-14 against milestone
 [`v0.12.0 Naming and licence`](https://github.com/galax-io/galaxio-cli/milestone/1),
-issues [#47](https://github.com/galax-io/galaxio-cli/issues/47) and
-[#48](https://github.com/galax-io/galaxio-cli/issues/48), with the scope correction tracked
-in [#107](https://github.com/galax-io/galaxio-cli/issues/107), the current repository tree,
+issues [#47](https://github.com/galax-io/galaxio-cli/issues/47),
+[#48](https://github.com/galax-io/galaxio-cli/issues/48),
+[#104](https://github.com/galax-io/galaxio-cli/issues/104), and
+[#107](https://github.com/galax-io/galaxio-cli/issues/107), with review remediation tracked
+in [#109](https://github.com/galax-io/galaxio-cli/issues/109), the current repository tree,
 and the public `parsec` repository. Reproduction commands are collected in
 [quickstart.md](quickstart.md).
 
@@ -178,6 +180,11 @@ commits.
   review must occur on the completed PR and merge still needs an explicit instruction.
 - Tag the release from the milestone PR: rejected because release execution starts only
   after the reviewed PR lands, linked issues close, and the separate linkage audit passes.
+
+**Issue-scope evidence (2026-09-14)**: #104 now asks only for the `parsec` library identity,
+the `report` CLI namespace, the retained `GPL-2.0-only`/MIT boundary, and this milestone's
+planning artifacts. It remains open on milestone 1 and is linked for closure by PR #110;
+no other library or repository is part of the CLI milestone.
 
 ## R8. Known pre-existing risk: Apache-2.0 dependencies
 
