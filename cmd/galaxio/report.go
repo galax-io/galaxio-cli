@@ -17,12 +17,15 @@ import (
 var reportTools = []string{"gatling"}
 
 // reportOptions is what runReport needs: the tool the user named, the path
-// they gave (empty for the default results root), and where to write.
+// they gave (empty for the default results root), the root flags that shape
+// the diagnostics, and where to write.
 type reportOptions struct {
-	Tool   string
-	Path   string
-	Stdout io.Writer
-	Stderr io.Writer
+	Tool    string
+	Path    string
+	Quiet   bool
+	Verbose bool
+	Stdout  io.Writer
+	Stderr  io.Writer
 }
 
 // reportOutput is what runReport learned: which run it read, how that run was
@@ -60,9 +63,11 @@ Tools: gatling`,
 				return cmd.Help()
 			}
 			opts := reportOptions{
-				Tool:   args[0],
-				Stdout: cmd.OutOrStdout(),
-				Stderr: cmd.ErrOrStderr(),
+				Tool:    args[0],
+				Quiet:   isQuiet(cmd),
+				Verbose: globalOptsFromCmd(cmd).verbose,
+				Stdout:  cmd.OutOrStdout(),
+				Stderr:  cmd.ErrOrStderr(),
 			}
 			if len(args) == 2 {
 				opts.Path = args[1]
@@ -87,6 +92,12 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	if err != nil {
 		return reportOutput{}, RuntimeError{Err: err}
 	}
+	// Which run was read, and by which rule: "newest" is a guess from
+	// modification times, and a user who did not name the run should know
+	// that is how it was picked.
+	if !opts.Quiet {
+		fmt.Fprintf(opts.Stderr, "report: reading %s (found by %s)\n", loc.Dir, loc.Found)
+	}
 
 	src, err := report.Open(loc)
 	if err != nil {
@@ -105,6 +116,10 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	out := reportOutput{Dir: loc.Dir, Log: loc.Log, Found: loc.Found, Summary: sum}
 	if err != nil {
 		return out, RuntimeError{Err: err}
+	}
+	if opts.Verbose {
+		fmt.Fprintf(opts.Stderr, "report: %s log, Gatling %s: %d requests, %d groups, %d user events, %d errors\n",
+			src.Format, src.Reader.Run().ToolVersion, sum.Requests, sum.Groups, sum.Users, sum.Errors)
 	}
 	return out, nil
 }
