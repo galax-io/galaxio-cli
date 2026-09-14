@@ -1,0 +1,100 @@
+# Quickstart: prove `galaxio report` end to end
+
+**Feature**: [spec.md](spec.md) | **Contracts**: [cli.md](contracts/cli.md),
+[records.md](contracts/records.md)
+
+## Prerequisites
+
+- Go 1.27.1 (`go.mod`), `jq` for the checks below.
+- `github.com/galax-io/parsec v0.1.0` (approved 2026-09-15) added by the first implementation task: `go get github.com/galax-io/parsec@v0.1.0 && go mod tidy`.
+- The corpus copied to `internal/report/testdata/corpus/gatling/` with its `PROVENANCE.md`
+  (source: parsec v0.1.0 `testdata/corpus/gatling`, MIT, recordings never edited).
+
+```bash
+go build -o dist/galaxio ./cmd/galaxio
+```
+
+## 1. Named run, both formats (US1, SC-001)
+
+```bash
+C=internal/report/testdata/corpus/gatling
+dist/galaxio report gatling $C/3.12.0 | head -1 | jq .kind        # "run"
+dist/galaxio report gatling $C/3.12.0 | jq -c 'select(.kind=="request")' | wc -l   # 36
+dist/galaxio report gatling $C/3.15.1 | jq -c 'select(.kind=="request")' | wc -l   # 102
+dist/galaxio report gatling $C/3.15.1/simulation.log | cmp - <(dist/galaxio report gatling $C/3.15.1) && echo identical
+```
+
+Expected: the counts equal Gatling's console summary for each recording (36 for the text
+runs 3.11.5/3.12.0; 102 for the binary runs 3.13.1/3.14.9/3.15.1), exit code 0, and the
+log path and its directory produce identical output.
+
+## 2. Latest run without naming it (US2)
+
+```bash
+dist/galaxio report gatling $C/lastrun/results 2>&1 >/dev/null
+# report: reading …/corpussimulation-20260909022708912 (found by lastRun.txt)
+tmp=$(mktemp -d); cp -R $C/lastrun/results $tmp/ && rm $tmp/results/lastRun.txt
+dist/galaxio report gatling $tmp/results 2>&1 >/dev/null     # … (found by newest)
+( cd $tmp && mkdir -p target && cp -R results target/gatling && dist_abs=$OLDPWD/dist/galaxio && $dist_abs report gatling >/dev/null )   # no path → target/gatling
+dist/galaxio report gatling $tmp; echo "exit=$?"              # Error: … no Gatling run under …; exit=1
+```
+
+## 3. Streaming and a closed pipe (US3, SC-003)
+
+```bash
+dist/galaxio report gatling $C/3.15.1 | head -n 1      # header appears immediately, no stderr flood
+go test ./internal/report -run TestWriteAllocations -v     # ≤ 4 allocs/record
+go test ./internal/report -bench BenchmarkWrite -benchmem -run ^$
+```
+
+Record the benchmark's records/s, MB/s and B/op here once measured; the memory goal is
+heap in use < 32 MiB for any log size. The synthetic log replays the 3.12.0 body lines
+millions of times through an `io.Reader`, so no large file is written.
+
+## 4. Failures name what was at fault (US4)
+
+```bash
+dist/galaxio report gatling $C/3.15.1/index.html; echo "exit=$?"  # not a Gatling simulation.log …; 1
+dist/galaxio report gatling /nonexistent; echo "exit=$?"           # cannot read /nonexistent …; 1
+head -c 2000 $C/3.15.1/simulation.log > /tmp/cut.log
+dist/galaxio report gatling /tmp/cut.log | wc -l; echo "exit=${PIPESTATUS[0]}"   # 63 lines (header + 62), exit 1, stderr: log cut short at byte 1991 …
+dist/galaxio report jmeter $C/3.15.1; echo "exit=$?"               # unsupported tool "jmeter": accepted tools: gatling; 2
+dist/galaxio report $C/3.15.1; echo "exit=$?"                      # the path is taken as a tool name → unsupported tool; 2
+dist/galaxio report gatling $C/3.15.1 extra; echo "exit=$?"        # accepts at most 2 arg(s); 2
+dist/galaxio report gatling -o stats,global_stats $C/3.15.1; echo "exit=$?"   # not available yet, arrives with v0.15.0; 2
+dist/galaxio report gatling -o yml $C/3.15.1; echo "exit=$?"       # not available yet (postponed YAML); 2
+dist/galaxio report gatling -o json $C/3.15.1; echo "exit=$?"      # unknown report format "json": known formats: stats, global_stats, yml; 2
+dist/galaxio report; echo "exit=$?"                                # help, 0
+```
+
+Version-gate cases (below range 3.10.0, refused 3.13.0, newer-than-range warning) are
+synthetic and live in `internal/report` tests; run them with:
+
+```bash
+go test ./internal/report -run 'TestOpen|TestVersion' -v
+```
+
+## 5. Help is unchanged
+
+```bash
+dist/galaxio report --help | grep -E 'report <tool> \[PATH\]|-o, --output'
+```
+
+## 6. Gates
+
+```bash
+gofmt -l . && go vet ./... && go test -race -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+go mod tidy && git diff --exit-code -- go.mod go.sum
+go test -tags=integration -race -count=1 ./...
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+```
+
+Expected: no formatting diff, vet clean, all tests pass with the race detector, total
+coverage ≥ 80%, tidy leaves no diff, integration suite passes (the pipe test needs `head`),
+no known vulnerabilities.
+
+## 7. Documentation
+
+`README.md` § Reporting Ecosystem documents `galaxio report`, its argument, `-o`, exit
+codes and the record keys, and links to [contracts/records.md](contracts/records.md) for the
+full schema. `galaxio report --help` shows `<tool> [PATH]` and `-o`.
