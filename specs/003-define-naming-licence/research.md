@@ -209,3 +209,63 @@ after the Go skill-set refresh and was applied together with `golang-cli`,
 Where general testing guidance suggests third-party assertions or goroutine-leak tooling,
 the repository constitution wins: this feature uses standard-library tests and adds no
 dependency. No goroutine is introduced.
+
+## R10. Full milestone review and pre-merge verification
+
+**Status**: `in-review` on 2026-09-14. `verifiedAt` is intentionally unset until a
+maintainer reviews and explicitly merges PR
+[#110](https://github.com/galax-io/galaxio-cli/pull/110). The PR and issues #47, #48, #104,
+#107, and #109 remain open.
+
+**Reviewed implementation**:
+
+- The milestone specification and the historical changes merged through PRs #103, #105,
+  #106, and #108 were reviewed together for intent, behavior, tests, licensing, scope, and
+  delivery correctness. Those commits are already ancestors of `main`; PR #110 records the
+  review corrections without reverting and re-adding their valid behavior.
+- `galaxio report` is a correct help-only namespace parent: it is visible from root help,
+  direct invocation prints help with exit 0, unexpected arguments become `UsageError` with
+  exit 2, and it opens no input and defines no operation or result format.
+- The prepended `LICENSE` metadata caused a real classifier regression and was removed by
+  T024. The canonical file is pinned by SHA-256, README and the OCI label retain the exact
+  `GPL-2.0-only` selection, and GitHub again reports GPLv2 for the pushed branch.
+- Planning, issue, and milestone text now cover only the public `parsec` boundary and the
+  `report` CLI namespace. No external repository was edited.
+- The workflow now uses one milestone PR and one green commit per task. Implementation-time
+  issue comments are not treated as review; merge and closure remain maintainer-owned.
+
+**Local verification**:
+
+| Check | Result |
+|---|---|
+| `test -z "$(gofmt -l .)"` | PASS |
+| `go mod tidy` plus clean `go.mod`/`go.sum` diff | PASS |
+| `go vet ./...` | PASS |
+| `go test -race -coverprofile=coverage.out ./...` | PASS; total coverage 83.4% |
+| `go build ./...` | PASS |
+| `go test -tags=integration -race -count=1 ./...` | PASS |
+| Eight shell suites under `scripts/`, `.claude/hooks/`, and `.githooks/` | PASS |
+| `TestHelpPrintsMinimalUsage` and `TestReportCommand*` through `runCLI` | PASS |
+| Scope scan for excluded library text, `internal/report/`, and a `parsec` Go import | PASS; none found |
+| Diff audit for `go.mod`, `go.sum`, `internal/`, release workflow, Dockerfile, and GoReleaser | PASS; no milestone-PR changes |
+
+**GitHub evidence**:
+
+- The licence API for `galaxio/109-restore-review-workflow` reports key `gpl-2.0`, SPDX
+  `GPL-2.0`, name `GNU General Public License v2.0`, and path `LICENSE`.
+- `galax-io/parsec` is PUBLIC and reports MIT.
+- `scripts/check-linkage.sh --pr 110` passes; PR #110 is assigned to milestone 1, and each
+  linked issue reports PR #110 as an open closing reference.
+- The milestone API reports six open items before merge: five linked issues plus the open
+  milestone PR. This is the expected `in-review` state, not release readiness.
+- PR #110 has no maintainer review yet. The active ruleset requires a PR but currently sets
+  `required_approving_review_count` to zero and allows an organization-admin bypass. That
+  repository setting was not changed without explicit authorization; the stricter agent
+  behavior is enforced by `AGENTS.md` and Constitution v2.0.0.
+- GitHub Actions status is evaluated on the final pushed T027 head and belongs to the PR
+  review evidence. It is not inferred or embedded as a self-referential source-commit claim.
+
+**Deferred to the maintainer**: Review and disposition of PR #110, the resulting issue and
+milestone closure, the separate release linkage audit, and any version tag or publication.
+No merge, PR/issue closure, release audit, tag, or publication was performed while preparing
+this record.
