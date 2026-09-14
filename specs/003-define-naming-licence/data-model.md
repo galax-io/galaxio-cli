@@ -59,7 +59,8 @@ Represents a repository's selected licence identity and visible evidence.
   classifier for that same selection.
 - README must contain the exact `GPL-2.0-only` expression.
 - The OCI label must equal `GPL-2.0-only`.
-- The GPL terms remain verbatim; any project notice sits adjacent to those terms.
+- `LICENSE` remains byte-for-byte canonical GPL v2 text so repository classifiers can
+  recognize it; README and the OCI label carry the exact `GPL-2.0-only` project selection.
 - `parsec` must retain its MIT notice; this feature only audits it.
 
 ## 3. Compatibility Decision

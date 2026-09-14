@@ -16,10 +16,10 @@ placeholder as a second active name.
 
 | Surface | Contract | Verification |
 |---|---|---|
-| `LICENSE` | Contains the unchanged GNU GPL Version 2 terms and an approved project selection that is unambiguously version 2 only | Inspect the notice and confirm the licence body remains verbatim |
+| `LICENSE` | Is the byte-for-byte canonical GNU GPL Version 2 text; project-specific metadata is kept out of this classifier input | Run `scripts/license_surface_test.sh` and verify the pinned SHA-256 |
 | `README.md` | Names the exact SPDX expression `GPL-2.0-only` and links `LICENSE` and the decision record | Text search and link review |
 | `Dockerfile` | OCI label equals `GPL-2.0-only` | Inspect `org.opencontainers.image.licenses` |
-| GitHub repository | Detects the GPL v2 licence file; the API may expose the legacy classifier `gpl-2.0` | `gh repo view galax-io/galaxio-cli --json licenseInfo` |
+| GitHub repository | Detects the canonical file as GPL v2; the API may expose the legacy classifier `GPL-2.0`/`gpl-2.0` | Query the licence API for the PR branch before merge |
 
 GitHub's classifier is accepted only when it resolves from the repository's v2-only licence
 file and displays GNU GPLv2. It is documented as a platform alias, not copied into
@@ -50,7 +50,7 @@ The milestone evidence is not complete if any of these is true:
 
 - an audited CLI surface contradicts `GPL-2.0-only`;
 - README leaves the version selection implicit;
-- the GPL terms are altered rather than accompanied by a project notice;
+- the canonical GPL v2 file is altered or prefixed with project metadata;
 - `parsec` is not public, not organization-controlled, or no longer identifies as MIT;
 - root help lacks `report`;
 - the decision record omits the authoritative compatibility sources or rejected choices.

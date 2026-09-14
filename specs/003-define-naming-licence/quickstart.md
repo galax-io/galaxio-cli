@@ -52,7 +52,7 @@ clarification marker may remain in a planning artifact.
 
 ```sh
 rg -n 'GPL-2.0-only' README.md Dockerfile specs/003-define-naming-licence
-sed -n '1,24p' LICENSE
+scripts/license_surface_test.sh
 gh repo view galax-io/galaxio-cli --json nameWithOwner,licenseInfo,url
 gh repo view galax-io/parsec --json nameWithOwner,visibility,licenseInfo,url
 ```
@@ -60,8 +60,8 @@ gh repo view galax-io/parsec --json nameWithOwner,visibility,licenseInfo,url
 Expected:
 
 - README and the OCI label say `GPL-2.0-only` exactly;
-- `LICENSE` keeps the GNU GPL Version 2 terms verbatim and includes or is paired with the
-  approved v2-only project notice;
+- `LICENSE` is the byte-for-byte canonical GNU GPL Version 2 text; the exact project
+  selection stays in README and container metadata so licence classifiers remain reliable;
 - GitHub recognizes the CLI as GNU GPLv2 (its API may use the legacy `gpl-2.0` key);
 - `parsec` is public and MIT-licensed;
 - the decision record links the FSF Expat/MIT and Apache-2.0 classifications;

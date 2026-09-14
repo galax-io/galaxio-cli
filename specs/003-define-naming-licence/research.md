@@ -110,35 +110,34 @@ separate approved decision. SPDX identifies the intended CLI expression as
 
 ## R5. Licence-surface audit and normalization
 
-**Decision**: Treat the repository's current GPL v2 terms, exact container label, and
-GitHub classifier as evidence of the retained licence, then make the project selection
-unambiguous in README and—only after licence-sensitive maintainer approval—in a short
-project-specific `GPL-2.0-only` notice placed before the unchanged GPL text.
-Do not rewrite the verbatim licence terms or mutate repository settings solely to chase a
-different GitHub API spelling.
+**Decision**: Keep `LICENSE` byte-for-byte equal to the canonical GNU GPL Version 2 text so
+GitHub's licence classifier can recognize it. Express the project's version-2-only
+selection as `GPL-2.0-only` in README and the OCI image label. Guard these surfaces with a
+deterministic repository test; do not mutate repository settings to compensate for a
+non-canonical licence file.
 
 | Surface | Observed 2026-09-14 | Required outcome |
 |---|---|---|
-| `LICENSE` | Verbatim GNU GPL Version 2 terms; no project-specific `only` notice | After approval, prepend an explicit `GPL-2.0-only` project notice and retain the licence body verbatim |
+| `LICENSE` | Canonical GNU GPL Version 2 text, SHA-256 `8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643` | Keep byte-for-byte canonical; do not prepend project metadata |
 | `Dockerfile` | `org.opencontainers.image.licenses="GPL-2.0-only"` | No change |
-| `README.md` | Links to `LICENSE` but does not name the expression | State `GPL-2.0-only` explicitly and link the decision record |
-| GitHub repository metadata | `gpl-2.0` / “GNU General Public License v2.0” | Document as GitHub's classifier for the recognized v2 file; verify it still resolves after any notice change |
+| `README.md` | States `GPL-2.0-only` and links `LICENSE` and this record | Keep the exact expression |
+| GitHub repository metadata | Canonical file classifies as `GPL-2.0`; prepending the project notice regressed it to `NOASSERTION` | Require the GPL v2 classification and verify the PR branch before merge |
 | `galax-io/parsec` | Public; `MIT` | Audit only; no external edit |
 
-**Rationale**: README is currently the only repository-owned surface that is too implicit.
-The same GPL v2 text is used for both `only` and `or-later` expressions; SPDX notes that a
-project notice distinguishes them. Adding such a notice is a licensing-sensitive act even
-when it preserves the intended policy, so it must be reviewed before implementation. The
-GitHub API's `gpl-2.0` key is not itself a repository-controlled SPDX declaration and cannot
-be normalized through a code-only change; the displayed licence name and detected file are
-the auditable evidence.
+**Rationale**: The six-line project preamble preserved every GPL clause but changed GitHub's
+classifier from `GPL-2.0` to `NOASSERTION`. The exact project selection does not need to be
+embedded in the licence text: README and the OCI label are explicit repository-owned
+metadata, while the canonical file gives tools a stable, recognized licence body. The
+regression test checks all three without network access.
 
 **Alternatives considered**:
 
-- Replace or edit clauses in the GPL text: rejected because the licence permits verbatim
-  copies and says changing the document is not allowed.
-- Treat the README link alone as exact metadata: rejected because it does not distinguish
-  `GPL-2.0-only` from `GPL-2.0-or-later`.
+- Prepend SPDX/project metadata to `LICENSE`: rejected because it breaks GitHub detection;
+  use README and the OCI label for the exact project selection.
+- Replace or edit clauses in the GPL text: rejected because the canonical file is both the
+  licence text and the classifier input.
+- Treat the README link alone as exact metadata: rejected because the exact SPDX expression
+  and the canonical licence text are both required.
 - Edit `parsec` from this repository: rejected by scope and the cross-repository ask-first
   boundary.
 
