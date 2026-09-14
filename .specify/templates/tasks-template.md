@@ -9,9 +9,11 @@ description: "Task list template for feature implementation"
 
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: Test tasks are REQUIRED. Include the unit, command, integration, regression, and golden coverage needed by the feature specification and Constitution Principle III.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+
+**Delivery**: Keep every task in one milestone PR. Each task maps to exactly one green commit, and every commit maps to one task. A validation-only task commits its checkbox and recorded evidence.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -179,7 +181,7 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Within Each User Story
 
-- Tests (if included) MUST be written and FAIL before implementation
+- Tests MUST be written and FAIL before implementation
 - Models before services
 - Services before endpoints
 - Core implementation before integration
@@ -199,7 +201,7 @@ Examples of foundational tasks (adjust based on your project):
 ## Parallel Example: User Story 1
 
 ```bash
-# Launch all tests for User Story 1 together (if tests requested):
+# Launch all tests for User Story 1 together:
 Task: "Contract test for [endpoint] in tests/contract/test_[name].py"
 Task: "Integration test for [user journey] in tests/integration/test_[name].py"
 
@@ -247,6 +249,6 @@ With multiple developers:
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
 - Verify tests fail before implementing
-- Commit after each task or logical group
+- Commit after each task; never combine tasks into a logical-group commit
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
