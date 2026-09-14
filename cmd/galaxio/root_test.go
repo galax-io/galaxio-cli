@@ -68,6 +68,7 @@ func TestReportCommand(t *testing.T) {
 				"Tools: gatling",
 				"Usage:",
 				"galaxio report <tool> [PATH] [flags]",
+				"-o, --output string",
 			} {
 				if !strings.Contains(stdout, want) {
 					t.Fatalf("expected report help to contain %q, got %q", want, stdout)

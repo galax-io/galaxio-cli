@@ -300,3 +300,35 @@ func TestReportNoRunFound(t *testing.T) {
 		t.Errorf("expected stderr to name the searched directory, got %q", stderr)
 	}
 }
+
+func TestReportRejectsReportFormats(t *testing.T) {
+	dir := filepath.Join(reportCorpus, "3.15.1")
+
+	tests := []struct {
+		output   string
+		expected string
+	}{
+		{output: "stats", expected: `report format "stats" is not available yet: it arrives with milestone v0.15.0 Legacy stats.json`},
+		{output: "stats,global_stats", expected: `report format "stats" is not available yet: it arrives with milestone v0.15.0 Legacy stats.json`},
+		{output: "global_stats", expected: `report format "global_stats" is not available yet: it arrives with milestone v0.15.0 Legacy stats.json`},
+		{output: "yml", expected: `report format "yml" is not available yet: the OpenNFR YAML report is postponed`},
+		{output: "json", expected: `unknown report format "json": known formats: stats, global_stats, yml`},
+		{output: "text", expected: `unknown report format "text": known formats: stats, global_stats, yml`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.output, func(t *testing.T) {
+			code, stdout, stderr := runCLI("report", "gatling", dir, "-o", tt.output)
+
+			if code != exitUsage {
+				t.Fatalf("expected exit code %d, got %d", exitUsage, code)
+			}
+			if stdout != "" {
+				t.Errorf("expected empty stdout, got %q", stdout)
+			}
+			if !strings.Contains(stderr, tt.expected) {
+				t.Errorf("expected stderr to contain %q, got %q", tt.expected, stderr)
+			}
+		})
+	}
+}

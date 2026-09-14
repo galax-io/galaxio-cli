@@ -16,12 +16,27 @@ import (
 // a usage error lists them. Each later tool is one more entry here.
 var reportTools = []string{"gatling"}
 
+// reportFormatNames is what -o may name, in the order a usage error lists
+// them. Every one is reserved for a later milestone: the record stream is
+// what the command writes when no format is requested, and it has no name
+// of its own.
+var reportFormatNames = []string{"stats", "global_stats", "yml"}
+
+// reportFormatsPending says, per reserved format, why it cannot be produced
+// yet. An entry leaves this map when its milestone implements it.
+var reportFormatsPending = map[string]string{
+	"stats":        "it arrives with milestone v0.15.0 Legacy stats.json",
+	"global_stats": "it arrives with milestone v0.15.0 Legacy stats.json",
+	"yml":          "the OpenNFR YAML report is postponed",
+}
+
 // reportOptions is what runReport needs: the tool the user named, the path
 // they gave (empty for the default results root), the root flags that shape
 // the diagnostics, and where to write.
 type reportOptions struct {
 	Tool    string
 	Path    string
+	Output  string
 	Quiet   bool
 	Verbose bool
 	Stdout  io.Writer
@@ -38,6 +53,8 @@ type reportOutput struct {
 }
 
 func newReportCommand() *cobra.Command {
+	var output string
+
 	cmd := &cobra.Command{
 		Use:   "report <tool> [PATH]",
 		Short: "Report on finished load-test runs.",
@@ -51,7 +68,11 @@ PATH is a run directory, its simulation.log, or a results root holding run
 directories. Without it the Maven and sbt results root target/gatling is
 searched, taking the run lastRun.txt names or else the most recently modified.
 
-Tools: gatling`,
+Tools: gatling
+
+Without -o the record stream is written. The report formats -o can name are
+reserved for later releases: stats and global_stats (Gatling's legacy
+stats.json and global_stats.json) and yml (the OpenNFR YAML report).`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.MaximumNArgs(2)(cmd, args); err != nil {
 				return UsageError{Err: err}
@@ -64,6 +85,7 @@ Tools: gatling`,
 			}
 			opts := reportOptions{
 				Tool:    args[0],
+				Output:  output,
 				Quiet:   isQuiet(cmd),
 				Verbose: globalOptsFromCmd(cmd).verbose,
 				Stdout:  cmd.OutOrStdout(),
@@ -77,7 +99,25 @@ Tools: gatling`,
 		},
 	}
 
+	cmd.Flags().StringVarP(&output, "output", "o", "", "report format(s) to produce, comma-separated: stats, global_stats, yml (reserved for later releases)")
+
 	return cmd
+}
+
+// validateReportFormats parses the -o list. Every known name is reserved,
+// so any value is a usage error: a reserved name says which milestone
+// delivers it, an unknown name lists the known ones. A script that asks for
+// stats today must fail loudly rather than receive the record stream.
+func validateReportFormats(list string) error {
+	for _, name := range strings.Split(list, ",") {
+		name = strings.TrimSpace(name)
+		reason, known := reportFormatsPending[name]
+		if !known {
+			return UsageError{Err: fmt.Errorf("unknown report format %q: known formats: %s", name, strings.Join(reportFormatNames, ", "))}
+		}
+		return UsageError{Err: fmt.Errorf("report format %q is not available yet: %s", name, reason)}
+	}
+	return nil
 }
 
 // runReport locates, opens and writes one run. An unsupported tool is a
@@ -86,6 +126,11 @@ Tools: gatling`,
 func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	if !slices.Contains(reportTools, opts.Tool) {
 		return reportOutput{}, UsageError{Err: fmt.Errorf("unsupported tool %q: accepted tools: %s", opts.Tool, strings.Join(reportTools, ", "))}
+	}
+	if opts.Output != "" {
+		if err := validateReportFormats(opts.Output); err != nil {
+			return reportOutput{}, err
+		}
 	}
 
 	loc, err := report.Locate(opts.Path)
