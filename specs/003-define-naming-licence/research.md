@@ -49,11 +49,9 @@ fake `runReport`, output struct, or JSON renderer would define an API the specif
 explicitly leaves for later. The group is not experimental: hiding it would contradict
 FR-005 and SC-003.
 
-The repository currently declares `-o` on operational leaf commands, while root and parent
-namespaces expose help without an output-format flag. The constitution describes `-o` as a
-global flag, but broadening it is not part of #47. This plan follows the actual parent-group
-contract and requires the first operational `report` subcommand to define its text/JSON
-result and `runX` seam.
+Constitution v2.0.0 distinguishes operational commands from help-only namespace parents.
+The latter may route directly to help and omit `runX` and `-o`; the first operational
+`report` subcommand must define its text/JSON result and `runX` seam.
 
 **Alternatives considered**:
 
@@ -161,25 +159,25 @@ and design analysis.
 
 ## R7. Delivery and closure sequence
 
-**Decision**: Land the Spec Kit artifacts first without closing either implementation issue.
-Then land a separate one-commit #47 PR for the public namespace and its README entry. After
-#47, land a separate one-commit #48 PR for explicit licence posture, with any `LICENSE`
-notice subject to approval. Remove the unrelated component references through #107 before
-final verification. Assign every PR to milestone 1 and use each closing reference only on
-the corresponding implementation or correction PR.
+**Decision**: Use one milestone PR (#110) for specification reconciliation, implementation
+corrections, validation, and review. Each corrective task maps to exactly one green commit.
+The PR carries the milestone and the closing references; issues stay open until the reviewed
+PR lands on `main`. Agents prepare and update the PR but never merge or close it without an
+explicit post-review instruction for that exact PR.
 
-**Rationale**: This satisfies the repository's spec-first, one-issue/one-commit, dependency
-ordering, milestone, and closure rules. It also keeps the already-uncommitted Spec Kit
-installation files out of feature commits.
+**Rationale**: A single review boundary gives the maintainer one coherent milestone diff and
+decision record. Task-sized commits keep that review bisectable without fragmenting it into
+separate PRs. The already-uncommitted Spec Kit installation files remain outside these
+commits.
 
 **Alternatives considered**:
 
-- Close both issues from the spec PR: rejected because root help still lacks `report` and
-  README still lacks an explicit licence expression.
-- Combine #47 and #48 in one implementation PR: rejected because they are separately
-  tracked concerns and #48 depends on #47.
-- Tag the release from either implementation PR: rejected because release execution starts
-  only after both issues are merged/closed and the linkage audit passes.
+- Split the milestone by issue or documentation concern: rejected because it fragments the
+  required milestone review and contradicts the active workflow.
+- Treat issue comments written during implementation as maintainer review: rejected because
+  review must occur on the completed PR and merge still needs an explicit instruction.
+- Tag the release from the milestone PR: rejected because release execution starts only
+  after the reviewed PR lands, linked issues close, and the separate linkage audit passes.
 
 ## R8. Known pre-existing risk: Apache-2.0 dependencies
 
