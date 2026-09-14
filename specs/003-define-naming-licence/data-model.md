@@ -11,11 +11,11 @@ Represents one stable ecosystem name.
 | Field | Type | Rules |
 |---|---|---|
 | `canonicalName` | string | Required; exactly one active name per role |
-| `role` | enum | `result-primitives-library`, `live-metrics-sidecar`, or `finished-run-cli-namespace` |
+| `role` | enum | `result-primitives-library` or `finished-run-cli-namespace` |
 | `organization` | string | `galax-io` for repository-backed components |
 | `repositoryPath` | string, optional | Organization-qualified path when the component has a repository |
-| `modulePath` | string, optional | Required for the public Go library; omitted for sidecar and CLI namespace |
-| `visibility` | enum | `public`, `private`, or `not-applicable` |
+| `modulePath` | string, optional | Required for the public Go library; omitted for the CLI namespace |
+| `visibility` | enum | `public` or `not-applicable` |
 | `invocation` | string, optional | Required for the CLI namespace |
 | `aliases` | list of string | Must be empty for active documentation; rejected alternatives live in the decision record |
 
@@ -24,14 +24,12 @@ Represents one stable ecosystem name.
 | `canonicalName` | `role` | `repositoryPath` / `modulePath` | `visibility` | `invocation` |
 |---|---|---|---|---|
 | `parsec` | result-primitives-library | `github.com/galax-io/parsec` | public | — |
-| `comet` | live-metrics-sidecar | `galax-io/comet` | private | — |
 | `report` | finished-run-cli-namespace | — | not-applicable | `galaxio report` |
 
 ### Validation
 
 - No two instances may own the same role.
 - `parsec` must resolve as a public repository controlled by `galax-io`.
-- `comet` must resolve for an authorized maintainer and remain private.
 - `report` must be present in root CLI help and must not replace an existing command.
 - Active documentation must use `canonicalName`; an alternative is never an alias.
 
@@ -43,7 +41,7 @@ Represents a repository's selected licence identity and visible evidence.
 |---|---|---|
 | `subject` | repository path | Required |
 | `spdxExpression` | string or absent | Exact for in-scope public repositories |
-| `visibility` | enum | `public` or `private` |
+| `visibility` | enum | `public` |
 | `surfaces` | list of evidence | File, README, container, and repository metadata as applicable |
 | `noticeRequired` | boolean | Whether redistribution must retain a notice |
 | `scopeStatus` | enum | `selected`, `audit-only`, or `out-of-scope` |
@@ -54,7 +52,6 @@ Represents a repository's selected licence identity and visible evidence.
 |---|---|---:|---|
 | `github.com/galax-io/galaxio-cli` | `GPL-2.0-only` | true | selected |
 | `github.com/galax-io/parsec` | `MIT` | true | selected; external surface is audit-only in this repository |
-| `galax-io/comet` | absent | not evaluated | out-of-scope |
 
 ### Validation
 
@@ -64,7 +61,6 @@ Represents a repository's selected licence identity and visible evidence.
 - The OCI label must equal `GPL-2.0-only`.
 - The GPL terms remain verbatim; any project notice sits adjacent to those terms.
 - `parsec` must retain its MIT notice; this feature only audits it.
-- No statement assigns a licence to `comet`.
 
 ## 3. Compatibility Decision
 
@@ -111,7 +107,8 @@ draft -> approved -> implemented -> verified
 
 - `draft -> approved`: maintainer approves the observable command addition and retained
   licence posture.
-- `approved -> implemented`: #47 and #48 changes land in dependency order.
+- `approved -> implemented`: #47 and #48 changes land in dependency order and the #107
+  scope correction follows.
 - `implemented -> verified`: root help, licence audit, test gates, issue closure, and
   milestone state all satisfy [quickstart.md](quickstart.md).
 - Any missing/inconsistent surface keeps the record at its current state; no value is
@@ -121,9 +118,9 @@ draft -> approved -> implemented -> verified
 
 ```text
 Decision Record
-├── selects 3 Component Identities
+├── selects 2 Component Identities
 ├── selects/observes Licence Postures
 ├── contains Compatibility Decisions
-├── links milestone 1 and issues #47/#48
+├── links milestone 1 and issues #47/#48/#107
 └── is verified by CLI, repository, metadata, and test evidence
 ```

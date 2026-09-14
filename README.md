@@ -219,8 +219,6 @@ Galaxio uses one canonical name for each reporting component:
 
 - `parsec` is the public result-primitives library at
   [`github.com/galax-io/parsec`](https://github.com/galax-io/parsec).
-- `comet` is the private live-metrics sidecar at `galax-io/comet`; this
-  documentation does not promise public access to that repository.
 - `galaxio report` is the CLI namespace for finished-run reporting.
 
 This milestone exposes the namespace and its help only. Operational report
