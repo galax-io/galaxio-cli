@@ -426,4 +426,11 @@ CI job.
 
 ## License
 
-This project is distributed under the terms described in [LICENSE](LICENSE).
+`galaxio-cli` is licensed under the GNU General Public License, version 2 only
+(`GPL-2.0-only`); see [LICENSE](LICENSE).
+
+The public [`parsec`](https://github.com/galax-io/parsec) result-primitives
+library is separately licensed under `MIT`. The reviewed MIT-to-GPL relationship
+is compatible for this planned dependency, but it is not a whole-module licence
+audit. See the [naming and licence decision record](specs/003-define-naming-licence/research.md)
+for the compatibility rationale and its scope.
