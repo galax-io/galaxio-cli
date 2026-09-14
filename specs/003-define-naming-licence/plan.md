@@ -25,7 +25,8 @@ contract, `parsec` import, or external-repository change.
 No new or upgraded dependency; `parsec` is named but is not imported in this feature.
 
 **Storage**: N/A. The durable state is versioned Markdown under
-`specs/003-define-naming-licence/` plus user-facing `README.md` and `LICENSE` notices.
+`specs/003-define-naming-licence/`, the user-facing `README.md`, and the canonical GPL v2
+text in `LICENSE`.
 
 **Testing**: Standard-library `testing`; command-level assertions through `runCLI` for root
 help, `galaxio report`, `galaxio report --help`, and invalid arguments. Repository gates are
@@ -41,9 +42,9 @@ is opened and no report arithmetic is introduced.
 
 **Constraints**: Preserve `GPL-2.0-only`; do not edit `galax-io/parsec`;
 do not change a release workflow or publish a tag; do not add `internal/report/`, report
-flags, JSON output, or a module dependency; add a short `GPL-2.0-only` project notice before
-the full GPL v2 terms without changing those verbatim terms, and only after the required
-licence-sensitive approval.
+flags, JSON output, or a module dependency; keep `LICENSE` byte-for-byte canonical so
+GitHub can classify it, and express the project's `GPL-2.0-only` selection in README and
+container metadata.
 
 **Scale/Scope**: One new command-group file, one root registration, command-level tests,
 two focused README additions, and the spec/plan/research/contracts/quickstart artifacts.
@@ -94,8 +95,8 @@ cmd/galaxio/
 └── root_test.go                  # Root visibility, report help, argument/exit tests
 
 README.md                         # #47 canonical names/report usage; #48 explicit licence boundary
-LICENSE                           # #48: add approved GPL-2.0-only project notice before the
-                                  # unchanged verbatim GPL v2 terms
+LICENSE                           # #48: canonical, unmodified GNU GPL Version 2 text
+scripts/license_surface_test.sh  # Regression guard for licence text and exact metadata
 Dockerfile                        # audit only: already labels `GPL-2.0-only`
 go.mod                            # unchanged: no parsec import or dependency update
 .goreleaser.yaml                  # audit only; no publishing/release change
