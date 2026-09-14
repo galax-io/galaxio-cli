@@ -94,6 +94,13 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	}
 	defer src.Close()
 
+	// A version newer than any recording is read, and the warning travels in
+	// the header too; it is printed even under --quiet because it is not
+	// informational — the numbers it qualifies are on stdout.
+	for _, w := range src.Reader.Run().Warnings {
+		fmt.Fprintf(opts.Stderr, "report: warning: %s\n", w)
+	}
+
 	sum, err := report.Write(ctx, src.Reader, opts.Stdout)
 	out := reportOutput{Dir: loc.Dir, Log: loc.Log, Found: loc.Found, Summary: sum}
 	if err != nil {

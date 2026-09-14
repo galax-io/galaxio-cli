@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -139,5 +140,37 @@ func TestRunReportOutput(t *testing.T) {
 	}
 	if out.Summary.Requests != 102 || out.Summary.Truncated != nil {
 		t.Errorf("Summary = %+v, want 102 requests and no truncation", out.Summary)
+	}
+}
+
+// writeRun writes a synthetic simulation.log into a fresh run directory and
+// returns that directory.
+func writeRun(t *testing.T, log []byte) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "simulation.log"), log, 0o644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	return dir
+}
+
+func TestReportWarnsAboutUnverifiedVersion(t *testing.T) {
+	dir := writeRun(t, []byte("RUN\tio.x.Sim\tsim\t1700000000000\t \t3.99.0\n"))
+
+	code, stdout, stderr := runCLI("report", "gatling", dir, "--quiet")
+
+	if code != exitOK {
+		t.Fatalf("expected exit code %d, got %d; stderr: %s", exitOK, code, stderr)
+	}
+	if !strings.Contains(stderr, "report: warning: 3.99.0: ") {
+		t.Errorf("expected the warning on stderr even under --quiet, got %q", stderr)
+	}
+	kinds := recordKinds(t, stdout)
+	if len(kinds) != 1 || kinds[0] != "run" {
+		t.Errorf("kinds = %v, want the header only", kinds)
+	}
+	if !strings.Contains(stdout, `"warnings":[{"version":"3.99.0","reason":`) {
+		t.Errorf("header lacks the warning: %s", stdout)
 	}
 }
