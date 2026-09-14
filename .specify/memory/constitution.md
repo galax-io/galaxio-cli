@@ -1,25 +1,34 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.1.0 → 1.1.1
-Bump rationale: PATCH. galaxio-cli#107 removes an obsolete statement that couples an
-unrelated external library to CLI report arithmetic. The normative ownership boundary
-between `galaxio-cli` and `parsec` is unchanged.
+Version change: 1.1.1 → 2.0.0
+Bump rationale: MAJOR. galaxio-cli#109 replaces split issue/PR delivery with one reviewed
+PR per milestone and one commit per task. Agents may prepare and update a PR, but may not
+merge or close it without an explicit post-review instruction for that exact PR. Principle I
+now distinguishes operational commands from help-only namespace parents and names the actual
+root flags.
 
-Principles: unchanged (I–VI).
+Principles modified: I (operational-command contract and namespace-parent exception),
+VI (out-of-scope work stays out of the milestone rather than automatically creating another
+PR).
 
 Added sections: none. Removed sections: none.
 
 Modified:
-- Principle II rationale: describes only CLI report arithmetic over `parsec` definitions.
-- Active milestone artifacts and README: remove the unrelated component from
-  `galaxio-cli` scope.
+- Development Workflow: specification and implementation stay in one milestone PR; every
+  task maps to exactly one green commit; maintainer review owns merge and closure.
+- Governance: amendment PRs remain open until maintainer review and explicit merge action.
+- AGENTS.md: records the same single-PR, task-commit, and review ownership rules.
+- Principle I: applies `runX` and `-o text|json` to operational commands, permits help-only
+  namespace parents, and removes `-o` from the root-flag list.
 
-Templates and agent guidance: no text depends on the changed rationale; none touched.
-- ✅ .specify/templates/plan-template.md — Constitution Check gates unchanged.
-- ✅ .specify/templates/tasks-template.md — unchanged.
+Templates:
+- ✅ .specify/templates/plan-template.md — existing Constitution Check can assess the
+  clarified command contract.
+- ✅ .specify/templates/tasks-template.md — requires one commit per task and one PR per
+  milestone; removes optional-test wording.
 - ✅ .specify/templates/spec-template.md — unchanged.
-- ✅ AGENTS.md — release instructions match `.github/workflows/release.yml`.
+- ✅ AGENTS.md — runtime guidance matches this amendment.
 
 Follow-up TODOs (carried from 1.0.0 unless noted):
 - `scripts/linkage_test.sh` covers the release-range helpers used by
@@ -27,8 +36,8 @@ Follow-up TODOs (carried from 1.0.0 unless noted):
   and remains a follow-up; the `shell suites` job discovers the existing helper suite.
 - The release workflow has no end-to-end test against a disposable GitHub repository; its
   local regression suite checks trigger, guard, verification, and publication ordering.
-- `.claude/skills/speckit-tasks/SKILL.md` (spec-kit managed) still generates "OPTIONAL" test
-  headings; the template is corrected, the generator is not ours.
+- `.claude/skills/speckit-tasks/SKILL.md` (spec-kit managed) may still generate "OPTIONAL"
+  test headings; this repository's template and constitution require tests.
 - Skills classification pinned to `samber/cc-skills-golang` 2.0.1 and
   `galaxio/galaxio-gatling` 2.4.0 as installed on 2026-09-13; re-read on every plugin update.
 -->
@@ -38,12 +47,16 @@ Follow-up TODOs (carried from 1.0.0 unless noted):
 
 ### I. Command Contract
 
-- Every command is a thin cobra wrapper over a `runX(ctx, opts) (XOutput, error)` function
-  in `cmd/galaxio/`, one file per command, registered in `root.go`. The cobra layer parses
-  and dispatches; it MUST NOT hold logic a test cannot reach through `runX`.
-- Human output goes to stdout, diagnostics to stderr. Every command offers `-o text|json`.
-  The JSON form MUST be a documented structure, never the text table wrapped in a string,
-  and MUST end with a single newline.
+- Every operational command is a thin cobra wrapper over a
+  `runX(ctx, opts) (XOutput, error)` function in `cmd/galaxio/`, one file per command,
+  registered in `root.go`. The cobra layer parses and dispatches; it MUST NOT hold logic a
+  test cannot reach through `runX`.
+- A help-only namespace parent MAY route directly to `cmd.Help()` and define neither a
+  result type, `runX`, nor `-o` until it gains operational behavior. It MUST reject
+  positional arguments, expose its child commands, and inherit the root flags.
+- Human output goes to stdout, diagnostics to stderr. Every operational command offers
+  `-o text|json`. The JSON form MUST be a documented structure, never the text table wrapped
+  in a string, and MUST end with a single newline.
 - Exit codes are a contract: `0` success, `1` runtime failure (`RuntimeError`), `2` usage
   failure (`UsageError`). A usage error is a bad flag, argument or unknown command; anything
   that fails while executing a valid command is runtime. An error MUST name what was
@@ -52,8 +65,8 @@ Follow-up TODOs (carried from 1.0.0 unless noted):
   read with `strconv.ParseBool`). A gated command that is disabled MUST exit `2` naming the
   variable that enables it, and the gate MUST be removed — not left in place — when the
   command is promoted.
-- Global flags (`--verbose`, `--quiet`, `--no-color`, `-o`) behave identically across
-  commands. A new command MUST honour them.
+- Root flags (`--verbose`, `--quiet`, `--no-color`) behave identically across commands. The
+  `-o` flag is local to operational commands and MUST follow the output contract above.
 
 Rationale: CI jobs and scripts are the primary consumers of this binary. A stable exit-code
 and output contract is what lets them be written once; the `runX` seam is what lets that
@@ -79,9 +92,9 @@ contract be tested without a terminal.
 - Source detection is by file content, never by file name or extension; an explicit override
   flag takes precedence over detection.
 
-Rationale: the CLI computes over finished logs while `parsec` supplies shared definitions
-rather than aggregate implementations. Keeping report arithmetic here prevents library
-consumers from inheriting CLI policy, and the honesty rules keep the result comparable.
+Rationale: this CLI computes reports over finished logs while `parsec` supplies shared
+definitions rather than aggregate implementations. Keeping report arithmetic here prevents
+library consumers from inheriting CLI policy, and the honesty rules keep results comparable.
 
 ### III. Tests Land With The Change (NON-NEGOTIABLE)
 
@@ -151,8 +164,8 @@ repository can see. A renamed flag breaks them long after the release that cause
   layer distinguishes; everything else is wrapped into one of them at the boundary. `panic`
   and `recover` MUST NOT be used for control flow.
 - No dead code, no duplicated code, no speculative abstraction: build what the current spec
-  needs. Three similar lines beat a premature helper. A refactor outside the scope of the
-  current issue goes in its own PR.
+  needs. Three similar lines beat a premature helper. A refactor outside the current
+  milestone stays out; an in-scope refactor is an explicit task and its own commit.
 - Follow the conventions already in the codebase before adding a new one; a new convention
   is named in the plan and applied consistently in the PR that introduces it.
 - Comments say why, not what. A comment that restates the identifier is deleted.
@@ -235,7 +248,7 @@ Three bounds apply to all of them:
 | reading untrusted input — every log, spec, pack and archive this binary opens | `golang-safety`, `golang-security` | Archive extraction (`safeJoin`) and spec parsing are the exposed edges. |
 | designing a constructor, an options struct or a streaming reader | `golang-design-patterns` | Functional options and `io.Reader` pipelines recur in `internal/report/`. |
 | a dependency is proposed under the ask-first rule | `golang-pkg-go-dev`, `golang-dependency-management` | Principle IV: licence, CVEs and the real API are what the case has to survive. |
-| existing code is restructured | `golang-refactoring` | Principle VI sends it to its own PR; this is how it stays behaviour-preserving. |
+| existing code is restructured | `golang-refactoring` | Principle VI requires an explicit in-scope task and its own commit; this is how it stays behaviour-preserving. |
 | a new `internal/` package is added or a helper needs a home | `golang-project-layout` | `cmd/galaxio/` and `internal/<area>/` are settled; where a shared helper goes is the open question. |
 | a lint is added or the toolchain is bumped | `golang-lint`, `golang-modernize` | No `golangci-lint` config exists at ratification; adding one is a gate change, asked for first. |
 | a bug resists the obvious explanation | `golang-troubleshooting` | Cheap to reach for, and only then. |
@@ -261,28 +274,33 @@ pinned above, and fix every `research.md` left pointing at a file that moved.
 `AGENTS.md` holds the step-by-step procedure; the rules below are the ones it MUST NOT
 contradict.
 
-- **Spec-first.** Every feature starts as `specs/NNN-<feature>/` (spec, plan, tasks),
-  committed as `docs(speckit): add NNN-<feature> spec/plan/tasks` BEFORE any `feat` or `fix`
-  commit, and never folded into implementation. Spec work belongs to the milestone that owns
-  the spec.
-- **Milestones.** Every PR MUST carry the active milestone (the lowest-numbered open
-  milestone matching the current spec) before merge; no milestone, no merge. Every issue a
-  PR fixes MUST be closed when the PR lands on `main`. `scripts/check-linkage.sh --pr N` is
-  the merge gate. A completed milestone is released by one `vX.Y.Z` tag; before pushing it,
-  `scripts/check-linkage.sh --for-tag vX.Y.Z` must pass. `.claude/hooks/linkage-guard.sh`
-  and `.githooks/pre-push` protect that irreversible tag push.
-- **Commits.** Semantic messages (`feat(scope): … (#NNN)`); one tracked issue per commit;
-  every commit green on its own; format before commit; intent, not path: squash churn
-  before review. The type records intent for the changelog: `feat` for a user-visible
+- **Spec-first, same PR.** Every feature starts as `specs/NNN-<feature>/` (spec, plan,
+  tasks), committed as `docs(speckit): add NNN-<feature> spec/plan/tasks` BEFORE any `feat`
+  or `fix` commit. Specification and implementation stay in the same milestone PR.
+- **Milestones.** One active milestone is delivered by one PR containing its specification,
+  implementation, validation, and documentation commits. Split or stacked PRs require an
+  explicit maintainer request. The PR MUST carry the active milestone when created, and
+  every completed issue is linked for closure only when that reviewed PR lands on `main`.
+  `scripts/check-linkage.sh --pr N` is the merge gate. A completed milestone is released by
+  one `vX.Y.Z` tag; before pushing it, `scripts/check-linkage.sh --for-tag vX.Y.Z` must pass.
+  `.claude/hooks/linkage-guard.sh` and `.githooks/pre-push` protect that irreversible tag
+  push.
+- **Commits.** Semantic messages (`feat(scope): … (#NNN)`); exactly one task per commit and
+  one commit per task; every commit green on its own; format before commit. A validation-only
+  task commits its checkbox and evidence. Intent, not path: squash churn before review. The
+  type records intent for the changelog: `feat` for a user-visible
   capability, `fix` for a defect, `docs`/`ci`/`chore`/`test`/`refactor` for everything else.
-- **Branches and PRs.** Branch from `main`. One concern per PR (feature ≠ docs). Rebase
-  only: no merge commits in PR branches; stacked PRs are updated with `--force-with-lease`.
-  Never force-push to `main`, never commit to `main` directly.
+- **Branches and PRs.** Branch from `main`, push every milestone task to the same PR, and
+  rebase only: no merge commits in PR branches. Never force-push to `main` or commit to it
+  directly. Agents may prepare and update the milestone PR but leave it open for maintainer
+  review.
 - **Ask first.** New dependencies or upgrades; changes to public API signatures, observable
   behaviour or serialized formats (Principle V); edits to another repository; release or
   publish workflow changes; a licence change.
-- **Never.** Commit broken code; refactor outside the issue's scope; mock an external system
-  where a real integration path exists; phrase a command to evade a guard.
+- **Never.** Commit broken code; refactor outside the milestone's scope; mock an external
+  system where a real integration path exists; phrase a command to evade a guard; merge or
+  close a PR without an explicit post-review instruction for that exact PR from the
+  maintainer. Agents leave prepared PRs open for maintainer review.
 - **Releases are tag-triggered.** Merges run `ci.yml` verification and never create a tag,
   GitHub Release, or published image. One completed `vX.Y.0` milestone is released by one
   deliberate `vX.Y.Z` tag on `main` or `release/X.Y.0`. `release.yml` first validates the
@@ -304,7 +322,8 @@ contradict.
   `.specify/memory/constitution.md`, bumps the version below, rewrites the Sync Impact
   Report comment at the top of the file, and updates `.specify/templates/*` and any affected
   guidance doc in the same PR. It is approved by a maintainer of `galax-io/galaxio-cli`
-  through PR review and committed as
+  through PR review, remains open until the maintainer explicitly merges it, and is
+  committed as
   `docs(speckit): amend constitution to vX.Y.Z (<summary>)`.
 - **Versioning policy.** MAJOR: a principle or governance rule is removed or redefined in a
   backward-incompatible way. MINOR: a principle or section is added, or guidance is
@@ -316,4 +335,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 1.1.1 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-14
+**Version**: 2.0.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-14
