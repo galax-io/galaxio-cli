@@ -50,23 +50,25 @@ Standard-library testing, no assertion library; table-driven subtests; golden fi
 
 **Ask first:** new deps or upgrades, changing public API signatures / observable behavior / serialized formats, editing another repo, release/publish workflow changes.
 
-**Never:** force-push or commit to `main`, merge commits in PR branches (rebase only), commit broken code, opportunistic refactors outside scope, mock external systems where a real integration path exists.
+**Never:** force-push or commit to `main`, merge commits in PR branches (rebase only), commit broken code, opportunistic refactors outside scope, mock external systems where a real integration path exists, merge or close a PR without an explicit post-review instruction for that exact PR from the maintainer.
 
 ## Milestones (ALWAYS)
 
 Every piece of work is tied to a milestone. No exceptions unless explicitly told otherwise.
 
-- **Every PR** must be assigned to the active milestone before merging. No milestone = do not merge.
-- **Every issue** fixed by a PR must be closed when that PR lands on `main`. Do not leave completed issues open.
-- **Spec work** (`specs/NNN-*/`) belongs to the milestone that owns the spec. Link the spec PR to the milestone immediately when creating it.
+- **One milestone = one PR.** Keep all specification, implementation, validation, and milestone documentation commits in one active milestone PR. Split or stack PRs only when the maintainer explicitly requests it.
+- **Every PR** must be assigned to the active milestone when it is created. No milestone = do not merge.
+- **Every issue** completed by the milestone PR must be linked for closure when the reviewed PR lands on `main`. Do not close issues before that merge.
+- **Spec work** (`specs/NNN-*/`) belongs to the milestone that owns the spec and is committed first in the same milestone PR.
 - **Active milestone** = the lowest-numbered open milestone that matches the current spec/plan. Check `gh api repos/galax-io/galaxio-cli/milestones` if unsure.
 
 ## Commits & PRs
 
-- **Spec-first.** `specs/NNN-*/` artifacts → `docs(speckit): add NNN-<feature> spec/plan/tasks` commit BEFORE any `feat`/`fix`. Never folded into implementation.
-- **1 issue = 1 commit.** Each tracked GitHub issue maps to one semantic commit (`feat(scope): … (#NNN)`), green on its own (`go build ./... && go test ./...`). Verified Dependabot PRs may omit an issue, but must carry the active milestone and remain green on their own. Docs, tweaks, and out-of-scope improvements go in separate PRs — never mixed with issue commits.
+- **Spec-first, same PR.** `specs/NNN-*/` artifacts → `docs(speckit): add NNN-<feature> spec/plan/tasks` commit BEFORE any `feat`/`fix`, but never in a separate spec PR.
+- **1 task = 1 commit.** Each task in `tasks.md` (or an explicitly listed recovery checklist) maps to exactly one semantic commit (`feat(scope): … (#NNN)`) and every commit maps to one task. Do not combine tasks in a commit or split a task across commits. A validation-only task commits its checkbox and recorded evidence so it still has its own commit. Each task commit must be green on its own (`go build ./... && go test ./...`).
 - **Intent, not path.** No add-then-remove within a PR. Squash churn before review.
-- **1 concern per PR.** Feature ≠ docs/README. Stack dependent PRs; update with `--force-with-lease`.
+- **One active milestone PR.** Push and update the same PR throughout the milestone. Do not open replacement, documentation, or stacked implementation PRs unless the maintainer explicitly requests a split.
+- **Review owns merge.** Agents may create, push, and update the milestone PR, but must leave it open for maintainer review. Only the maintainer merges or closes it, unless the maintainer gives an explicit post-review instruction for that exact PR in the current conversation.
 - **Idiomatic code.** Follow the language's idioms and the conventions already in the codebase; no control-flow-by-exception, no dead/duplicated code.
 
 ## Release Process (MANDATORY)
