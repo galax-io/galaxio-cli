@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-14
 
-**Status**: Draft
+**Status**: In Review
 
 **Input**: User description: "https://github.com/galax-io/galaxio-cli/milestone/1"
 
