@@ -12,6 +12,20 @@ import (
 // allocating.
 var noGroups = []string{}
 
+// scratch is the storage the optional fields of a record point at. One
+// scratch serves every record a writer produces, so an optional field costs
+// no allocation: encoding/json follows the pointer and writes the value, or
+// omits the field when the pointer is nil.
+type scratch struct {
+	duration      int64
+	cumulated     int64
+	bytesSent     int64
+	bytesReceived int64
+	scenario      string
+	responseCode  string
+	failure       Failure
+}
+
 // headerFrom builds the run header. Warnings and assertions are copied only
 // when present so that a run without them omits the keys.
 func headerFrom(run model.Run) RunRecord {
@@ -48,33 +62,35 @@ func headerFrom(run model.Run) RunRecord {
 
 // requestFrom converts one sample. Outcome is what the source recorded and is
 // never derived from whether a failure is present; Failure is copied exactly
-// when the source set it.
-func requestFrom(s model.Sample) RequestRecord {
+// when the source set it. The record's optional fields point into sc.
+func requestFrom(s model.Sample, sc *scratch) RequestRecord {
 	rec := RequestRecord{
 		Kind:          KindRequest,
 		Groups:        groups(s.Groups),
 		Name:          s.Name,
 		Start:         millis(s.Start),
-		Duration:      durationMillis(s.Duration),
+		Duration:      keepDuration(s.Duration, &sc.duration),
 		Outcome:       s.Outcome.String(),
-		Scenario:      opt(s.Scenario),
-		ResponseCode:  opt(s.ResponseCode),
-		BytesSent:     opt(s.BytesSent),
-		BytesReceived: opt(s.BytesReceived),
+		Scenario:      keep(s.Scenario, &sc.scenario),
+		ResponseCode:  keep(s.ResponseCode, &sc.responseCode),
+		BytesSent:     keep(s.BytesSent, &sc.bytesSent),
+		BytesReceived: keep(s.BytesReceived, &sc.bytesReceived),
 	}
 	if f, ok := s.Failure.Get(); ok {
-		rec.Failure = Some(Failure{Type: f.Type, Message: f.Message})
+		sc.failure = Failure{Type: f.Type, Message: f.Message}
+		rec.Failure = &sc.failure
 	}
 	return rec
 }
 
-func groupFrom(g model.GroupSample) GroupRecord {
+// groupFrom converts one group traversal; its optional fields point into sc.
+func groupFrom(g model.GroupSample, sc *scratch) GroupRecord {
 	return GroupRecord{
 		Kind:              KindGroup,
 		Groups:            groups(g.Groups),
 		Start:             millis(g.Start),
-		Duration:          durationMillis(g.Duration),
-		CumulatedDuration: durationMillis(g.CumulatedDuration),
+		Duration:          keepDuration(g.Duration, &sc.duration),
+		CumulatedDuration: keepDuration(g.CumulatedDuration, &sc.cumulated),
 		Outcome:           g.Outcome.String(),
 	}
 }
@@ -111,22 +127,26 @@ func millis(t time.Time) int64 {
 	return t.UnixMilli()
 }
 
-// durationMillis keeps the set/unset distinction: an unset duration stays
-// unset, a recorded 0 ms becomes Some(0).
-func durationMillis(d model.Opt[time.Duration]) Opt[int64] {
-	v, ok := d.Get()
-	if !ok {
-		return Opt[int64]{}
-	}
-	return Some(v.Milliseconds())
-}
-
-func opt[T comparable](o model.Opt[T]) Opt[T] {
+// keep stores the value the source recorded in slot and returns slot, or
+// returns nil when the source recorded nothing, so that a recorded zero and
+// an absent value never look alike.
+func keep[T comparable](o model.Opt[T], slot *T) *T {
 	v, ok := o.Get()
 	if !ok {
-		return Opt[T]{}
+		return nil
 	}
-	return Some(v)
+	*slot = v
+	return slot
+}
+
+// keepDuration is keep for a duration, stored in milliseconds.
+func keepDuration(o model.Opt[time.Duration], slot *int64) *int64 {
+	d, ok := o.Get()
+	if !ok {
+		return nil
+	}
+	*slot = d.Milliseconds()
+	return slot
 }
 
 // groups substitutes the shared empty path for a nil one so that the key is

@@ -67,9 +67,11 @@ func Write(ctx context.Context, rd simlog.RunReader, w io.Writer) (Summary, erro
 		return sum, &WriteError{Err: err}
 	}
 
-	// One value per kind, reused for every item: encoding a pointer to it
-	// allocates nothing per record.
+	// One value per kind, reused for every item, and one scratch for their
+	// optional fields: encoding a pointer to a reused value allocates nothing
+	// per record.
 	var (
+		sc  scratch
 		req RequestRecord
 		grp GroupRecord
 		usr UserRecord
@@ -92,10 +94,10 @@ func Write(ctx context.Context, rd simlog.RunReader, w io.Writer) (Summary, erro
 		var rec any
 		switch item.Kind {
 		case model.ItemSample:
-			req = requestFrom(item.Sample)
+			req = requestFrom(item.Sample, &sc)
 			rec = &req
 		case model.ItemGroup:
-			grp = groupFrom(item.Group)
+			grp = groupFrom(item.Group, &sc)
 			rec = &grp
 		case model.ItemUser:
 			usr = userFrom(item.User)

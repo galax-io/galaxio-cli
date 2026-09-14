@@ -139,7 +139,7 @@ func TestRequestFrom(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := marshal(t, requestFrom(tt.sample)); got != tt.expected {
+			if got := marshal(t, requestFrom(tt.sample, &scratch{})); got != tt.expected {
 				t.Fatalf("requestFrom =\n%s\nwant\n%s", got, tt.expected)
 			}
 		})
@@ -155,13 +155,13 @@ func TestGroupFrom(t *testing.T) {
 		Duration:          model.Some(1504 * time.Millisecond),
 		CumulatedDuration: model.Some(1503 * time.Millisecond),
 		Outcome:           model.OutcomeFailure,
-	}))
+	}, &scratch{}))
 	expected := `{"kind":"group","groups":["outer","inner, with comma"],"start":1788670095016,"duration":1504,"cumulatedDuration":1503,"outcome":"failure"}`
 	if got != expected {
 		t.Fatalf("groupFrom =\n%s\nwant\n%s", got, expected)
 	}
 
-	got = marshal(t, groupFrom(model.GroupSample{Groups: []string{"outer"}, Outcome: model.OutcomeSuccess}))
+	got = marshal(t, groupFrom(model.GroupSample{Groups: []string{"outer"}, Outcome: model.OutcomeSuccess}, &scratch{}))
 	expected = `{"kind":"group","groups":["outer"],"outcome":"success"}`
 	if got != expected {
 		t.Fatalf("groupFrom without timings =\n%s\nwant\n%s", got, expected)

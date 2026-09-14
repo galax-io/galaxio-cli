@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
 	"github.com/galax-io/parsec/gatling"
 	"github.com/galax-io/parsec/gatling/simlog"
 	"github.com/galax-io/parsec/model"
@@ -31,24 +32,29 @@ func openBytes(t *testing.T, data []byte) simlog.RunReader {
 	return rd
 }
 
-// textLog splits the 3.12.0 corpus log into its header — every line through
-// the RUN record — and its body, so that a test can build a log with the
-// body it needs and a header parsec accepts.
-func textLog(t *testing.T) (header, body []string) {
+// splitCorpus splits the 3.12.0 corpus log into its header and body bytes.
+func splitCorpus(t *testing.T) (header, body []byte) {
 	t.Helper()
 
 	data, err := os.ReadFile(filepath.Join(corpusDir, "3.12.0", "simulation.log"))
 	if err != nil {
 		t.Fatalf("read corpus log: %v", err)
 	}
-	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-	for i, line := range lines {
-		if strings.HasPrefix(line, "RUN\t") {
-			return lines[:i+1], lines[i+1:]
-		}
+	header, body, err = reporttest.Split(data)
+	if err != nil {
+		t.Fatalf("Split: %v", err)
 	}
-	t.Fatalf("no RUN line in the corpus log")
-	return nil, nil
+	return header, body
+}
+
+// textLog is the 3.12.0 corpus log as lines: the header through the RUN
+// record, and the body, so that a test can build a log with the body it
+// needs and a header parsec accepts.
+func textLog(t *testing.T) (header, body []string) {
+	t.Helper()
+
+	h, b := splitCorpus(t)
+	return strings.Split(strings.TrimSuffix(string(h), "\n"), "\n"), strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
 }
 
 func joinLines(lines []string) []byte {
@@ -60,13 +66,12 @@ func joinLines(lines []string) []byte {
 func repeatLog(t *testing.T, n int) []byte {
 	t.Helper()
 
-	header, body := textLog(t)
-	var buf bytes.Buffer
-	buf.Write(joinLines(header))
-	for range n {
-		buf.Write(joinLines(body))
+	header, body := splitCorpus(t)
+	data, err := io.ReadAll(reporttest.Replay(header, body, n))
+	if err != nil {
+		t.Fatalf("Replay: %v", err)
 	}
-	return buf.Bytes()
+	return data
 }
 
 // parseLines checks that every line of out is a standalone JSON object with
@@ -390,5 +395,34 @@ func TestWriteUnknownItemKind(t *testing.T) {
 	}
 	if kinds := parseLines(t, out.Bytes()); len(kinds) != 2 {
 		t.Errorf("kinds = %v, want the header and one record flushed", kinds)
+	}
+}
+
+// maxAllocsPerRecord is the per-record allocation goal from the plan. The
+// count includes parsec's own reader, so it bounds the whole path a record
+// takes, not only this package's share.
+const maxAllocsPerRecord = 4
+
+func TestWriteAllocations(t *testing.T) {
+	header, body := splitCorpus(t)
+	const repeats = 200
+
+	var records int
+	allocs := testing.AllocsPerRun(1, func() {
+		rd, err := simlog.NewRunReader(reporttest.Replay(header, body, repeats))
+		if err != nil {
+			t.Fatalf("NewRunReader: %v", err)
+		}
+		sum, err := Write(context.Background(), rd, io.Discard)
+		if err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		records = sum.Records()
+	})
+
+	perRecord := allocs / float64(records)
+	t.Logf("%.0f allocations over %d records: %.2f per record", allocs, records, perRecord)
+	if perRecord > maxAllocsPerRecord {
+		t.Fatalf("%.2f allocations per record exceeds the goal of %d", perRecord, maxAllocsPerRecord)
 	}
 }

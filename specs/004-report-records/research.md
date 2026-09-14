@@ -84,27 +84,36 @@ maintainer on 2026-09-15 together with the YAML encoding; the table in `record.g
 one place a later rename touches. Emitting parsec's `Field.String()` verbatim — rejected:
 a documented schema should not change when a library reworded a message.
 
-## 4. Absent versus zero: `Opt[T]` with `omitzero`
+## 4. Absent versus zero: pointer fields into per-write scratch storage
 
-**Decision**: Optional numeric fields (`duration`, `cumulatedDuration`, `bytesSent`,
-`bytesReceived`) are a small generic `Opt[T]` in `internal/report/` with `MarshalJSON` and
-`IsZero`, tagged `omitzero`, so an unset value is omitted and a recorded `0` is written as
-`0`. Instants (`start`, `at`) are `int64` epoch milliseconds tagged `omitzero`: parsec
-guarantees a recorded instant is never the zero `time.Time`, and no recorded instant is
-before 1970, so `0` can only mean "could not be resolved" and is correctly omitted.
-Optional strings (`description`, `scenario`, `responseCode`, `failure.type`) use
-`omitempty`, which is exact for strings. `groups` is always present on request and group
-records — an empty, non-nil slice renders as `[]` under `omitzero`, and a request outside
-any group has a known-empty path, not an absent one.
+**Decision**: Optional fields (`duration`, `cumulatedDuration`, `scenario`, `responseCode`,
+`bytesSent`, `bytesReceived`, `failure`) are pointers tagged `omitempty`, and the
+conversion points them into a `scratch` struct the writer allocates once per run. A nil
+pointer is omitted; a pointer to a recorded `0` is written as `0`. Instants (`start`, `at`)
+are `int64` epoch milliseconds tagged `omitzero`: parsec guarantees a recorded instant is
+never the zero `time.Time`, and no recorded instant is before 1970, so `0` can only mean
+"could not be resolved" and is correctly omitted. Optional strings that are never
+"recorded as empty" (`description`, `failure.type`) use `omitempty`. `groups` is always
+present on request and group records — a request outside any group has a known-empty
+path, rendered `[]` from a shared empty slice.
 
-**Rationale**: FR-012 forbids rendering absence as zero; `encoding/json` offers only
-pointers or `omitzero`-aware types to express it. Pointers cost one allocation per
-optional field per record and would break the ≤ 4 allocations goal; the generic type
-costs none. Go 1.24+ `omitzero` honours an `IsZero() bool` method.
+**Rationale**: FR-012 forbids rendering absence as zero. The first design was a generic
+`Opt[T]` with `IsZero` and `MarshalJSON` methods; measured on the 64 MiB replay it cost
+9.8 allocations per record, all of them `encoding/json` boxing the value to call those
+methods through reflection (profile: `reflect.packEface` under the struct arshaler and
+`bytes.Clone` of every `MarshalJSON` result). Pointers into reused storage are followed by
+the encoder without any call and any allocation: the same replay then allocates 475 objects
+in total for 940 000 records, and the 2 GiB replay 87 objects for 30 million. A record's
+pointers are valid until the next conversion, the same rule parsec applies to `Groups`, and
+the writer encodes each record before converting the next.
 
-**Alternatives considered**: `*int64` fields — rejected on allocations; encoding `null` —
-rejected, the spec says omit; a hand-written `MarshalJSON` per record kind — rejected as
-duplicated code.
+**Alternatives considered**: `Opt[T]` without `IsZero` (reflect's own zero check has the
+same semantics) — halved the cost but each set field still paid for `MarshalJSON` plus the
+encoder's clone of its result, 3 allocations per set field; a pointer-receiver
+`MarshalJSON` with `strconv` — no cheaper, and a struct marshalled by value silently
+renders `{}` for the field; a hand-written JSON appender — zero allocations but a second
+encoder to keep correct; `encoding/json/v2` with `MarshalJSONTo` — not importable on this
+toolchain without an experiment flag.
 
 ## 5. Assertion payloads: base64 of the bytes parsec delivered
 

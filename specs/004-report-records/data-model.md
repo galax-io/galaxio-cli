@@ -119,12 +119,14 @@ never appears; it exists so the stream is lossless for a source that interleaves
 |---|---|---|---|
 | `payload` | string (base64) | always | `Item.Assertion`, base64 of the bytes verbatim |
 
-## Optional value (`Opt[T]`)
+## Optional fields
 
-`internal/report` carries a small generic `Opt[T comparable]{V T; Set bool}` with
-`MarshalJSON` (writes `V`) and `IsZero() bool` (`!Set`), used with the `omitzero` tag. It
-mirrors parsec's `model.Opt` without importing it into the schema, so a recorded zero and
-an unrecorded value never look alike and no optional field costs an allocation.
+An optional field is a pointer (`*int64`, `*string`, `*Failure`) tagged `omitempty`: nil is
+omitted, a pointer to a recorded zero is written as `0`. The conversion points each one
+into a `scratch` struct the writer allocates once, so an optional field costs no allocation
+per record; a record is therefore valid only until the next conversion, exactly as parsec's
+reused `Groups` slice is. The measured effect and the rejected `Opt[T]` design are in
+research.md §4.
 
 ## Summary (returned by `Write`, not emitted)
 

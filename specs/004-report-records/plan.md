@@ -82,8 +82,8 @@ section, spec artifacts.
 | VI | Idiomatic, Simple Go — gofmt/vet clean; errors as values wrapped into `UsageError`/`RuntimeError` at the boundary; no panic control flow; no dead or duplicated code; no refactor outside this issue's scope. | PASS — errors from parsec are inspected with `errors.As` and wrapped once at the command boundary; with one encoding there is no encoder interface — `Write` writes JSON Lines to an `io.Writer` directly; no options struct, registry or plugin abstraction; no change to existing commands beyond the parent's help text and its test. Required skills (`golang-cli`, `golang-spf13-cobra`, `golang-error-handling`, `golang-testing`, `golang-naming`, `golang-documentation`) are read before the corresponding code is written; consulted ones are listed in research.md §14. |
 
 **Post-design re-check**: gates II–VI PASS; gate I keeps its single justified FAIL (no
-`-o text`). The data model introduces one small generic optional type to keep
-absent-versus-zero honest without per-field allocation (Principle II and VI); the contracts
+`-o text`). The data model keeps absent-versus-zero honest with pointer fields into
+per-write scratch storage, at no allocation per record (Principle II and VI); the contracts
 add no flag beyond `-o`; the dependency decision is unchanged and approved.
 
 ## Project Structure
@@ -148,7 +148,7 @@ no subcommand is added (research.md §12).
 |-----------|------------|-------------------------------------|
 | Principle I: `report` offers neither `-o text` nor `-o json` | Maintainer decision, 2026-09-15: `-o` on `report` selects a *report format* (`stats`, `global_stats`, `yml` — all reserved now), not an encoding of one output; the record stream is the unnamed default with one encoding shared with the sidecar. A `text` rendering would be a second published surface (Principle V) with no consumer, and a `json` name would collide with the report-format meaning of `-o`. | Complying by adding `-o text\|json` was rejected by the maintainer, repeatedly. A follow-up constitution amendment should say that on `report` commands `-o` names a report format and the default output is the machine-readable one, so later report commands do not each need this row. |
 
-The generic `Opt[T]` in `internal/report/` is not a gate violation; it exists because
-`encoding/json` cannot otherwise tell "duration 0 ms" from "no duration" without a pointer
-per optional field per record, which would break the per-record allocation goal
-(research.md §4).
+The `scratch` struct in `internal/report/` is not a gate violation: optional fields are
+pointers into it, which is how `encoding/json` tells "duration 0 ms" from "no duration"
+without an allocation per record. The generic `Opt[T]` first planned here was measured and
+replaced (research.md §4).

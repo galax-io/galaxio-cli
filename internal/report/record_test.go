@@ -8,38 +8,32 @@ import (
 	"github.com/galax-io/parsec/model"
 )
 
-func TestOptMarshalJSON(t *testing.T) {
-	t.Parallel()
+func ptr[T any](v T) *T {
+	return &v
+}
 
-	type holder struct {
-		Duration Opt[int64]   `json:"duration,omitzero"`
-		Failure  Opt[Failure] `json:"failure,omitzero"`
-	}
+func TestOptionalFields(t *testing.T) {
+	t.Parallel()
 
 	tests := []struct {
 		name     string
-		value    holder
+		value    RequestRecord
 		expected string
 	}{
 		{
-			name:     "unset values are omitted",
-			value:    holder{},
-			expected: `{}`,
+			name:     "unrecorded values are omitted",
+			value:    RequestRecord{Kind: KindRequest, Groups: []string{}, Name: "GET /ok", Outcome: "success"},
+			expected: `{"kind":"request","groups":[],"name":"GET /ok","outcome":"success"}`,
 		},
 		{
 			name:     "a recorded zero is written as zero",
-			value:    holder{Duration: Some[int64](0)},
-			expected: `{"duration":0}`,
+			value:    RequestRecord{Kind: KindRequest, Groups: []string{}, Name: "GET /ok", Duration: ptr[int64](0), Outcome: "success"},
+			expected: `{"kind":"request","groups":[],"name":"GET /ok","duration":0,"outcome":"success"}`,
 		},
 		{
-			name:     "a set value is written",
-			value:    holder{Duration: Some[int64](1504)},
-			expected: `{"duration":1504}`,
-		},
-		{
-			name:     "a struct value nests and omits its own empty type",
-			value:    holder{Failure: Some(Failure{Message: "status.find.is(200), found 500"})},
-			expected: `{"failure":{"message":"status.find.is(200), found 500"}}`,
+			name:     "a failure nests and omits its own empty type",
+			value:    RequestRecord{Kind: KindRequest, Groups: []string{}, Name: "GET /fail", Outcome: "failure", Failure: &Failure{Message: "status.find.is(200), found 500"}},
+			expected: `{"kind":"request","groups":[],"name":"GET /fail","outcome":"failure","failure":{"message":"status.find.is(200), found 500"}}`,
 		},
 	}
 
@@ -55,21 +49,6 @@ func TestOptMarshalJSON(t *testing.T) {
 				t.Fatalf("Marshal = %s, want %s", got, tt.expected)
 			}
 		})
-	}
-}
-
-func TestOptGet(t *testing.T) {
-	t.Parallel()
-
-	if v, ok := Some("x").Get(); !ok || v != "x" {
-		t.Fatalf("Some(\"x\").Get() = %q, %v; want \"x\", true", v, ok)
-	}
-	var unset Opt[string]
-	if v, ok := unset.Get(); ok || v != "" {
-		t.Fatalf("unset.Get() = %q, %v; want \"\", false", v, ok)
-	}
-	if unset != (Opt[string]{}) {
-		t.Fatalf("unset Opt must equal the zero Opt")
 	}
 }
 

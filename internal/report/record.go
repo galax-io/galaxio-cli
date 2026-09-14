@@ -1,10 +1,6 @@
 package report
 
-import (
-	"encoding/json"
-
-	"github.com/galax-io/parsec/model"
-)
+import "github.com/galax-io/parsec/model"
 
 // Kind is the value of the "kind" key that opens every record.
 type Kind string
@@ -19,39 +15,6 @@ const (
 	KindError     Kind = "error"
 	KindAssertion Kind = "assertion"
 )
-
-// Opt is a value the source may not have recorded.
-//
-// The zero Opt is unset and is omitted from JSON under the omitzero tag, so a
-// duration the source measured as 0 ms and a duration it never recorded do
-// not read alike. It is a value rather than a pointer so that an optional
-// field costs no allocation per record.
-type Opt[T comparable] struct {
-	value T
-	isSet bool
-}
-
-// Some returns an Opt holding v.
-func Some[T comparable](v T) Opt[T] {
-	return Opt[T]{value: v, isSet: true}
-}
-
-// Get returns the value and whether it was set.
-func (o Opt[T]) Get() (T, bool) {
-	return o.value, o.isSet
-}
-
-// IsZero reports whether the value is unset; encoding/json consults it for
-// the omitzero tag.
-func (o Opt[T]) IsZero() bool {
-	return !o.isSet
-}
-
-// MarshalJSON writes the held value; an unset Opt is omitted before this is
-// reached.
-func (o Opt[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(o.value)
-}
 
 // Warning is what the source's version gate raised about a run that was read
 // anyway.
@@ -84,29 +47,34 @@ type RunRecord struct {
 
 // RequestRecord is one recorded request. Groups is always present: a
 // request outside any group has an empty path, not an absent one.
+//
+// An optional field is a pointer so that a value the source did not record
+// is omitted while a recorded zero is written as 0. The pointers a conversion
+// returns refer to scratch storage the writer reuses, so a record is valid
+// only until the next conversion — the same rule parsec applies to Groups.
 type RequestRecord struct {
-	Kind          Kind         `json:"kind"`
-	Groups        []string     `json:"groups"`
-	Name          string       `json:"name"`
-	Start         int64        `json:"start,omitzero"`
-	Duration      Opt[int64]   `json:"duration,omitzero"`
-	Outcome       string       `json:"outcome"`
-	Failure       Opt[Failure] `json:"failure,omitzero"`
-	Scenario      Opt[string]  `json:"scenario,omitzero"`
-	ResponseCode  Opt[string]  `json:"responseCode,omitzero"`
-	BytesSent     Opt[int64]   `json:"bytesSent,omitzero"`
-	BytesReceived Opt[int64]   `json:"bytesReceived,omitzero"`
+	Kind          Kind     `json:"kind"`
+	Groups        []string `json:"groups"`
+	Name          string   `json:"name"`
+	Start         int64    `json:"start,omitzero"`
+	Duration      *int64   `json:"duration,omitempty"`
+	Outcome       string   `json:"outcome"`
+	Failure       *Failure `json:"failure,omitempty"`
+	Scenario      *string  `json:"scenario,omitempty"`
+	ResponseCode  *string  `json:"responseCode,omitempty"`
+	BytesSent     *int64   `json:"bytesSent,omitempty"`
+	BytesReceived *int64   `json:"bytesReceived,omitempty"`
 }
 
 // GroupRecord is one traversal of a group, closing. Groups is the group's
 // own path, its own name last.
 type GroupRecord struct {
-	Kind              Kind       `json:"kind"`
-	Groups            []string   `json:"groups"`
-	Start             int64      `json:"start,omitzero"`
-	Duration          Opt[int64] `json:"duration,omitzero"`
-	CumulatedDuration Opt[int64] `json:"cumulatedDuration,omitzero"`
-	Outcome           string     `json:"outcome"`
+	Kind              Kind     `json:"kind"`
+	Groups            []string `json:"groups"`
+	Start             int64    `json:"start,omitzero"`
+	Duration          *int64   `json:"duration,omitempty"`
+	CumulatedDuration *int64   `json:"cumulatedDuration,omitempty"`
+	Outcome           string   `json:"outcome"`
 }
 
 // UserRecord is a virtual user starting or ending a scenario.
