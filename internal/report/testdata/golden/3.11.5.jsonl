@@ -1,0 +1,67 @@
+{"kind":"run","id":"corpussimulation","name":"io.galaxio.parsec.corpus.CorpusSimulation","start":1788379664977,"tool":"gatling","toolVersion":"3.11.5","absent":["sample.scenario","sample.responseCode","sample.bytesSent","sample.bytesReceived","sample.failureType","sample.userIdentity","timing.connect","timing.dns","timing.tls","requirements","intervalSeries"],"assertions":["QUFFQkFBSUNBQUFBQUFBQUFQQS8=","QUFFQkFBTUNBQUFBQUFBQUFQQS8=","QUFNQUFRZEhSVlFnTDI5ckF3QUJBZ01BQUFBQUFBQk03VUE9"]}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379665622}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379665622}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379665622}
+{"kind":"request","groups":[],"name":"GET /ok","start":1788379665619,"duration":7,"outcome":"success"}
+{"kind":"request","groups":[],"name":"GET /ok","start":1788379665619,"duration":7,"outcome":"success"}
+{"kind":"request","groups":[],"name":"GET /ok","start":1788379665619,"duration":7,"outcome":"success"}
+{"kind":"request","groups":["outer"],"name":"GET /ok","start":1788379665735,"duration":1,"outcome":"success"}
+{"kind":"request","groups":["outer"],"name":"GET /ok","start":1788379665735,"duration":1,"outcome":"success"}
+{"kind":"request","groups":["outer"],"name":"GET /ok","start":1788379665735,"duration":0,"outcome":"success"}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379666113}
+{"kind":"request","groups":[],"name":"GET /ok","start":1788379666110,"duration":6,"outcome":"success"}
+{"kind":"request","groups":["outer"],"name":"GET /ok","start":1788379666219,"duration":1,"outcome":"success"}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379666613}
+{"kind":"request","groups":[],"name":"GET /ok","start":1788379666611,"duration":5,"outcome":"success"}
+{"kind":"request","groups":["outer"],"name":"GET /ok","start":1788379666719,"duration":1,"outcome":"success"}
+{"kind":"user","scenario":"Corpus recording","event":"start","at":1788379667113}
+{"kind":"request","groups":[],"name":"GET /ok","start":1788379667110,"duration":7,"outcome":"success"}
+{"kind":"request","groups":["outer"],"name":"GET /ok","start":1788379667221,"duration":1,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379665736,"duration":1503,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379665736,"duration":1504,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379665736,"duration":1503,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379667241,"duration":1,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379667240,"duration":2,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379667241,"duration":1,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379665736,"duration":1515,"cumulatedDuration":1505,"outcome":"failure"}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379665736,"duration":1515,"cumulatedDuration":1504,"outcome":"failure"}
+{"kind":"group","groups":["outer"],"start":1788379665733,"duration":1518,"cumulatedDuration":1506,"outcome":"failure"}
+{"kind":"group","groups":["outer"],"start":1788379665733,"duration":1518,"cumulatedDuration":1505,"outcome":"failure"}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379665736,"duration":1515,"cumulatedDuration":1505,"outcome":"failure"}
+{"kind":"group","groups":["outer"],"start":1788379665733,"duration":1518,"cumulatedDuration":1506,"outcome":"failure"}
+{"kind":"request","groups":[],"name":"connect refused","start":1788379667354,"duration":4,"outcome":"failure","failure":{"message":"j.n.ConnectException: Connection refused"}}
+{"kind":"request","groups":[],"name":"connect refused","start":1788379667354,"duration":4,"outcome":"failure","failure":{"message":"j.n.ConnectException: Connection refused"}}
+{"kind":"request","groups":[],"name":"connect refused","start":1788379667354,"duration":4,"outcome":"failure","failure":{"message":"j.n.ConnectException: Connection refused"}}
+{"kind":"request","groups":[],"name":"unknown host","start":1788379667360,"duration":2,"outcome":"failure","failure":{"message":"j.n.UnknownHostException: nonexistent.invalid"}}
+{"kind":"request","groups":[],"name":"unknown host","start":1788379667360,"duration":2,"outcome":"failure","failure":{"message":"j.n.UnknownHostException: nonexistent.invalid: nodename nor servname provided, or not known"}}
+{"kind":"request","groups":[],"name":"unknown host","start":1788379667360,"duration":2,"outcome":"failure","failure":{"message":"j.n.UnknownHostException: nonexistent.invalid"}}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379667366}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379667366}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379667366}
+{"kind":"user","scenario":"Corpus recording","event":"end","at":1788379667367}
+{"kind":"user","scenario":"Corpus recording","event":"end","at":1788379667368}
+{"kind":"user","scenario":"Corpus recording","event":"end","at":1788379667368}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379666220,"duration":1504,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379667725,"duration":2,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379666220,"duration":1508,"cumulatedDuration":1506,"outcome":"failure"}
+{"kind":"group","groups":["outer"],"start":1788379666219,"duration":1509,"cumulatedDuration":1507,"outcome":"failure"}
+{"kind":"request","groups":[],"name":"connect refused","start":1788379667832,"duration":2,"outcome":"failure","failure":{"message":"j.n.ConnectException: Connection refused"}}
+{"kind":"request","groups":[],"name":"unknown host","start":1788379667835,"duration":0,"outcome":"failure","failure":{"message":"j.n.UnknownHostException: nonexistent.invalid"}}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379667837}
+{"kind":"user","scenario":"Corpus recording","event":"end","at":1788379667839}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379666721,"duration":1503,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379668225,"duration":0,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379666720,"duration":1506,"cumulatedDuration":1504,"outcome":"failure"}
+{"kind":"group","groups":["outer"],"start":1788379666719,"duration":1507,"cumulatedDuration":1505,"outcome":"failure"}
+{"kind":"request","groups":[],"name":"connect refused","start":1788379668329,"duration":1,"outcome":"failure","failure":{"message":"j.n.ConnectException: Connection refused"}}
+{"kind":"request","groups":[],"name":"unknown host","start":1788379668330,"duration":0,"outcome":"failure","failure":{"message":"j.n.UnknownHostException: nonexistent.invalid"}}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379668331}
+{"kind":"user","scenario":"Corpus recording","event":"end","at":1788379668331}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /slow","start":1788379667223,"duration":1502,"outcome":"success"}
+{"kind":"request","groups":["outer","inner  with comma"],"name":"GET /fail","start":1788379668726,"duration":1,"outcome":"failure","failure":{"message":"status.find.is(200), but actually found 500"}}
+{"kind":"group","groups":["outer","inner  with comma"],"start":1788379667223,"duration":1505,"cumulatedDuration":1503,"outcome":"failure"}
+{"kind":"group","groups":["outer"],"start":1788379667220,"duration":1508,"cumulatedDuration":1504,"outcome":"failure"}
+{"kind":"request","groups":[],"name":"connect refused","start":1788379668830,"duration":1,"outcome":"failure","failure":{"message":"j.n.ConnectException: Connection refused"}}
+{"kind":"request","groups":[],"name":"unknown host","start":1788379668832,"duration":0,"outcome":"failure","failure":{"message":"j.n.UnknownHostException: nonexistent.invalid"}}
+{"kind":"error","message":"unresolvable url: No attribute named 'undefinedAttribute' is defined ","at":1788379668832}
+{"kind":"user","scenario":"Corpus recording","event":"end","at":1788379668833}
