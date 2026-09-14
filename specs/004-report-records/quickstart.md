@@ -101,6 +101,21 @@ Expected: no formatting diff, vet clean, all tests pass with the race detector, 
 coverage ≥ 80%, tidy leaves no diff, integration suite passes (the pipe test needs `head`),
 no known vulnerabilities.
 
+Observed 2026-09-15 (T016, commit `80f45e1` and its predecessors, Go 1.27.1, darwin/arm64):
+
+```text
+gofmt:      no diff
+vet:        clean
+tests:      10 packages ok (race on)
+coverage:   84.6% total
+report pkg: 95.1% mean over 33 functions
+mod tidy:   no diff
+mod verify: all modules verified
+integration: 10 packages ok
+build:      ok ( 27M)
+govulncheck: No vulnerabilities found.
+```
+
 ## 7. Documentation
 
 `README.md` § Reporting Ecosystem documents `galaxio report`, its argument, `-o`, exit
