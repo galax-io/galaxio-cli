@@ -1,24 +1,21 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.1 → 1.1.0
-Bump rationale: MINOR. galaxio-cli#71 restores the organisation's release contract:
-one completed milestone produces one deliberate version tag. `ci.yml` verifies PRs and
-main pushes only; `release.yml` is triggered by `vX.Y.Z`, checks tag placement and
-`scripts/check-linkage.sh --for-tag`, reruns every release gate, then publishes through
-GoReleaser and Docker Hub in that order.
+Version change: 1.1.0 → 1.1.1
+Bump rationale: PATCH. galaxio-cli#107 removes an obsolete statement that couples an
+unrelated external library to CLI report arithmetic. The normative ownership boundary
+between `galaxio-cli` and `parsec` is unchanged.
 
 Principles: unchanged (I–VI).
 
 Added sections: none. Removed sections: none.
 
 Modified:
-- Quality Gates: docs-only merges still run verification, but only a tag starts publication.
-- Development Workflow: the release rule and hotfix path are tag-triggered and permit the
-  shared `release/X.Y.0` branch convention.
-- AGENTS.md: now states the same milestone-to-tag procedure and release workflow.
+- Principle II rationale: describes only CLI report arithmetic over `parsec` definitions.
+- Active milestone artifacts and README: remove the unrelated component from
+  `galaxio-cli` scope.
 
-Templates: no template text depends on the changed lines; none touched.
+Templates and agent guidance: no text depends on the changed rationale; none touched.
 - ✅ .specify/templates/plan-template.md — Constitution Check gates unchanged.
 - ✅ .specify/templates/tasks-template.md — unchanged.
 - ✅ .specify/templates/spec-template.md — unchanged.
@@ -82,10 +79,9 @@ contract be tested without a terminal.
 - Source detection is by file content, never by file name or extension; an explicit override
   flag takes precedence over detection.
 
-Rationale: two consumers compute — this command over a finished log, the `comet` sidecar
-over a log still being written — and the library refuses to pick one implementation so that
-the part that must not diverge stays in one place. The arithmetic here is deliberately a
-second implementation, and the honesty rules are what keep it comparable.
+Rationale: the CLI computes over finished logs while `parsec` supplies shared definitions
+rather than aggregate implementations. Keeping report arithmetic here prevents library
+consumers from inheriting CLI policy, and the honesty rules keep the result comparable.
 
 ### III. Tests Land With The Change (NON-NEGOTIABLE)
 
@@ -320,4 +316,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-13
+**Version**: 1.1.1 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-14

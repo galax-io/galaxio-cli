@@ -3,9 +3,10 @@
 Evidence was checked on 2026-09-14 against milestone
 [`v0.12.0 Naming and licence`](https://github.com/galax-io/galaxio-cli/milestone/1),
 issues [#47](https://github.com/galax-io/galaxio-cli/issues/47) and
-[#48](https://github.com/galax-io/galaxio-cli/issues/48), the current repository tree, and
-the organization repositories visible to the authenticated maintainer. Reproduction
-commands are collected in [quickstart.md](quickstart.md).
+[#48](https://github.com/galax-io/galaxio-cli/issues/48), with the scope correction tracked
+in [#107](https://github.com/galax-io/galaxio-cli/issues/107), the current repository tree,
+and the public `parsec` repository. Reproduction commands are collected in
+[quickstart.md](quickstart.md).
 
 This file is the authoritative decision record required by FR-013. The normative
 requirements remain in [spec.md](spec.md).
@@ -17,24 +18,20 @@ requirements remain in [spec.md](spec.md).
 | Role | Canonical identity | Repository/module or invocation | Visibility |
 |---|---|---|---|
 | Result-primitives library | `parsec` | `github.com/galax-io/parsec` | Public |
-| Live-metrics sidecar | `comet` | `galax-io/comet` | Private |
 | Finished-run CLI namespace | `report` | `galaxio report` | Public command help |
 
-**Rationale**: The organization already controls both repository paths. GitHub reports
-`galax-io/parsec` as public and `galax-io/comet` as private, which resolves the collision
-edge case within the only namespace that matters. `report` is the noun a CLI user is most
-likely to try for finished-run output, and it does not collide with an existing root
-command. The three names are distinct enough to keep the library, live sidecar, and user
-action separate in later specifications.
+**Rationale**: The organization controls the public `galax-io/parsec` repository, which
+resolves the library-name collision edge case within the only namespace that matters.
+`report` is the noun a CLI user is most likely to try for finished-run output, and it does
+not collide with an existing root command. The two names keep the shared primitives and
+the user action distinct in later specifications.
 
 **Alternatives considered**:
 
-- `galaxio-results` and `galaxio-tail`: descriptive, but longer and inconsistent with the
-  established organization register; rejected after the organization secured the concise
-  repository paths.
-- A descriptive public-library name with `comet` for the private component: rejected
-  because it creates two naming systems for one ecosystem.
-- A command name derived from either repository: rejected because users seek an action,
+- `galaxio-results`: descriptive, but longer and inconsistent with the established
+  organization register; rejected after the organization secured the concise repository
+  path.
+- A command name derived from the library repository: rejected because users seek an action,
   not an internal component.
 
 ## R2. Minimal `report` command surface
@@ -127,7 +124,6 @@ different GitHub API spelling.
 | `README.md` | Links to `LICENSE` but does not name the expression | State `GPL-2.0-only` explicitly and link the decision record |
 | GitHub repository metadata | `gpl-2.0` / “GNU General Public License v2.0” | Document as GitHub's classifier for the recognized v2 file; verify it still resolves after any notice change |
 | `galax-io/parsec` | Public; `MIT` | Audit only; no external edit |
-| `galax-io/comet` | Private; GitHub reports another/unspecified licence | Make no licence commitment; visibility only is in scope |
 
 **Rationale**: README is currently the only repository-owned surface that is too implicit.
 The same GPL v2 text is used for both `only` and `or-later` expressions; SPDX notes that a
@@ -143,8 +139,8 @@ the auditable evidence.
   copies and says changing the document is not allowed.
 - Treat the README link alone as exact metadata: rejected because it does not distinguish
   `GPL-2.0-only` from `GPL-2.0-or-later`.
-- Edit `parsec` or `comet` from this repository: rejected by scope and the cross-repository
-  ask-first boundary.
+- Edit `parsec` from this repository: rejected by scope and the cross-repository ask-first
+  boundary.
 
 ## R6. Durable decision location
 
@@ -166,11 +162,12 @@ and design analysis.
 
 ## R7. Delivery and closure sequence
 
-**Decision**: Land the Spec Kit artifacts first without closing either issue. Then land a
-separate one-commit #47 PR for the public namespace and its README entry. After #47, land a
-separate one-commit #48 PR for explicit licence posture, with any `LICENSE` notice subject
-to approval. Assign every PR to milestone 1 and use `Closes #47` / `Closes #48` only on the
-corresponding implementation PR.
+**Decision**: Land the Spec Kit artifacts first without closing either implementation issue.
+Then land a separate one-commit #47 PR for the public namespace and its README entry. After
+#47, land a separate one-commit #48 PR for explicit licence posture, with any `LICENSE`
+notice subject to approval. Remove the unrelated component references through #107 before
+final verification. Assign every PR to milestone 1 and use each closing reference only on
+the corresponding implementation or correction PR.
 
 **Rationale**: This satisfies the repository's spec-first, one-issue/one-commit, dependency
 ordering, milestone, and closure rules. It also keeps the already-uncommitted Spec Kit

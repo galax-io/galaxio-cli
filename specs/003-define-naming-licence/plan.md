@@ -5,12 +5,13 @@
 **Input**: Feature specification from `/specs/003-define-naming-licence/spec.md`
 (milestone [`v0.12.0 Naming and licence`](https://github.com/galax-io/galaxio-cli/milestone/1),
 issues [#47](https://github.com/galax-io/galaxio-cli/issues/47) and
-[#48](https://github.com/galax-io/galaxio-cli/issues/48))
+[#48](https://github.com/galax-io/galaxio-cli/issues/48), plus the
+[scope correction #107](https://github.com/galax-io/galaxio-cli/issues/107))
 
 ## Summary
 
-Make `parsec`, `comet`, and `report` the durable vocabulary for the public result-primitives
-library, private live-metrics sidecar, and CLI reporting namespace. Add a help-only
+Make `parsec` and `report` the durable vocabulary for the public result-primitives library
+and CLI reporting namespace. Add a help-only
 `galaxio report` parent command that is visible from root help, document the names and the
 `GPL-2.0-only`/`MIT` boundary, and record the compatibility evidence needed to close #47
 and #48. This milestone deliberately adds no report subcommand, calculation, input/output
@@ -38,7 +39,7 @@ Linux, and Windows on amd64/arm64, plus the distroless Linux container.
 **Performance Goals**: N/A for the help-only namespace and documentation. No result stream
 is opened and no report arithmetic is introduced.
 
-**Constraints**: Preserve `GPL-2.0-only`; do not edit `galax-io/parsec` or `galax-io/comet`;
+**Constraints**: Preserve `GPL-2.0-only`; do not edit `galax-io/parsec`;
 do not change a release workflow or publish a tag; do not add `internal/report/`, report
 flags, JSON output, or a module dependency; add a short `GPL-2.0-only` project notice before
 the full GPL v2 terms without changing those verbatim terms, and only after the required
@@ -128,6 +129,7 @@ and MUST NOT be swept into the feature's spec or implementation commits.
    without editing the verbatim GPL terms. Document GitHub's legacy
    `GPL-2.0` classifier as the platform representation of the v2-only file; the PR body
    carries `Closes #48` and milestone 1.
-4. Do not import `parsec`, modify `comet`, change a release workflow, close the milestone,
-   or create/push `v0.12.0` in these PRs. Once both fixes are on `main` and both issues are
-   closed, the separate release procedure begins with the mandated linkage audit.
+4. Do not import or modify `parsec`, change a release workflow, close the milestone, or
+   create/push `v0.12.0` in these PRs. Once both fixes and the #107 scope correction are on
+   `main` and their issues are closed, the separate release procedure begins with the
+   mandated linkage audit.

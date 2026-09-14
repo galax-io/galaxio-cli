@@ -10,16 +10,16 @@
 
 **Tracking**: [milestone `v0.12.0 Naming and licence`](https://github.com/galax-io/galaxio-cli/milestone/1);
 [galax-io/galaxio-cli#47](https://github.com/galax-io/galaxio-cli/issues/47) and
-[galax-io/galaxio-cli#48](https://github.com/galax-io/galaxio-cli/issues/48)
+[galax-io/galaxio-cli#48](https://github.com/galax-io/galaxio-cli/issues/48), with the
+[scope correction #107](https://github.com/galax-io/galaxio-cli/issues/107)
 
 ## Background
 
-The milestone establishes names and licensing boundaries for three related Galaxio
+The milestone establishes names and licensing boundaries for the two related CLI/reporting
 components before later work publishes interfaces that would be expensive to rename:
 
 - `parsec` is the public load-test result-primitives library at
   `github.com/galax-io/parsec`;
-- `comet` is the private live-metrics sidecar at `galax-io/comet`;
 - `report` is the user-facing command group, invoked as `galaxio report`.
 
 The selected licensing boundary keeps `galaxio-cli` under `GPL-2.0-only` and the public
@@ -33,7 +33,7 @@ so it remains unsuitable for direct inclusion in a GPL-2.0-only program without 
 licensing decision.
 
 This specification turns those existing choices into one durable milestone contract. It
-does not define report calculations, the public library API, or sidecar behaviour.
+does not define report calculations or the public library API.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -41,7 +41,7 @@ does not define report calculations, the public library API, or sidecar behaviou
 
 A maintainer or downstream contributor can name every ecosystem component without relying
 on placeholders or revisiting alternatives. Repository references, planning documents, and
-user-facing command help consistently use `parsec`, `comet`, and `report` for their distinct
+user-facing command help consistently use `parsec` and `report` for their distinct
 roles.
 
 **Why this priority**: Published repository, module, and command names become dependencies
@@ -49,7 +49,7 @@ for later milestones. Settling them first prevents redirects, import-path churn,
 names for the same capability.
 
 **Independent Test**: Review the authoritative decision record, organization repositories,
-active planning documents, and root command help; each of the three roles resolves to
+active planning documents, and root command help; each of the two roles resolves to
 exactly one canonical name and no active placeholder remains.
 
 **Acceptance Scenarios**:
@@ -57,12 +57,10 @@ exactly one canonical name and no active placeholder remains.
 1. **Given** a contributor planning result ingestion, **When** they look up the public
    result-primitives library, **Then** the canonical repository and module identity is
    `github.com/galax-io/parsec`.
-2. **Given** a maintainer planning live run metrics, **When** they identify the private
-   sidecar, **Then** the canonical organization repository identity is `galax-io/comet`.
-3. **Given** a CLI user looking for finished-run reporting, **When** they inspect root help,
+2. **Given** a CLI user looking for finished-run reporting, **When** they inspect root help,
    **Then** `report` appears as the command group and is invoked as `galaxio report`.
-4. **Given** a later issue or specification in this ecosystem, **When** it refers to any of
-   the three components, **Then** it uses the corresponding canonical name rather than a
+3. **Given** a later issue or specification in this ecosystem, **When** it refers to either
+   component, **Then** it uses the corresponding canonical name rather than a
    descriptive placeholder or rejected alternative.
 
 ---
@@ -117,18 +115,17 @@ evidence sufficient to close them when the specification work lands.
    selected repository names and the `report` command name without unresolved alternatives.
 2. **Given** issue #48, **When** its acceptance evidence is reviewed, **Then** it shows
    consistent CLI licensing and a compatible permissive licence for the shared library.
-3. **Given** both issue fixes are on the milestone's release commit, **When** the milestone
-   is audited, **Then** #47 and #48 are closed and the milestone has no remaining open work.
+3. **Given** both issue fixes and the scope correction are on the milestone's release
+   commit, **When** the milestone is audited, **Then** #47, #48, and #107 are closed and the
+   milestone has no remaining open work.
 
 ### Edge Cases
 
-- A generic or well-known word such as `comet` or `parsec` exists elsewhere: the canonical
+- A generic or well-known word such as `parsec` exists elsewhere: the canonical
   identity includes the `galax-io` organization, and organization ownership of the exact
   repository path is the deciding evidence.
 - The term “MIT licence” is used ambiguously: project records use the SPDX identifier `MIT`,
   preserve its exact notice, and connect it to the FSF's Expat compatibility entry.
-- The private `comet` repository is not visible to a public consumer: public documentation
-  may name its role and organization identity but must not promise public access.
 - Root help already contains a command with a conflicting name: the `report` name is not
   accepted until the conflict is resolved without silently replacing an existing command.
 - A licence surface cannot be inspected or disagrees with the others: milestone acceptance
@@ -145,13 +142,10 @@ evidence sufficient to close them when the specification work lands.
 - **FR-001**: The decision record MUST designate `parsec` as the sole canonical name for
   the public result-primitives library and MUST identify its repository and module path as
   `github.com/galax-io/parsec`.
-- **FR-002**: The decision record MUST designate `comet` as the sole canonical name for the
-  private live-metrics sidecar and MUST identify its organization repository as
-  `galax-io/comet`.
-- **FR-003**: The decision record MUST designate `report` as the sole canonical CLI command
+- **FR-002**: The decision record MUST designate `report` as the sole canonical CLI command
   group name and MUST show its invocation as `galaxio report`.
-- **FR-004**: The organization MUST control repositories at both selected paths; `parsec`
-  MUST be publicly discoverable and `comet` MUST retain its intended private visibility.
+- **FR-004**: The organization MUST control the selected `parsec` repository path and it
+  MUST be publicly discoverable.
 - **FR-005**: Root CLI help MUST list `report` as a command group without changing or
   removing an existing published command.
 - **FR-006**: Active specifications, contributor guidance, and user-facing documentation
@@ -172,19 +166,19 @@ evidence sufficient to close them when the specification work lands.
 - **FR-011**: The decision record MUST also preserve the boundary that Apache-2.0 is not
   compatible with GPL version 2 by itself; a direct Apache-2.0 dependency MUST require a
   separate, explicit licensing decision before inclusion.
-- **FR-012**: This feature MUST NOT change or make a public commitment about the licence of
-  the private `comet` sidecar or relicense any other Galaxio repository.
+- **FR-012**: This feature MUST NOT relicense any other Galaxio repository.
 
 **Decision traceability**
 
-- **FR-013**: A durable record MUST link milestone `v0.12.0 Naming and licence` and issues
-  #47 and #48, state the chosen alternatives, summarize the rejected alternatives, and
-  explain why the selections meet downstream needs.
+- **FR-013**: A durable record MUST link milestone `v0.12.0 Naming and licence`, issues #47
+  and #48, and scope correction #107; state the chosen alternatives; summarize the rejected
+  alternatives; and explain why the selections meet downstream needs.
 - **FR-014**: Evidence for issue #47 MUST include repository-path ownership and root-help
   visibility; evidence for issue #48 MUST include the consistent licence-surface audit and
   the compatibility classification.
-- **FR-015**: When the corresponding fixes land on the milestone's release commit, their
-  pull request MUST close #47 and #48 so the milestone records no completed work as open.
+- **FR-015**: When the corresponding fixes and scope correction land on the milestone's
+  release commit, their pull requests MUST close #47, #48, and #107 so the milestone records
+  no completed work as open.
 
 ### Key Entities
 
@@ -202,30 +196,31 @@ evidence sufficient to close them when the specification work lands.
 
 ### Measurable Outcomes
 
-- **SC-001**: All three component roles have exactly one canonical identity across the
-  decision record and active user-facing documentation: `parsec`, `comet`, and `report`.
-- **SC-002**: Both selected organization repository paths resolve under `galax-io`, with
-  `parsec` publicly discoverable and `comet` retaining private visibility.
+- **SC-001**: Both in-scope component roles have exactly one canonical identity across the
+  decision record and active user-facing documentation: `parsec` and `report`.
+- **SC-002**: The selected `parsec` repository path resolves under `galax-io` and remains
+  publicly discoverable.
 - **SC-003**: A user can find `galaxio report` from root help on the first inspection,
   without knowing an internal project or repository name.
 - **SC-004**: 100% of the audited CLI licence surfaces agree on `GPL-2.0-only`, and the
   public library is identified as `MIT`; the audit reports zero unresolved mismatches.
 - **SC-005**: The compatibility review reports zero unresolved licence conflicts blocking
   `galaxio-cli` from consuming `parsec` under the selected licences.
-- **SC-006**: A downstream maintainer can identify all three names, both in-scope licence
+- **SC-006**: A downstream maintainer can identify both names, both in-scope licence
   identities, and the compatibility rationale from the decision record without requesting
   clarification.
-- **SC-007**: Issues #47 and #48 are closed when their fixes land, reducing the milestone's
-  open issue count from two to zero and making it eligible for its deliberate release audit.
+- **SC-007**: Issues #47, #48, and #107 are closed when their changes land, reducing the
+  milestone's open issue count to zero and making it eligible for its deliberate release
+  audit.
 
 ## Assumptions
 
-- The repository's ratified constitution is authoritative: it already uses `parsec`,
-  `comet`, and `galaxio report`, keeps the CLI under `GPL-2.0-only`, and identifies `parsec`
+- The repository's ratified constitution is authoritative: it already uses `parsec` and
+  `galaxio report`, keeps the CLI under `GPL-2.0-only`, and identifies `parsec`
   as MIT-licensed.
-- The existing `galax-io/parsec` and `galax-io/comet` repositories are conclusive evidence
-  that the organization controls the selected names; this feature does not create, rename,
-  or edit either external repository.
+- The existing `galax-io/parsec` repository is conclusive evidence that the organization
+  controls the selected library name; this feature does not create, rename, or edit that
+  external repository.
 - The selected licence strategy is the fallback described in issue #48: preserve the CLI's
   existing GPL-2.0-only licence and keep the shared public library under MIT. The project
   records an engineering compatibility decision, not individualized legal advice.
@@ -234,8 +229,8 @@ evidence sufficient to close them when the specification work lands.
   specifications.
 - Issue #48 remains ordered after #47 because the licensing record refers to the selected
   library identity.
-- Rejected naming alternatives (`galaxio-results`, `galaxio-tail`, or a mixed naming scheme)
-  and CLI relicensing alternatives (Apache-2.0 or GPL-3.0-or-later) remain historical
-  context, not active aliases or requirements.
-- Out of scope: package naming inside `parsec`; sidecar functionality or licensing; report
-  calculations; changes to other repositories; and milestone release/tag execution.
+- The rejected naming alternative (`galaxio-results`) and CLI relicensing alternatives
+  (Apache-2.0 or GPL-3.0-or-later) remain historical context, not active aliases or
+  requirements.
+- Out of scope: package naming inside `parsec`; report calculations; changes to other
+  repositories; and milestone release/tag execution.

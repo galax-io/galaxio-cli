@@ -7,10 +7,9 @@ The following mapping is exact and exhaustive for this milestone:
 | Role | Name | Canonical path/invocation |
 |---|---|---|
 | Public result-primitives library | `parsec` | `github.com/galax-io/parsec` |
-| Private live-metrics sidecar | `comet` | `galax-io/comet` |
 | Finished-run CLI namespace | `report` | `galaxio report` |
 
-Active documentation MUST NOT use `galaxio-results`, `galaxio-tail`, or another descriptive
+Active documentation MUST NOT use `galaxio-results` or another descriptive
 placeholder as a second active name.
 
 ## CLI licence surfaces
@@ -45,13 +44,6 @@ This contract is scoped to the prospective MIT `parsec` relationship. It does no
 the whole existing module graph: Cobra is a pre-existing Apache-2.0 dependency and requires
 its own audit rather than being silently declared resolved here.
 
-## Private sidecar boundary
-
-- `galax-io/comet` must remain visible to authorized maintainers as a private repository.
-- Public documentation may name its role and organization-qualified path.
-- This milestone assigns no licence to `comet`, promises no public access, and makes no
-  source, behavior, or commercial commitment about it.
-
 ## Failure conditions
 
 The milestone evidence is not complete if any of these is true:
@@ -60,7 +52,6 @@ The milestone evidence is not complete if any of these is true:
 - README leaves the version selection implicit;
 - the GPL terms are altered rather than accompanied by a project notice;
 - `parsec` is not public, not organization-controlled, or no longer identifies as MIT;
-- `comet` visibility cannot be checked by an authorized maintainer;
 - root help lacks `report`;
 - the decision record omits the authoritative compatibility sources or rejected choices.
 

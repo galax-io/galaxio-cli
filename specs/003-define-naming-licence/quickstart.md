@@ -1,8 +1,7 @@
 # Quickstart: Verify Ecosystem Naming and Licensing
 
 Run from the repository root on branch `003-define-naming-licence` after the implementation
-PRs have been applied. GitHub checks require an authenticated `gh` session with access to
-the private `galax-io/comet` repository.
+PRs have been applied. GitHub checks require an authenticated `gh` session.
 
 ## 1. Verify the public command namespace
 
@@ -32,24 +31,20 @@ case exits 2 with an error on stderr.
 
 ```sh
 gh repo view galax-io/parsec --json nameWithOwner,visibility,licenseInfo,url
-gh repo view galax-io/comet --json nameWithOwner,visibility,licenseInfo,url
 ```
 
 Expected:
 
-- `galax-io/parsec` is `PUBLIC` and its licence key is `mit`;
-- `galax-io/comet` is `PRIVATE` for an authorized maintainer;
-- lack of private-repository access is a failed evidence check, not proof of absence;
-- no licence conclusion is drawn for `comet`.
+- `galax-io/parsec` is `PUBLIC` and its licence key is `mit`.
 
 Search active decision and user-facing documents for the exact names:
 
 ```sh
-rg -n 'parsec|comet|galaxio report' README.md specs/003-define-naming-licence
-rg -n 'galaxio-results|galaxio-tail' README.md specs/003-define-naming-licence
+rg -n 'parsec|galaxio report' README.md specs/003-define-naming-licence
+rg -n 'galaxio-results' README.md specs/003-define-naming-licence
 ```
 
-The first search must show all three canonical identities. Any match from the second search
+The first search must show both canonical identities. Any match from the second search
 must be historical/rejected-alternative context, never an active alias. No unresolved
 clarification marker may remain in a planning artifact.
 
@@ -102,10 +97,11 @@ After both implementation PRs land on `main`:
 ```sh
 gh issue view 47 --repo galax-io/galaxio-cli --json number,state,milestone,url
 gh issue view 48 --repo galax-io/galaxio-cli --json number,state,milestone,url
+gh issue view 107 --repo galax-io/galaxio-cli --json number,state,milestone,url
 gh api repos/galax-io/galaxio-cli/milestones/1
 ```
 
-Expected: #47 and #48 are closed, both remain attached to
+Expected: #47, #48, and #107 are closed, all remain attached to
 `v0.12.0 Naming and licence`, and the milestone reports zero open issues.
 
 Release tagging is deliberately not part of this quickstart. Once the milestone is complete,
