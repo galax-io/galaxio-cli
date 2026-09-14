@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
 	"github.com/galax-io/parsec/gatling/run"
 )
 
@@ -330,5 +333,200 @@ func TestReportRejectsReportFormats(t *testing.T) {
 				t.Errorf("expected stderr to contain %q, got %q", tt.expected, stderr)
 			}
 		})
+	}
+}
+
+// corpusLog reads one corpus recording.
+func corpusLog(t *testing.T, version string) []byte {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(reportCorpus, version, "simulation.log"))
+	if err != nil {
+		t.Fatalf("read corpus log: %v", err)
+	}
+	return data
+}
+
+// patchedCorpusLog is the 3.13.1 recording with its six version bytes at
+// offset 5 replaced — the bytes parsec's gate reads first.
+func patchedCorpusLog(t *testing.T, version string) []byte {
+	t.Helper()
+
+	data := corpusLog(t, "3.13.1")
+	if got := string(data[5:11]); got != "3.13.1" {
+		t.Fatalf("corpus log carries version %q at offset 5, want 3.13.1", got)
+	}
+	patched := append([]byte(nil), data...)
+	copy(patched[5:11], version)
+	return patched
+}
+
+// damagedTextLog is the 3.12.0 recording with one event line replaced by
+// something no codec can decode.
+func damagedTextLog(t *testing.T) []byte {
+	t.Helper()
+
+	header, body, err := reporttest.Split(corpusLog(t, "3.12.0"))
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	lines := strings.Split(string(body), "\n")
+	lines[20] = "BOGUS\tnot a record"
+	return append(append([]byte(nil), header...), []byte(strings.Join(lines, "\n"))...)
+}
+
+func TestReportFailures(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        func(t *testing.T) []string
+		code        int
+		stdoutLines int // -1: not checked
+		stderrHas   []string
+		stderrLacks []string
+	}{
+		{
+			name: "a version below the supported range",
+			args: func(t *testing.T) []string {
+				return []string{"report", "gatling", writeRun(t, []byte("RUN\tio.x.Sim\tsim\t1700000000000\t \t3.10.0\n"))}
+			},
+			code:        exitRuntime,
+			stdoutLines: 0,
+			stderrHas:   []string{"version 3.10.0 is below the supported range 3.11.5 through 3.12.0"},
+		},
+		{
+			name: "3.13.0 is refused",
+			args: func(t *testing.T) []string {
+				return []string{"report", "gatling", writeRun(t, patchedCorpusLog(t, "3.13.0"))}
+			},
+			code:        exitRuntime,
+			stdoutLines: 0,
+			stderrHas:   []string{"3.13.0", "3.13.1"},
+		},
+		{
+			name: "a log cut short",
+			args: func(t *testing.T) []string {
+				return []string{"report", "gatling", writeRun(t, corpusLog(t, "3.15.1")[:2000])}
+			},
+			code:        exitRuntime,
+			stdoutLines: 63,
+			stderrHas:   []string{"the log is cut short", "the 62 records already written are what the run recorded"},
+		},
+		{
+			name: "a path that does not exist",
+			args: func(t *testing.T) []string {
+				return []string{"report", "gatling", filepath.Join(t.TempDir(), "nonexistent")}
+			},
+			code:        exitRuntime,
+			stdoutLines: 0,
+			stderrHas:   []string{"cannot read ", "nonexistent"},
+			stderrLacks: []string{"no Gatling run"},
+		},
+		{
+			name: "not a Gatling log",
+			args: func(t *testing.T) []string {
+				return []string{"report", "gatling", writeRun(t, []byte("<!DOCTYPE html>\n<html></html>\n"))}
+			},
+			code:        exitRuntime,
+			stdoutLines: 0,
+			stderrHas:   []string{"not a Gatling simulation.log", "simulation.log"},
+		},
+		{
+			name:        "a damaged log",
+			args:        func(t *testing.T) []string { return []string{"report", "gatling", writeRun(t, damagedTextLog(t))} },
+			code:        exitRuntime,
+			stdoutLines: 21,
+			stderrHas:   []string{"the 20 records already written do not form a complete run"},
+		},
+		{
+			name:        "three positional arguments",
+			args:        func(*testing.T) []string { return []string{"report", "gatling", "a", "b"} },
+			code:        exitUsage,
+			stdoutLines: 0,
+			stderrHas:   []string{"accepts at most 2 arg(s), received 3"},
+		},
+		{
+			name: "an unknown flag",
+			args: func(*testing.T) []string {
+				return []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--bogus"}
+			},
+			code:        exitUsage,
+			stdoutLines: 0,
+			stderrHas:   []string{"unknown flag: --bogus"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, stdout, stderr := runCLI(tt.args(t)...)
+
+			if code != tt.code {
+				t.Fatalf("expected exit code %d, got %d; stderr: %s", tt.code, code, stderr)
+			}
+			if tt.stdoutLines == 0 && stdout != "" {
+				t.Errorf("expected empty stdout, got %q", stdout)
+			}
+			if tt.stdoutLines > 0 {
+				if kinds := recordKinds(t, stdout); len(kinds) != tt.stdoutLines {
+					t.Errorf("stdout holds %d complete lines, want %d", len(kinds), tt.stdoutLines)
+				}
+			}
+			for _, want := range tt.stderrHas {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("expected stderr to contain %q, got %q", want, stderr)
+				}
+			}
+			for _, unwanted := range tt.stderrLacks {
+				if strings.Contains(stderr, unwanted) {
+					t.Errorf("expected stderr not to contain %q, got %q", unwanted, stderr)
+				}
+			}
+		})
+	}
+}
+
+// failAfterWriter accepts n writes and then fails every one, like a reader
+// that went away.
+type failAfterWriter struct {
+	remaining int
+	calls     int
+}
+
+var errPipeClosed = errors.New("pipe closed")
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	w.calls++
+	if w.remaining == 0 {
+		return 0, errPipeClosed
+	}
+	w.remaining--
+	return len(p), nil
+}
+
+func TestReportStopsAtFirstWriteFailure(t *testing.T) {
+	header, body, err := reporttest.Split(corpusLog(t, "3.12.0"))
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	large, err := io.ReadAll(reporttest.Replay(header, body, 40))
+	if err != nil {
+		t.Fatalf("Replay: %v", err)
+	}
+	dir := writeRun(t, large)
+
+	var stderr bytes.Buffer
+	stdout := &failAfterWriter{remaining: 2}
+	code := execute([]string{"report", "gatling", dir, "--quiet"}, stdout, &stderr)
+
+	if code != exitRuntime {
+		t.Fatalf("expected exit code %d, got %d; stderr: %s", exitRuntime, code, stderr.String())
+	}
+	if stdout.calls != 3 {
+		t.Errorf("stdout saw %d writes after failing on the third, want exactly 3", stdout.calls)
+	}
+	if got := strings.Count(stderr.String(), "Error:"); got != 1 {
+		t.Errorf("expected exactly one Error line on stderr, got %d: %s", got, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "writing output: pipe closed") {
+		t.Errorf("expected the write failure to be named, got %q", stderr.String())
 	}
 }
