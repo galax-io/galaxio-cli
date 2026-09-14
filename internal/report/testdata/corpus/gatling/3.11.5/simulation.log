@@ -1,0 +1,70 @@
+ASSERTION	AAEBAAICAAAAAAAAAPA/
+ASSERTION	AAEBAAMCAAAAAAAAAPA/
+ASSERTION	AAMAAQdHRVQgL29rAwABAgMAAAAAAABM7UA=
+RUN	io.galaxio.parsec.corpus.CorpusSimulation	corpussimulation	1788379664977	 	3.11.5
+USER	Corpus recording	START	1788379665622
+USER	Corpus recording	START	1788379665622
+USER	Corpus recording	START	1788379665622
+REQUEST		GET /ok	1788379665619	1788379665626	OK	 
+REQUEST		GET /ok	1788379665619	1788379665626	OK	 
+REQUEST		GET /ok	1788379665619	1788379665626	OK	 
+REQUEST	outer	GET /ok	1788379665735	1788379665736	OK	 
+REQUEST	outer	GET /ok	1788379665735	1788379665736	OK	 
+REQUEST	outer	GET /ok	1788379665735	1788379665735	OK	 
+USER	Corpus recording	START	1788379666113
+REQUEST		GET /ok	1788379666110	1788379666116	OK	 
+REQUEST	outer	GET /ok	1788379666219	1788379666220	OK	 
+USER	Corpus recording	START	1788379666613
+REQUEST		GET /ok	1788379666611	1788379666616	OK	 
+REQUEST	outer	GET /ok	1788379666719	1788379666720	OK	 
+USER	Corpus recording	START	1788379667113
+REQUEST		GET /ok	1788379667110	1788379667117	OK	 
+REQUEST	outer	GET /ok	1788379667221	1788379667222	OK	 
+REQUEST	outer,inner  with comma	GET /slow	1788379665736	1788379667239	OK	 
+REQUEST	outer,inner  with comma	GET /slow	1788379665736	1788379667240	OK	 
+REQUEST	outer,inner  with comma	GET /slow	1788379665736	1788379667239	OK	 
+REQUEST	outer,inner  with comma	GET /fail	1788379667241	1788379667242	KO	status.find.is(200), but actually found 500
+REQUEST	outer,inner  with comma	GET /fail	1788379667240	1788379667242	KO	status.find.is(200), but actually found 500
+REQUEST	outer,inner  with comma	GET /fail	1788379667241	1788379667242	KO	status.find.is(200), but actually found 500
+GROUP	outer,inner  with comma	1788379665736	1788379667251	1505	KO
+GROUP	outer,inner  with comma	1788379665736	1788379667251	1504	KO
+GROUP	outer	1788379665733	1788379667251	1506	KO
+GROUP	outer	1788379665733	1788379667251	1505	KO
+GROUP	outer,inner  with comma	1788379665736	1788379667251	1505	KO
+GROUP	outer	1788379665733	1788379667251	1506	KO
+REQUEST		connect refused	1788379667354	1788379667358	KO	j.n.ConnectException: Connection refused
+REQUEST		connect refused	1788379667354	1788379667358	KO	j.n.ConnectException: Connection refused
+REQUEST		connect refused	1788379667354	1788379667358	KO	j.n.ConnectException: Connection refused
+REQUEST		unknown host	1788379667360	1788379667362	KO	j.n.UnknownHostException: nonexistent.invalid
+REQUEST		unknown host	1788379667360	1788379667362	KO	j.n.UnknownHostException: nonexistent.invalid: nodename nor servname provided, or not known
+REQUEST		unknown host	1788379667360	1788379667362	KO	j.n.UnknownHostException: nonexistent.invalid
+ERROR	unresolvable url: No attribute named 'undefinedAttribute' is defined 	1788379667366
+ERROR	unresolvable url: No attribute named 'undefinedAttribute' is defined 	1788379667366
+ERROR	unresolvable url: No attribute named 'undefinedAttribute' is defined 	1788379667366
+USER	Corpus recording	END	1788379667367
+USER	Corpus recording	END	1788379667368
+USER	Corpus recording	END	1788379667368
+REQUEST	outer,inner  with comma	GET /slow	1788379666220	1788379667724	OK	 
+REQUEST	outer,inner  with comma	GET /fail	1788379667725	1788379667727	KO	status.find.is(200), but actually found 500
+GROUP	outer,inner  with comma	1788379666220	1788379667728	1506	KO
+GROUP	outer	1788379666219	1788379667728	1507	KO
+REQUEST		connect refused	1788379667832	1788379667834	KO	j.n.ConnectException: Connection refused
+REQUEST		unknown host	1788379667835	1788379667835	KO	j.n.UnknownHostException: nonexistent.invalid
+ERROR	unresolvable url: No attribute named 'undefinedAttribute' is defined 	1788379667837
+USER	Corpus recording	END	1788379667839
+REQUEST	outer,inner  with comma	GET /slow	1788379666721	1788379668224	OK	 
+REQUEST	outer,inner  with comma	GET /fail	1788379668225	1788379668225	KO	status.find.is(200), but actually found 500
+GROUP	outer,inner  with comma	1788379666720	1788379668226	1504	KO
+GROUP	outer	1788379666719	1788379668226	1505	KO
+REQUEST		connect refused	1788379668329	1788379668330	KO	j.n.ConnectException: Connection refused
+REQUEST		unknown host	1788379668330	1788379668330	KO	j.n.UnknownHostException: nonexistent.invalid
+ERROR	unresolvable url: No attribute named 'undefinedAttribute' is defined 	1788379668331
+USER	Corpus recording	END	1788379668331
+REQUEST	outer,inner  with comma	GET /slow	1788379667223	1788379668725	OK	 
+REQUEST	outer,inner  with comma	GET /fail	1788379668726	1788379668727	KO	status.find.is(200), but actually found 500
+GROUP	outer,inner  with comma	1788379667223	1788379668728	1503	KO
+GROUP	outer	1788379667220	1788379668728	1504	KO
+REQUEST		connect refused	1788379668830	1788379668831	KO	j.n.ConnectException: Connection refused
+REQUEST		unknown host	1788379668832	1788379668832	KO	j.n.UnknownHostException: nonexistent.invalid
+ERROR	unresolvable url: No attribute named 'undefinedAttribute' is defined 	1788379668832
+USER	Corpus recording	END	1788379668833
