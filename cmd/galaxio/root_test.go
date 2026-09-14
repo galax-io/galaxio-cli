@@ -65,9 +65,10 @@ func TestReportCommand(t *testing.T) {
 			}
 			for _, want := range []string{
 				"Report on finished load-test runs.",
-				"Operational subcommands are introduced separately.",
+				"Tools: gatling",
 				"Usage:",
-				"galaxio report [flags]",
+				"galaxio report <tool> [PATH] [flags]",
+				"-o, --output string",
 			} {
 				if !strings.Contains(stdout, want) {
 					t.Fatalf("expected report help to contain %q, got %q", want, stdout)
@@ -86,8 +87,8 @@ func TestReportCommandRejectsArguments(t *testing.T) {
 	if stdout != "" {
 		t.Fatalf("expected empty stdout, got %q", stdout)
 	}
-	if !strings.Contains(stderr, "unknown command") && !strings.Contains(stderr, "accepts 0 arg") {
-		t.Fatalf("expected argument validation error, got %q", stderr)
+	if !strings.Contains(stderr, "unsupported tool") {
+		t.Fatalf("expected the argument to be rejected as a tool, got %q", stderr)
 	}
 }
 
