@@ -28,6 +28,9 @@ Expected: the counts equal Gatling's console summary for each recording (36 for 
 runs 3.11.5/3.12.0; 102 for the binary runs 3.13.1/3.14.9/3.15.1), exit code 0, and the
 log path and its directory produce identical output.
 
+Observed 2026-09-15: first kind `run`; 3.12.0 → 36 request records; 3.15.1 → 102; the log
+path and its directory → `cmp` reports identical output.
+
 ## 2. Latest run without naming it (US2)
 
 ```bash
@@ -37,6 +40,15 @@ tmp=$(mktemp -d); cp -R $C/lastrun/results $tmp/ && rm $tmp/results/lastRun.txt
 dist/galaxio report gatling $tmp/results 2>&1 >/dev/null     # … (found by newest)
 ( cd $tmp && mkdir -p target && cp -R results target/gatling && dist_abs=$OLDPWD/dist/galaxio && $dist_abs report gatling >/dev/null )   # no path → target/gatling
 dist/galaxio report gatling $tmp; echo "exit=$?"              # Error: … no Gatling run under …; exit=1
+```
+
+Observed 2026-09-15:
+
+```text
+report: reading internal/report/testdata/corpus/gatling/lastrun/results/corpussimulation-20260909022708912 (found by lastRun.txt)
+report: reading <tmp>/results/corpussimulation-20260909022727230 (found by newest)
+report: reading target/gatling/corpussimulation-20260909022727230 (found by newest)   # no path, from the project directory; exit 0
+Error: gatling: no Gatling run under <tmp>                                             # exit 1
 ```
 
 ## 3. Streaming and a closed pipe (US3, SC-003)
@@ -59,13 +71,18 @@ synthetic log replaying the 3.12.0 body through an `io.Reader` so no file is wri
 without it the benchmark shows none per record. The memory goal is heap in use < 32 MiB for
 any log size, met with a margin of sixteen times.
 
+Observed 2026-09-15, closed pipe: a 14 MB replayed run piped into `head -n 1` delivered the
+header line, the pipeline exited 0 within the second, and the process wrote nothing to
+standard error.
+
 ## 4. Failures name what was at fault (US4)
 
 ```bash
-dist/galaxio report gatling $C/3.15.1/index.html; echo "exit=$?"  # not a Gatling simulation.log …; 1
+html=$(mktemp -d); printf '<!DOCTYPE html>\n' > $html/simulation.log
+dist/galaxio report gatling $html; echo "exit=$?"                  # not a Gatling simulation.log …; 1
 dist/galaxio report gatling /nonexistent; echo "exit=$?"           # cannot read /nonexistent …; 1
-head -c 2000 $C/3.15.1/simulation.log > /tmp/cut.log
-dist/galaxio report gatling /tmp/cut.log | wc -l; echo "exit=${PIPESTATUS[0]}"   # 63 lines (header + 62), exit 1, stderr: log cut short at byte 1991 …
+cut=$(mktemp -d); head -c 2000 $C/3.15.1/simulation.log > $cut/simulation.log   # a run is a simulation.log
+dist/galaxio report gatling $cut | wc -l; echo "exit=${PIPESTATUS[0]}"   # 63 lines (header + 62), exit 1, stderr: the log is cut short …
 dist/galaxio report jmeter $C/3.15.1; echo "exit=$?"               # unsupported tool "jmeter": accepted tools: gatling; 2
 dist/galaxio report $C/3.15.1; echo "exit=$?"                      # the path is taken as a tool name → unsupported tool; 2
 dist/galaxio report gatling $C/3.15.1 extra; echo "exit=$?"        # accepts at most 2 arg(s); 2
@@ -73,6 +90,21 @@ dist/galaxio report gatling -o stats,global_stats $C/3.15.1; echo "exit=$?"   # 
 dist/galaxio report gatling -o yml $C/3.15.1; echo "exit=$?"       # not available yet (postponed YAML); 2
 dist/galaxio report gatling -o json $C/3.15.1; echo "exit=$?"      # unknown report format "json": known formats: stats, global_stats, yml; 2
 dist/galaxio report; echo "exit=$?"                                # help, 0
+```
+
+Observed 2026-09-15 (bash; zsh has no `PIPESTATUS`):
+
+```text
+Error: <tmp>/html/simulation.log: gatling: not a Gatling simulation.log: found "<!DOCTYPE " at the start of the stream   # exit 1
+Error: cannot read /nonexistent: no such file or directory                                                                 # exit 1
+lines=63; Error: gatling: byte 1991: the log is cut short: 9 trailing bytes could not be decoded, and a request name was still to come; the 62 records already written are what the run recorded   # exit 1
+Error: unsupported tool "jmeter": accepted tools: gatling                                                                  # exit 2
+Error: unsupported tool "internal/report/testdata/corpus/gatling/3.15.1": accepted tools: gatling                          # exit 2 (path where the tool should be)
+Error: accepts at most 2 arg(s), received 3                                                                                # exit 2
+Error: report format "stats" is not available yet: it arrives with milestone v0.15.0 Legacy stats.json                    # exit 2 (-o stats,global_stats)
+Error: report format "yml" is not available yet: the OpenNFR YAML report is postponed                                      # exit 2
+Error: unknown report format "json": known formats: stats, global_stats, yml                                               # exit 2
+help printed                                                                                                                # exit 0
 ```
 
 Version-gate cases (below range 3.10.0, refused 3.13.0, newer-than-range warning) are
@@ -86,6 +118,13 @@ go test ./internal/report -run 'TestOpen|TestVersion' -v
 
 ```bash
 dist/galaxio report --help | grep -E 'report <tool> \[PATH\]|-o, --output'
+```
+
+Observed 2026-09-15:
+
+```text
+  galaxio report <tool> [PATH] [flags]
+  -o, --output string   report format(s) to produce, comma-separated: stats, global_stats, yml (reserved for later releases)
 ```
 
 ## 6. Gates
