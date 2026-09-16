@@ -1,36 +1,41 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.1.1 → 2.0.0
-Bump rationale: MAJOR. galaxio-cli#109 replaces split issue/PR delivery with one reviewed
-PR per milestone and one commit per task. Agents may prepare and update a PR, but may not
-merge or close it without an explicit post-review instruction for that exact PR. Principle I
-now distinguishes operational commands from help-only namespace parents and names the actual
-root flags.
+Version change: 2.0.0 → 2.1.0
+Bump rationale: MINOR. Two clauses are redefined, and neither redefinition is
+backward-incompatible: no work that satisfied v2.0.0 fails v2.1.0. Principle I's output
+clause is widened rather than narrowed — `-o text|json` remains correct for every command
+that has it, and the clause now also admits a command whose `-o` names a product. Principle
+II's percentile clause is tightened from "estimates" to "exact", and nothing in the
+repository computes a percentile yet, so no existing output becomes non-compliant. MAJOR was
+considered and rejected on that reading of the versioning policy; a maintainer who reads
+"redefined" as sufficient for MAJOR should say so in review.
 
-Principles modified: I (operational-command contract and namespace-parent exception),
-VI (out-of-scope work stays out of the milestone rather than automatically creating another
-PR).
+Principles modified: I (what `-o` names, and the ban on inventing an interim machine-readable
+form), II (percentiles are exact, and parity with another tool is not a defined target).
 
 Added sections: none. Removed sections: none.
 
-Modified:
-- Development Workflow: specification and implementation stay in one milestone PR; every
-  task maps to exactly one green commit; maintainer review owns merge and closure.
-- Governance: amendment PRs remain open until maintainer review and explicit merge action.
-- AGENTS.md: records the same single-PR, task-commit, and review ownership rules.
-- Principle I: applies `runX` and `-o text|json` to operational commands, permits help-only
-  namespace parents, and removes `-o` from the root-flag list.
+Why now (galaxio-cli#112):
+- `galaxio report` offers `-o stats|global_stats|yml`, all reserved, and publishes no
+  machine-readable output until the first ships (galaxio-cli#50, maintainer decisions of
+  2026-09-15 and 2026-09-16). Under v2.0.0 that was a standing justified FAIL in
+  specs/004-report-records/plan.md; under v2.1.0 it is compliant and the Complexity Tracking
+  row is no longer required.
+- Gatling computes percentiles with an AVLTreeDigest carrying an unseeded java.util.Random:
+  2000 identical rebuilds of one recording's 102 samples produced seven distinct percentile
+  tuples, and the value Gatling recorded appeared 22% of the time. A one-pass millisecond
+  histogram over the same log is exact. v2.0.0 had the division backwards; the evidence is
+  recorded on galaxio-cli#51.
 
 Templates:
-- ✅ .specify/templates/plan-template.md — existing Constitution Check can assess the
-  clarified command contract.
-- ✅ .specify/templates/tasks-template.md — requires one commit per task and one PR per
-  milestone; removes optional-test wording.
+- ✅ .specify/templates/plan-template.md — Constitution Check rows I and II reworded to the
+  amended clauses.
+- ✅ .specify/templates/tasks-template.md — unchanged; it cites neither clause.
 - ✅ .specify/templates/spec-template.md — unchanged.
-- ✅ AGENTS.md — runtime guidance matches this amendment.
+- ✅ AGENTS.md — the Architecture paragraph no longer repeats `-o text|json`.
 
-Follow-up TODOs (carried from 1.0.0 unless noted):
+Follow-up TODOs (carried from 2.0.0 unless noted):
 - `scripts/linkage_test.sh` covers the release-range helpers used by
   `scripts/check-linkage.sh`. A direct suite for its `gh` calls still needs a `gh` stub
   and remains a follow-up; the `shell suites` job discovers the existing helper suite.
@@ -40,6 +45,9 @@ Follow-up TODOs (carried from 1.0.0 unless noted):
   test headings; this repository's template and constitution require tests.
 - Skills classification pinned to `samber/cc-skills-golang` 2.0.1 and
   `galaxio/galaxio-gatling` 2.4.0 as installed on 2026-09-13; re-read on every plugin update.
+- NEW: no CI job runs `govulncheck`, although the Quality Gates table's spirit and several
+  plans assume a vulnerability scan before a release. Adding one is itself a gate change and
+  so a separate, ask-first amendment.
 -->
 # galaxio-cli Constitution
 
@@ -54,9 +62,16 @@ Follow-up TODOs (carried from 1.0.0 unless noted):
 - A help-only namespace parent MAY route directly to `cmd.Help()` and define neither a
   result type, `runX`, nor `-o` until it gains operational behavior. It MUST reject
   positional arguments, expose its child commands, and inherit the root flags.
-- Human output goes to stdout, diagnostics to stderr. Every operational command offers
-  `-o text|json`. The JSON form MUST be a documented structure, never the text table wrapped
-  in a string, and MUST end with a single newline.
+- Human output goes to stdout, diagnostics to stderr. Every operational command offers `-o`,
+  and what its values name depends on what the command produces. A command that publishes one
+  output in more than one encoding offers `-o text|json`; a command that chooses among
+  several *products* — a report command selecting `stats`, `global_stats` or an OpenNFR
+  document — names those products instead, and a name reserved for a release that has not
+  shipped MUST be rejected as a usage error naming that release rather than silently
+  accepted. Where a machine-readable form exists it MUST be a documented structure, never the
+  text table wrapped in a string, and MUST end with a single newline. A command that publishes
+  no machine-readable form yet MUST NOT invent an interim one, because a published surface is
+  expensive to withdraw (Principle V).
 - Exit codes are a contract: `0` success, `1` runtime failure (`RuntimeError`), `2` usage
   failure (`UsageError`). A usage error is a bad flag, argument or unknown command; anything
   that fails while executing a valid command is runtime. An error MUST name what was
@@ -66,7 +81,9 @@ Follow-up TODOs (carried from 1.0.0 unless noted):
   variable that enables it, and the gate MUST be removed — not left in place — when the
   command is promoted.
 - Root flags (`--verbose`, `--quiet`, `--no-color`) behave identically across commands. The
-  `-o` flag is local to operational commands and MUST follow the output contract above.
+  `-o` flag is local to operational commands and MUST follow the output contract above. Its
+  accepted values are part of the published surface: adding one is additive, and redefining
+  or removing one is a breaking change under Principle V.
 
 Rationale: CI jobs and scripts are the primary consumers of this binary. A stable exit-code
 and output contract is what lets them be written once; the `runX` seam is what lets that
@@ -82,9 +99,17 @@ contract be tested without a terminal.
 - What the library owns is the definitions — what counts as a failure, what a request
   position is, where a run begins and ends. This repository MUST NOT re-derive them.
 - Successful and failed samples are accumulated separately; a failure MUST NOT contribute to
-  a success statistic. Counts, minimum, maximum, mean and standard deviation MUST be exact.
-  Percentiles are estimates, and every place that prints one MUST say so and MUST NOT claim
-  digit-for-digit parity with Gatling.
+  a success statistic. Counts, minimum, maximum, mean, standard deviation and percentiles
+  MUST all be exact over the samples the source recorded. Where a bounded-memory accumulator
+  cannot keep a percentile exact — an unbounded value range, an exhausted budget — the
+  command MUST refuse and say which figure it cannot stand behind, rather than write an
+  estimate that reads like a measurement.
+- Percentiles MUST NOT be presented as reproducing another tool's. Gatling estimates its own
+  with a randomized digest that does not reproduce its output between runs of the same data,
+  so digit-for-digit parity is not a defined target: it MUST NOT be claimed, asserted in a
+  golden test, or offered as a diff. Every output carrying a percentile MUST say whose
+  definition it is and, where it is reproducing another tool's file, name the fields that can
+  differ and why.
 - Accumulation MUST work in one pass without retaining every sample: memory MUST NOT grow
   with the sample count, and a plan for a report feature states its peak-memory goal.
 - What a source cannot provide is reported as absent — never as a zero, an average or a
@@ -335,4 +360,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 2.0.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-14
+**Version**: 2.1.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-16
