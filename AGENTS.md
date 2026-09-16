@@ -32,7 +32,7 @@ cmd/galaxio/ -> one file per command, registered in root.go; internal/codegen/ -
 
 ## Architecture
 
-Each command is a thin cobra wrapper over a runX(ctx, opts) (XOutput, error) function; human output goes to stdout and diagnostics to stderr; every command offers -o text|json; usage errors exit 2 and runtime errors 1 via UsageError and RuntimeError. CI verifies merges; a version tag for a completed milestone starts the release.
+Each command is a thin cobra wrapper over a runX(ctx, opts) (XOutput, error) function; human output goes to stdout and diagnostics to stderr; every operational command offers -o, whose values are text|json where the command encodes one output and the product names where it selects among several; usage errors exit 2 and runtime errors 1 via UsageError and RuntimeError. CI verifies merges; a version tag for a completed milestone starts the release.
 
 ## Test Model
 
