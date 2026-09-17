@@ -188,6 +188,7 @@ curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/i
 ```sh
 galaxio --help          # show commands and flags
 galaxio version         # print build info
+galaxio report gatling  # read the latest Gatling run and report what it holds
 galaxio --verbose ...   # verbose diagnostic output
 galaxio --quiet ...     # suppress non-error output
 galaxio --no-color ...  # disable colour
@@ -221,16 +222,81 @@ Galaxio uses one canonical name for each reporting component:
   [`github.com/galax-io/parsec`](https://github.com/galax-io/parsec).
 - `galaxio report` is the CLI namespace for finished-run reporting.
 
-This milestone exposes the namespace and its help only. Operational report
-subcommands are introduced separately.
-
-```sh
-galaxio report
-galaxio report --help
-```
-
 See the [naming and licence decision record](specs/003-define-naming-licence/research.md)
 for the selected identities and rejected alternatives.
+
+### Read a finished run
+
+`galaxio report <tool> [PATH]` reads a finished run once and reports what it holds. It
+computes no statistic and writes no data format; statistics and Gatling's own `stats.json`
+follow in later releases.
+
+```sh
+galaxio report gatling                               # the latest run under target/gatling
+galaxio report gatling target/gatling/mysim-20260906044741110
+galaxio report gatling path/to/simulation.log
+galaxio report gatling build/reports/gatling         # a results root: lastRun.txt, else the newest run
+galaxio report                                       # help
+```
+
+```text
+run         io.galaxio.parsec.corpus.CorpusSimulation
+id          io.galaxio.parsec.corpus.CorpusSimulation
+started     2026-09-06T04:48:14.356Z
+tool        gatling 3.15.1
+log         binary, target/gatling/mysim-20260906044741110/simulation.log
+found by    path
+span        2026-09-06T04:48:14.885Z .. 2026-09-06T04:48:18.117Z (3.232s)
+requests    102 (84 ok, 18 ko)
+groups      12 traversals
+users       12 events
+errors      6
+assertions  10 payloads the run declared
+```
+
+**Tool.** The first argument names the tool that produced the run. `gatling` is the only
+tool this release reads: text logs from Gatling 3.11.5 through 3.12.0 and binary logs from
+3.13.1 through 3.15.1, identified from the log's content, never its name. A version below
+that range, and 3.13.0, are refused with a message naming the version and the range; a newer
+version is read and a warning goes to standard error.
+
+**PATH.** A run directory, its `simulation.log`, or a results root holding run directories.
+With no path the Maven and sbt results root `target/gatling` is searched (Gradle writes to
+`build/reports/gatling`; pass it). In a results root the run named by `lastRun.txt` wins if
+it still exists, otherwise the most recently modified run. The report says which run was
+read and by which rule.
+
+**What the report says.** `started` is the run's own recorded start and `span` is the
+interval the run actually covers, which is a different quantity; the span line is left out
+when the log holds an item the source could not place in time. `requests` splits by the
+outcome the source recorded, never inferred, and a further `unknown` line appears only when
+the source lost a sample's outcome, counting those requests apart rather than guessing
+either way. `groups` counts traversals and `users` counts events, each saying so, because a
+run enters a group once per iteration and emits a start and an end per virtual user.
+`assertions` counts the opaque payloads the run declared, wherever the log put them, and is
+left out when it declared none. Anything the log recorded is quoted if it is not printable,
+so a run from somebody else's CI cannot colour your terminal or erase the line it is on.
+`--quiet` suppresses the report and leaves errors, and the unverified-version warning, which
+qualifies every number under it; `--verbose` adds what this source can never record, such as
+a response code, which Gatling does not put in its log.
+
+**`-o`.** Reserved for report formats later releases produce: `stats` and `global_stats`
+(Gatling's own `stats.json` and `global_stats.json`) and `yml` (the OpenNFR YAML report).
+Every name in the list is checked, and any value exits 2: a known name naming the release
+that delivers it, or saying it is postponed where no release is set yet, and an unknown one
+listing the names that exist. The value is refused as the flag is parsed, so `--help` does
+not get past it either. There is no `-o json` and no `-o text`: the first machine-readable
+output this command publishes will be Gatling's own `stats.json`, in Gatling's schema and
+with Gatling's numbers.
+
+**Exit codes.** `0` when the run was read to the end; `1` for a runtime failure — no run
+under the directory, a path that cannot be read, a log that is not a Gatling `simulation.log`,
+an unsupported version, a log cut short (the counts of what it did hold are still reported,
+so a script cannot mistake a partial run for a complete one), or a damaged log (no counts,
+because the records before the damage are not a result); `2` for a usage error — an
+unsupported tool, an empty or third argument, an unknown flag, or any `-o`, which is
+rejected while the flag is parsed and so before any help. An interrupt cancels the read and
+exits 1 naming the log it stopped in.
 
 ## Template Workflow
 
