@@ -3,6 +3,7 @@ module github.com/galax-io/galaxio-cli
 go 1.27.1
 
 require (
+	github.com/galax-io/parsec v0.1.0
 	github.com/pb33f/libopenapi v0.38.7
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
