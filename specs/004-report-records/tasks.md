@@ -42,7 +42,7 @@ T003, T004 and T005; `golang-testing` before every task; `golang-naming` and
 ## Phase 1: Setup
 
 - [X] T001 Commit the feature artifacts first: `specs/004-report-records/` (spec, plan, research, data-model, contracts/cli.md, quickstart, checklists, tasks) and `.specify/feature.json` → commit `docs(speckit): add 004-report-records spec/plan/tasks (#50)`
-- [ ] T002 [P] Copy the corpus from the parsec v0.1.0 module cache into `internal/report/testdata/corpus/gatling/`: the `simulation.log` of 3.11.5, 3.12.0, 3.13.1, 3.14.9 and 3.15.1, and the `lastrun/results/` tree of three runs with its `lastRun.txt`; add `PROVENANCE.md` recording the source (parsec v0.1.0, MIT), the recording dates and each entry's own Gatling total, and `.gitattributes` marking every `simulation.log` as `-text` → commit `test(report): add Gatling corpus recordings from parsec v0.1.0 (#50)`
+- [X] T002 [P] Copy the corpus from the parsec v0.1.0 module cache into `internal/report/testdata/corpus/gatling/`: the `simulation.log` of 3.11.5, 3.12.0, 3.13.1, 3.14.9 and 3.15.1, and the `lastrun/results/` tree of three runs with its `lastRun.txt`; add `PROVENANCE.md` recording the source (parsec v0.1.0, MIT), the recording dates and each entry's own Gatling total, and `.gitattributes` marking every `simulation.log` as `-text` → commit `test(report): add Gatling corpus recordings from parsec v0.1.0 (#50)`
 
 **Checkpoint**: spec on the branch, fixtures on disk, `go test ./...` unchanged and green.
 
