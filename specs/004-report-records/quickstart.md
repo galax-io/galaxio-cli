@@ -64,6 +64,29 @@ go test ./internal/report -run '^$' -bench BenchmarkScan -benchtime=1x -benchmem
 go test -tags=integration -race -run TestReportIntegrationReadsALargeRun ./cmd/galaxio
 ```
 
+Observed 2026-09-16 on an Apple M2 Pro (darwin/arm64, Go 1.27.1). The memory goal is a test
+the ordinary suite runs, so CI runs it:
+
+| Replay | Heap the scan adds | Goal |
+|---|---|---|
+| 16 MiB | 1.04 MiB | 32 MiB |
+| 256 MiB | 1.04 MiB | 32 MiB |
+
+Flat in the size of the log, which is the property the goal is about. `BenchmarkScan`
+reports throughput and allocations only; it makes no memory assertion and gates nothing.
+
+```text
+goos: darwin / goarch: arm64 / cpu: Apple M2 Pro
+BenchmarkScan/size=64MiB-12       205278000 ns/op  326.90 MB/s  4570982 records/s  1063824 B/op  52 allocs/op
+BenchmarkScan/size=2048MiB-12    5730390583 ns/op  374.75 MB/s  5240193 records/s  1063824 B/op  52 allocs/op
+```
+
+Allocations are flat at 52 per operation from 64 MiB to 2 GiB, which is the same property
+from the allocator's side. Nothing here fails on the memory goal — a benchmark no CI job
+runs could not enforce it. `TestScanMemoryDoesNotGrowWithTheLog`, in the ordinary suite, is
+what does, and the integration test reads a large replayed run through the built binary and
+asserts its counts.
+
 ## 4. Failures name what was at fault (US4, SC-004)
 
 ```bash
