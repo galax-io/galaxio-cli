@@ -132,6 +132,26 @@ Expected: no formatting diff, vet clean, all tests pass with the race detector, 
 coverage at or above 80%, tidy leaves no diff, integration suite passes, no known
 vulnerabilities.
 
+## 7. Milestone and issue
+
+```bash
+gh api repos/galax-io/galaxio-cli/milestones/3 --jq '.title + " — " + .description'
+gh issue view 50 --repo galax-io/galaxio-cli --json title,milestone --jq '.title + " [" + .milestone.title + "]"'
+```
+
+Observed 2026-09-16, after the record stream was withdrawn:
+
+```text
+v0.13.0 Read a run — S2 — A finished Gatling run is a directory of HTML and a log only the
+matching Gatling version can read, and from 3.13.5 on Gatling exports nothing at all; this
+CLI cannot open one. Reading a run is the first result a user can see from the whole
+initiative, and what every later report milestone stands on.
+A finished Gatling run cannot be read at all [v0.13.0 Read a run]
+```
+
+Issue #50 carries an `## Amended` section recording the withdrawal, what the milestone now
+delivers, and the restated acceptance criteria.
+
 ## 8. Documentation
 
 `README.md` § Reporting Ecosystem documents the command, its arguments, the reserved `-o`
