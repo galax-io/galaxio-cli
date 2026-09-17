@@ -1,41 +1,51 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 2.0.0 → 2.1.0
-Bump rationale: MINOR. Two clauses are redefined, and neither redefinition is
-backward-incompatible: no work that satisfied v2.0.0 fails v2.1.0. Principle I's output
-clause is widened rather than narrowed — `-o text|json` remains correct for every command
-that has it, and the clause now also admits a command whose `-o` names a product. Principle
-II's percentile clause is tightened from "estimates" to "exact", and nothing in the
-repository computes a percentile yet, so no existing output becomes non-compliant. MAJOR was
-considered and rejected on that reading of the versioning policy; a maintainer who reads
-"redefined" as sufficient for MAJOR should say so in review.
+Version change: 2.1.0 → 2.2.0
+Bump rationale: MINOR. Principle II's percentile clause is widened and its guidance
+materially expanded; nothing is redefined in a backward-incompatible way. An exact percentile
+is as compliant as it was under v2.1.0. What is new is that a percentile may also be an
+estimate read from a bounded-memory sketch, on conditions the clause states — deterministic,
+labelled wherever it is printed, its estimator recorded, its values for the recorded corpus
+pinned in tests, a known divergence documented with an example — where v2.1.0 required a
+refusal. The refusal stays for every other figure. No work that satisfied v2.1.0 fails
+v2.2.0, and nothing in the repository computes a percentile yet. MAJOR was considered and
+rejected on the reading of the versioning policy that 2.1.0 recorded; a maintainer who reads
+the change as a redefinition should say so in review.
 
-Principles modified: I (what `-o` names, and the ban on inventing an interim machine-readable
-form), II (percentiles are exact, and parity with another tool is not a defined target).
+Principles modified: II (a percentile may be a deterministic, labelled estimate from a
+bounded-memory sketch; counts, minimum, maximum, mean and standard deviation stay exact, with
+a refusal).
 
 Added sections: none. Removed sections: none.
 
-Why now (galaxio-cli#112):
-- `galaxio report` offers `-o stats|global_stats|yml`, all reserved, and publishes no
-  machine-readable output until the first ships (galaxio-cli#50, maintainer decisions of
-  2026-09-15 and 2026-09-16). Under v2.0.0 that was a standing justified FAIL in
-  specs/004-report-records/plan.md; under v2.1.0 it is compliant and the Complexity Tracking
-  row is no longer required.
-- Gatling computes percentiles with an AVLTreeDigest carrying an unseeded java.util.Random:
-  2000 identical rebuilds of one recording's 102 samples produced seven distinct percentile
-  tuples, and the value Gatling recorded appeared 22% of the time. A one-pass millisecond
-  histogram over the same log is exact. v2.0.0 had the division backwards; the evidence is
-  recorded on galaxio-cli#51.
+Why now (galaxio-cli#114):
+- On 2026-09-17 the maintainer decided that `galaxio report` estimates percentiles with a
+  t-digest, `github.com/caio/go-tdigest/v5` read with its default quantile (galaxio-cli#51,
+  specs/005-report-summary). v2.1.0 required every percentile to be exact and a refusal
+  otherwise, so that specification failed gate II on a clause no implementation of the
+  decision could pass.
+- The conflict is permanent rather than a gap to wait out: an exact percentile needs every
+  sample or a histogram as wide as the range of values, and a log of any size bounds neither.
+  Two digests of a whole run held 0.06 MiB of heap after 100 million requests.
+- The estimate is deterministic — the library seeds its own generator with a constant, and
+  two reads of every corpus run gave identical percentiles — and its known divergence is
+  concrete: for the recorded 3.13.1 run the default quantile gives 1427 ms as the 95th
+  percentile of all requests, where the request at that rank took 1502 ms and none took
+  between 8 and 1501 ms. caio/go-tdigest#42 proposes a read by rank that returns 1502; taking
+  it is a later change that the pinned values make visible.
+- Parity with Gatling stays undefined, and the clause that says so is unchanged: Gatling
+  printed 1072 ms for that run, a value that comes from a defect in com.tdunning:t-digest 3.3
+  (tdunning/t-digest#230).
 
 Templates:
-- ✅ .specify/templates/plan-template.md — Constitution Check rows I and II reworded to the
-  amended clauses.
-- ✅ .specify/templates/tasks-template.md — unchanged; it cites neither clause.
+- ✅ .specify/templates/plan-template.md — Constitution Check row II reworded to the amended
+  clause.
+- ✅ .specify/templates/tasks-template.md — unchanged; it cites no clause of Principle II.
 - ✅ .specify/templates/spec-template.md — unchanged.
-- ✅ AGENTS.md — the Architecture paragraph no longer repeats `-o text|json`.
+- ✅ AGENTS.md — unchanged; it does not restate Principle II.
 
-Follow-up TODOs (carried from 2.0.0 unless noted):
+Follow-up TODOs (carried from 2.1.0):
 - `scripts/linkage_test.sh` covers the release-range helpers used by
   `scripts/check-linkage.sh`. A direct suite for its `gh` calls still needs a `gh` stub
   and remains a follow-up; the `shell suites` job discovers the existing helper suite.
@@ -45,9 +55,9 @@ Follow-up TODOs (carried from 2.0.0 unless noted):
   test headings; this repository's template and constitution require tests.
 - Skills classification pinned to `samber/cc-skills-golang` 2.0.1 and
   `galaxio/galaxio-gatling` 2.4.0 as installed on 2026-09-13; re-read on every plugin update.
-- NEW: no CI job runs `govulncheck`, although the Quality Gates table's spirit and several
-  plans assume a vulnerability scan before a release. Adding one is itself a gate change and
-  so a separate, ask-first amendment.
+- No CI job runs `govulncheck`, although the Quality Gates table's spirit and several plans
+  assume a vulnerability scan before a release. Adding one is itself a gate change and so a
+  separate, ask-first amendment.
 -->
 # galaxio-cli Constitution
 
@@ -99,11 +109,19 @@ contract be tested without a terminal.
 - What the library owns is the definitions — what counts as a failure, what a request
   position is, where a run begins and ends. This repository MUST NOT re-derive them.
 - Successful and failed samples are accumulated separately; a failure MUST NOT contribute to
-  a success statistic. Counts, minimum, maximum, mean, standard deviation and percentiles
-  MUST all be exact over the samples the source recorded. Where a bounded-memory accumulator
-  cannot keep a percentile exact — an unbounded value range, an exhausted budget — the
-  command MUST refuse and say which figure it cannot stand behind, rather than write an
-  estimate that reads like a measurement.
+  a success statistic. Counts, minimum, maximum, mean and standard deviation MUST be exact
+  over the samples the source recorded. Where a bounded-memory accumulator cannot keep one of
+  them exact, the command MUST refuse and say which figure it cannot stand behind, rather
+  than write an estimate that reads like a measurement.
+- A percentile MAY be an estimate read from a bounded-memory sketch rather than an exact
+  order statistic: an exact one needs every sample or a histogram as wide as the range of
+  values, and a log of any size bounds neither. An estimate MUST be deterministic — the same
+  log yields the same percentiles — and every output carrying one MUST say that it is an
+  estimate and how it is computed. Its estimator, the estimator's parameters and how it is
+  read MUST be recorded in the feature's `research.md`, and its values for the recorded
+  corpus MUST be pinned in tests, so that changing any of the three fails a test instead of
+  moving printed numbers in silence. Where an estimate is known to differ from the value
+  recorded at the percentile's rank, the documentation MUST say so with an example.
 - Percentiles MUST NOT be presented as reproducing another tool's. Gatling estimates its own
   with a randomized digest that does not reproduce its output between runs of the same data,
   so digit-for-digit parity is not a defined target: it MUST NOT be claimed, asserted in a
@@ -120,6 +138,9 @@ contract be tested without a terminal.
 Rationale: this CLI computes reports over finished logs while `parsec` supplies shared
 definitions rather than aggregate implementations. Keeping report arithmetic here prevents
 library consumers from inheriting CLI policy, and the honesty rules keep results comparable.
+An estimate is acceptable where a measurement is unaffordable only if it says so and stays
+put: a percentile that moves between two readings of one log, or between two builds without
+a failing test, is not a figure anyone can write a threshold against.
 
 ### III. Tests Land With The Change (NON-NEGOTIABLE)
 
@@ -360,4 +381,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 2.1.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-16
+**Version**: 2.2.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-17
