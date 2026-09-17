@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -65,9 +66,12 @@ func TestReportCommand(t *testing.T) {
 			}
 			for _, want := range []string{
 				"Report on finished load-test runs.",
-				"Operational subcommands are introduced separately.",
+				"Tools: gatling",
 				"Usage:",
-				"galaxio report [flags]",
+				"galaxio report <tool> [PATH] [flags]",
+				// The flag names its own type, and checks the value as it
+				// parses it, so that -o is answered before help is.
+				"-o, --output formats",
 			} {
 				if !strings.Contains(stdout, want) {
 					t.Fatalf("expected report help to contain %q, got %q", want, stdout)
@@ -86,8 +90,8 @@ func TestReportCommandRejectsArguments(t *testing.T) {
 	if stdout != "" {
 		t.Fatalf("expected empty stdout, got %q", stdout)
 	}
-	if !strings.Contains(stderr, "unknown command") && !strings.Contains(stderr, "accepts 0 arg") {
-		t.Fatalf("expected argument validation error, got %q", stderr)
+	if !strings.Contains(stderr, "unsupported tool") {
+		t.Fatalf("expected the argument to be rejected as a tool, got %q", stderr)
 	}
 }
 
@@ -526,6 +530,53 @@ func TestUpdateRejectsUnsupportedOutputBeforeRunning(t *testing.T) {
 	}
 	if !strings.Contains(stderr, `unsupported output format "xml"`) {
 		t.Fatalf("expected unsupported output error, got %q", stderr)
+	}
+}
+
+// TestUsageExitCodeFollowsTheErrorNotItsWords pins both directions of the
+// classification the exit code rests on, because a substring match on the
+// error's text satisfies only one of them.
+//
+// The runtime half is the defect that match produced: a valid invocation whose
+// failure message happens to contain the words "unknown command" — here a
+// directory the user named — is a runtime failure and must exit 1. The usage
+// half keeps a real unknown command at 2, including the commands cobra builds
+// itself, whose validators this package never wrote.
+func TestUsageExitCodeFollowsTheErrorNotItsWords(t *testing.T) {
+	t.Parallel()
+
+	runtimePath := filepath.Join(t.TempDir(), "unknown command")
+
+	tests := []struct {
+		name string
+		args []string
+		want int
+		has  string
+	}{
+		{
+			name: "a runtime failure naming a path that reads as a usage error",
+			args: []string{"report", "gatling", runtimePath},
+			want: exitRuntime,
+			has:  "unknown command",
+		},
+		{name: "an unknown subcommand", args: []string{"bogus"}, want: exitUsage, has: "unknown command"},
+		{name: "a command cobra wrote", args: []string{"completion", "bash", "extra"}, want: exitUsage, has: "unknown command"},
+		{name: "another shell cobra wrote", args: []string{"completion", "zsh", "extra"}, want: exitUsage, has: "unknown command"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			code, _, stderr := runCLI(tt.args...)
+			if code != tt.want {
+				t.Errorf("%v exited %d, want %d: %s", tt.args, code, tt.want, stderr)
+			}
+
+			if !strings.Contains(stderr, tt.has) {
+				t.Errorf("%v reported %q, want it to contain %q", tt.args, stderr, tt.has)
+			}
+		})
 	}
 }
 
