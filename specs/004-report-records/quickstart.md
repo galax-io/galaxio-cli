@@ -132,6 +132,25 @@ Expected: no formatting diff, vet clean, all tests pass with the race detector, 
 coverage at or above 80%, tidy leaves no diff, integration suite passes, no known
 vulnerabilities.
 
+Observed 2026-09-17 after the second review's fixes, Go 1.27.1, darwin/arm64:
+
+```text
+gofmt:       no diff
+vet:         clean
+vet (tags):  clean
+tests:       10 packages ok (race on)
+coverage:    84.6% total, floor 80.0%
+report pkg:  95.0%, reporttest 95.5%
+mod tidy:    no diff
+mod verify:  all modules verified
+integration: 10 packages ok
+shell suites: 8 ok
+govulncheck: No vulnerabilities found.
+```
+
+Every commit on this branch was checked out into a separate worktree and built and tested
+on its own; all of them pass.
+
 ## 7. Milestone and issue
 
 ```bash
