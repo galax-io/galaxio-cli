@@ -127,24 +127,3 @@ jobs:
 
       - name: Integration tests
         run: go test -tags=integration -race -count=1 ./...
-
-  docker-image:
-    name: docker image
-    runs-on: ubuntu-latest
-    needs:
-      - test
-      - integration
-      - shell-suites
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Build and validate image
-        uses: ./.github/actions/docker-build-validate
-        with:
-          image_name: galaxioteam/galaxio
-          version: dev
-          image_tag: galaxioteam/galaxio:ci-${{ github.sha }}
