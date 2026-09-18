@@ -1,17 +1,27 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 3.0.0 → 3.1.0
-Bump rationale: MINOR. Principle II's parity clause gains one described exception; every
-suite that satisfied v3.0.0 satisfies v3.1.0.
+Version change: 3.1.0 → 3.2.0
+Bump rationale: MINOR. The Quality Gates & Tooling section's Image gate moves from a
+per-pull-request CI job to the release workflow alone; no Core Principle changes, and every
+suite that satisfied v3.1.0's Principles I–VI satisfies v3.2.0's.
 
-Principles modified: II (a percentile may differ from Gatling 3.11's across a boundary
-between two runs of equal response times, where the estimator orders equal centroids
-otherwise; tests describe it and the documentation gives its example).
+Principles modified: none. Quality Gates & Tooling amended (Image gate).
 
 Added sections: none. Removed sections: none.
 
-Why now (galaxio-cli#51, maintainer, 2026-09-17):
+Why now (galaxio-cli#119, maintainer, 2026-09-18):
+- `ci.yml`'s `docker-image` job built and validated the Docker image on every pull request
+  and every push to `main`, pulling `golang:…-bookworm` and
+  `gcr.io/distroless/static-debian12:nonroot` each time. GitHub-hosted runners share a pool
+  of IPs against which Docker Hub's pull-rate limit is counted, so a per-PR image build
+  spends part of that shared budget for a check the release workflow already makes: before
+  `publish-image` ever pushes a tag, `release.yml`'s own `docker-image` job builds the same
+  `Dockerfile` and runs `galaxio version` inside it.
+- The Image gate now runs only in `release.yml`, exactly where it already ran before a
+  publish; a pull request no longer builds or pulls a Docker image at all.
+
+Superseded rationale (galaxio-cli#51, maintainer, 2026-09-17), retained for v3.0.0 → v3.1.0:
 - A fresh live 3.11.5 run gave 5 as the 75th percentile of failed requests, where Gatling
   3.11 printed 6 and its digest gives 6 for every seed. caio/go-tdigest keeps a merged
   centroid where it is; t-digest 3.1 removes it and adds it back after every centroid of an
@@ -23,12 +33,15 @@ Why now (galaxio-cli#51, maintainer, 2026-09-17):
   does matched all 630, and the maintainer chose to keep the library unmodified and describe
   the difference.
 
-Templates:
+Templates (v3.1.0):
 - ✅ .specify/templates/plan-template.md — Constitution Check row II reworded to the amended
   clause.
 - ✅ .specify/templates/tasks-template.md — unchanged; it cites no clause of Principle II.
 - ✅ .specify/templates/spec-template.md — unchanged.
 - ✅ AGENTS.md — unchanged; it does not restate Principle II.
+
+Templates (v3.2.0): none affected — no template names the Image gate or the `docker-image`
+job.
 
 Follow-up TODOs (carried from 2.1.0):
 - `scripts/linkage_test.sh` covers the release-range helpers used by
@@ -218,9 +231,10 @@ debugs one; predictable Go keeps both fast.
 Toolchain: Go 1.27 (`go.mod`), used by CI through `go-version-file`. The `toolchain`
 directive, when set, is bumped in a dedicated PR. Release binaries are built by GoReleaser
 (`.goreleaser.yaml`) with `CGO_ENABLED=0`; the image is built from `Dockerfile` and
-validated by running `galaxio version` inside it.
+validated by running `galaxio version` inside it, once, during the release workflow — a
+pull request builds neither.
 
-Every PR MUST be green on all CI jobs before merge:
+Every PR MUST be green on all `ci.yml` jobs before merge:
 
 | Gate | Command | CI job |
 |------|---------|--------|
@@ -231,9 +245,16 @@ Every PR MUST be green on all CI jobs before merge:
 | Coverage floor | total ≥ 80.0%, enforced | test |
 | Build | `go build -trimpath -o dist/galaxio ./cmd/galaxio` | test |
 | Integration | `go test -tags=integration -race -count=1 ./...` | integration tests |
-| Image | build from `Dockerfile`, run `galaxio version` | docker image |
 | Linkage | `scripts/check-linkage.sh --pr N` | linkage |
 | Shell suites | every `*_test.sh` under `scripts/`, `.claude/hooks/`, `.githooks/` | shell suites |
+
+The Image gate is not in that table because it is not a per-PR gate: `release.yml`'s
+`docker-image` job builds `Dockerfile` and runs `galaxio version` inside it before
+`publish-release`, and `publish-image` — gated on `publish-release` — is the only job that
+ever pushes to Docker Hub. Moved out of `ci.yml` (v3.2.0) because a build on every pull
+request pulls `golang` and `gcr.io/distroless` from a shared runner IP pool on every run,
+against Docker Hub's pull-rate limit, for a check the release workflow already repeats
+before anything is published.
 
 Local equivalents: `gofmt -w .` before every commit; `go vet ./... && go test ./...` to
 verify; `go build ./... && go test ./...` is the definition of a green commit;
@@ -242,8 +263,9 @@ verify; `go build ./... && go test ./...` is the definition of a green commit;
 Additional constraints:
 
 - CI has no `paths-ignore`: a docs-only merge still runs every verification job, but it does
-  not publish. Publication is the tag-triggered `release.yml` workflow and remains an
-  ask-first release-workflow change.
+  not publish and, since v3.2.0, does not build or validate the Docker image either — both
+  happen only in the tag-triggered `release.yml` workflow, which remains an ask-first
+  release-workflow change.
 - The `linkage` job runs `check-linkage.sh --pr` on every pull request, and the `shell suites`
   job runs every `*_test.sh` suite under `scripts/`, `.claude/hooks/` and `.githooks/` on every
   pull request and push to `main`. Both stay red until fixed; a reviewer relies on them
@@ -375,4 +397,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 3.1.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-17
+**Version**: 3.2.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-18
