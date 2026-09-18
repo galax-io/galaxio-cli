@@ -42,7 +42,9 @@ Derived when the summary is produced, in integers: the mean `floor((2·sum + tim
 quantile, rounded half up. While `timed` is zero every one of them is **absent**, never 0.
 
 **All requests**: not stored. Count, timed, sum and sum of squares add; minimum and maximum
-combine; its percentiles are read from a clone of the ok digest merged with the failed one.
+combine; its percentiles are read from a fresh digest into which the ok digest and then the
+failed one are merged — never from a clone, whose seed the library draws from the original's
+generator, so that reading the figures in the middle of a walk changes nothing that follows.
 A failure therefore reaches the figures of all requests and never a figure of ok requests.
 
 ## What feeds them

@@ -77,7 +77,7 @@ type Tally struct {
 // from a run that recorded nothing. [Source.Scan] holds that precondition for
 // the open runs this package hands out; a caller holding a bare reader owns it.
 func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, error) {
-	opts, err := opts.normalize()
+	opts, err := opts.Normalize()
 	if err != nil {
 		return Summary{}, err
 	}
@@ -110,10 +110,11 @@ func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, erro
 }
 
 // add folds one item into the summary: the tally counts every item, a request
-// feeds the figures of the outcome the source recorded for it, and a
-// successful one with a recorded end falls into a response-time band. A
-// request whose outcome the source lost stays in Tally.Unknown and feeds
-// nothing, and a group traversal feeds nothing either.
+// feeds the figures of the outcome the source recorded for it and, when it has
+// a recorded end, the digest of all requests, and a successful one with a
+// recorded end falls into a response-time band. A request whose outcome the
+// source lost stays in Tally.Unknown and feeds nothing, and a group traversal
+// feeds nothing either.
 func (s *Summary) add(item *model.Item) {
 	s.Tally.count(item)
 
@@ -125,10 +126,24 @@ func (s *Summary) add(item *model.Item) {
 	case model.OutcomeSuccess:
 		if ms, timed := s.OK.add(item.Sample.Duration); timed {
 			s.band(ms)
+			s.estimate(ms)
 		}
 	case model.OutcomeFailure:
-		s.Failed.add(item.Sample.Duration)
+		if ms, timed := s.Failed.add(item.Sample.Duration); timed {
+			s.estimate(ms)
+		}
 	}
+}
+
+// estimate feeds one recorded response time to the digest of all requests,
+// creating the digest on the first.
+func (s *Summary) estimate(ms int64) {
+	if s.all == nil {
+		s.all = newDigest()
+	}
+
+	// Add fails only for NaN, and a whole number of milliseconds never is.
+	_ = s.all.Add(float64(ms))
 }
 
 // count adds one item to the tally and extends the bounds with it. Every kind
