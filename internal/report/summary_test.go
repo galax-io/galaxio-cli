@@ -2,7 +2,10 @@ package report
 
 import (
 	"context"
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -148,6 +151,258 @@ func TestScanOptions(t *testing.T) {
 
 			if len(rd.items) != 1 || summary.Tally != (Tally{}) {
 				t.Errorf("Scan read the run although its options were refused: %+v, %d items left", summary.Tally, len(rd.items))
+			}
+		})
+	}
+}
+
+// TestSummaryAll holds the figures of all requests to both outcomes, and each
+// outcome to its own requests: a failure reaches every figure of all requests
+// and no figure of the successful ones.
+func TestSummaryAll(t *testing.T) {
+	t.Parallel()
+
+	s := Summary{OK: figuresOf(10, 20), Failed: figuresOf(1000)}
+
+	if got, expected := readingOf(t, s.All()), readingOf(t, figuresOf(10, 20, 1000)); got != expected {
+		t.Errorf("All = %+v, want %+v", got, expected)
+	}
+
+	if got, expected := readingOf(t, s.OK), (reading{count: 2, minimum: 10, maximum: 20, mean: 15, stdDev: 5, timed: true}); got != expected {
+		t.Errorf("OK = %+v, want %+v: a failure reached a figure of successful requests", got, expected)
+	}
+}
+
+// TestSummaryRate holds the rate to Gatling's one divisor: the run's span in
+// whole seconds, rounded up, shared by every rate.
+func TestSummaryRate(t *testing.T) {
+	t.Parallel()
+
+	at := func(ms int64) time.Time { return time.UnixMilli(1700000000000 + ms).UTC() }
+
+	userEvent := func(kind model.UserEventKind, ms int64) model.Item {
+		return model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: kind, At: at(ms)}}
+	}
+
+	tests := []struct {
+		name         string
+		items        []model.Item
+		count        int
+		expectedSpan time.Duration
+		spanKnown    bool
+		expectedRate float64
+		rateKnown    bool
+	}{
+		{
+			// 3.13.1 spans 3226 ms: four seconds, and 102 requests make 25.5.
+			name:         "a part second counts as a whole one",
+			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, 3226)},
+			count:        102,
+			expectedSpan: 3226 * time.Millisecond, spanKnown: true,
+			expectedRate: 25.5, rateKnown: true,
+		},
+		{
+			name:         "whole seconds are not rounded up",
+			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, 3000)},
+			count:        9,
+			expectedSpan: 3 * time.Second, spanKnown: true,
+			expectedRate: 3, rateKnown: true,
+		},
+		{
+			name:         "one millisecond is one second",
+			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, 1)},
+			count:        1,
+			expectedSpan: time.Millisecond, spanKnown: true,
+			expectedRate: 1, rateKnown: true,
+		},
+		{
+			name:         "a count of zero over a known span is a rate of 0",
+			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, 3226)},
+			count:        0,
+			expectedSpan: 3226 * time.Millisecond, spanKnown: true,
+			expectedRate: 0, rateKnown: true,
+		},
+		{
+			name:         "a run at one instant spans zero and has no rate",
+			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, 0)},
+			count:        1,
+			expectedSpan: 0, spanKnown: true,
+			rateKnown: false,
+		},
+		{
+			name: "a run the bounds cannot place has no span and no rate",
+			items: []model.Item{
+				userEvent(model.UserStart, 0),
+				{Kind: model.ItemSample, Sample: model.Sample{Name: "unplaced", Duration: model.Some(time.Millisecond), Outcome: model.OutcomeSuccess}},
+				userEvent(model.UserEnd, 3226),
+			},
+			count:     1,
+			spanKnown: false,
+			rateKnown: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			summary, err := Scan(context.Background(), &stubReader{items: tt.items}, DefaultOptions())
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+
+			span, spanKnown := summary.Span()
+			if span != tt.expectedSpan || spanKnown != tt.spanKnown {
+				t.Errorf("Span = %v, %v; want %v, %v", span, spanKnown, tt.expectedSpan, tt.spanKnown)
+			}
+
+			rate, rateKnown := summary.Rate(tt.count)
+			if rate != tt.expectedRate || rateKnown != tt.rateKnown {
+				t.Errorf("Rate(%d) = %v, %v; want %v, %v", tt.count, rate, rateKnown, tt.expectedRate, tt.rateKnown)
+			}
+		})
+	}
+}
+
+// gatlingFigures are the whole-run figures Gatling itself recorded for a run,
+// for all, successful and failed requests in that order. No percentile is
+// among them: Gatling's are not a reference for anything.
+type gatlingFigures struct {
+	count, minimum, maximum, mean, stdDev [3]int64
+	rate                                  [3]float64
+}
+
+// recordedGlobalStats is what a test reads from a global_stats.json Gatling
+// wrote, and deliberately nothing more.
+type recordedGlobalStats struct {
+	NumberOfRequests              recordedTriple[int64]   `json:"numberOfRequests"`
+	MinResponseTime               recordedTriple[int64]   `json:"minResponseTime"`
+	MaxResponseTime               recordedTriple[int64]   `json:"maxResponseTime"`
+	MeanResponseTime              recordedTriple[int64]   `json:"meanResponseTime"`
+	StandardDeviation             recordedTriple[int64]   `json:"standardDeviation"`
+	MeanNumberOfRequestsPerSecond recordedTriple[float64] `json:"meanNumberOfRequestsPerSecond"`
+}
+
+type recordedTriple[T int64 | float64] struct {
+	Total T `json:"total"`
+	OK    T `json:"ok"`
+	KO    T `json:"ko"`
+}
+
+func (r recordedTriple[T]) values() [3]T {
+	return [3]T{r.Total, r.OK, r.KO}
+}
+
+// readGlobalStats reads the figures Gatling wrote beside a corpus run.
+func readGlobalStats(t *testing.T, version, file string) gatlingFigures {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(corpusDir, version, file))
+	if err != nil {
+		t.Fatalf("read %s: %v", file, err)
+	}
+
+	var recorded recordedGlobalStats
+	if err := json.Unmarshal(data, &recorded); err != nil {
+		t.Fatalf("decode %s: %v", file, err)
+	}
+
+	return gatlingFigures{
+		count:   recorded.NumberOfRequests.values(),
+		minimum: recorded.MinResponseTime.values(),
+		maximum: recorded.MaxResponseTime.values(),
+		mean:    recorded.MeanResponseTime.values(),
+		stdDev:  recorded.StandardDeviation.values(),
+		rate:    recorded.MeanNumberOfRequestsPerSecond.values(),
+	}
+}
+
+// TestSummaryMatchesGatling holds every non-percentile whole-run figure of every
+// corpus run to what Gatling itself recorded for that run: its global_stats.json
+// where it wrote one, and the Global Information block of its console where it
+// did not, or as well.
+func TestSummaryMatchesGatling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		version  string
+		expected func(*testing.T) gatlingFigures
+	}{
+		{
+			name: "3.11.5 global_stats.json", version: "3.11.5",
+			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.11.5", "global_stats.json") },
+		},
+		{
+			name: "3.12.0 global_stats.json", version: "3.12.0",
+			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.12.0", "global_stats.json") },
+		},
+		{
+			name: "3.13.1 global_stats.json", version: "3.13.1",
+			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.13.1", "js/global_stats.json") },
+		},
+		{
+			// 3.13.1/console.txt, lines 44–53.
+			name: "3.13.1 console", version: "3.13.1",
+			expected: func(*testing.T) gatlingFigures {
+				return gatlingFigures{
+					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1503, 1503, 4},
+					mean: [3]int64{89, 108, 1}, stdDev: [3]int64{353, 387, 1}, rate: [3]float64{25.5, 21, 4.5},
+				}
+			},
+		},
+		{
+			// 3.14.9/console.txt, lines 41–50.
+			name: "3.14.9 console", version: "3.14.9",
+			expected: func(*testing.T) gatlingFigures {
+				return gatlingFigures{
+					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1502, 1502, 12},
+					mean: [3]int64{90, 108, 3}, stdDev: [3]int64{353, 387, 4}, rate: [3]float64{25.5, 21, 4.5},
+				}
+			},
+		},
+		{
+			// 3.15.1/console.txt, lines 40–49.
+			name: "3.15.1 console", version: "3.15.1",
+			expected: func(*testing.T) gatlingFigures {
+				return gatlingFigures{
+					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1502, 1502, 3},
+					mean: [3]int64{89, 108, 1}, stdDev: [3]int64{353, 387, 1}, rate: [3]float64{25.5, 21, 4.5},
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			expected := tt.expected(t)
+
+			summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, tt.version)), DefaultOptions())
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+
+			columns := [3]string{"total", "ok", "ko"}
+
+			for i, figures := range [3]Figures{summary.All(), summary.OK, summary.Failed} {
+				r := readingOf(t, figures)
+				if !r.timed {
+					t.Fatalf("%s: no timing figure, though Gatling recorded them", columns[i])
+				}
+
+				got := [5]int64{int64(r.count), r.minimum, r.maximum, r.mean, r.stdDev}
+				want := [5]int64{expected.count[i], expected.minimum[i], expected.maximum[i], expected.mean[i], expected.stdDev[i]}
+
+				if got != want {
+					t.Errorf("%s count/min/max/mean/std = %v, Gatling recorded %v", columns[i], got, want)
+				}
+
+				rate, ok := summary.Rate(figures.Count())
+				if !ok || rate != expected.rate[i] {
+					t.Errorf("%s rate = %v (%v), Gatling recorded %v", columns[i], rate, ok, expected.rate[i])
+				}
 			}
 		})
 	}
