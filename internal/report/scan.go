@@ -57,47 +57,54 @@ type Tally struct {
 	Bounds model.Bounds
 }
 
-// Scan walks the run rd yields once, counting what it holds and extending the
-// run's bounds. Nothing is retained, so memory does not grow with the log.
+// Scan walks the run rd yields once and returns its summary at opts: what the
+// log holds, counted, with the run's bounds extended as it goes. Nothing is
+// retained, so memory does not grow with the log. Options no summary can be
+// computed at are refused before anything is read.
 //
-// A log cut short — a run killed mid-flight — returns the tally of everything
+// A log cut short — a run killed mid-flight — returns the summary of everything
 // it did hold together with an error, because a partial run must not be
 // mistaken for a complete one. One shape cannot be detected: a run killed
 // exactly on a record boundary leaves a log neither format carries an end
 // marker for, so parsec ends it with io.EOF and this reports it as complete.
-// The format cannot express the difference and neither can this. Any other read failure returns the tally walked
-// so far and an error saying the run was not read completely. A cancelled ctx
-// returns its error.
+// The format cannot express the difference and neither can this. Any other
+// read failure returns the summary walked so far and an error saying the run
+// was not read completely. A cancelled ctx returns its error.
 //
 // rd must not have been walked already. A reader yields its items once, so a
-// second walk returns an empty tally and no error, which no caller can tell
+// second walk returns an empty summary and no error, which no caller can tell
 // from a run that recorded nothing. [Source.Scan] holds that precondition for
 // the open runs this package hands out; a caller holding a bare reader owns it.
-func Scan(ctx context.Context, rd simlog.RunReader) (Tally, error) {
-	var t Tally
+func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, error) {
+	opts, err := opts.normalize()
+	if err != nil {
+		return Summary{}, err
+	}
+
+	s := Summary{Options: opts}
 
 	for n := 0; ; n++ {
 		if n%cancelCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
-				return t, err
+				return s, err
 			}
 		}
 
 		item, err := rd.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return t, nil
+				return s, nil
 			}
 
 			var cutShort *gatling.TruncationError
 			if errors.As(err, &cutShort) {
-				return t, fmt.Errorf("%w; the run was not read to the end", err)
+				return s, fmt.Errorf("%w; the run was not read to the end", err)
 			}
 
-			return t, fmt.Errorf("%w; the run was not read completely", err)
+			return s, fmt.Errorf("%w; the run was not read completely", err)
 		}
 
-		t.count(&item)
+		s.Tally.count(&item)
 	}
 }
 

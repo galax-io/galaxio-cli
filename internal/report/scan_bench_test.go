@@ -36,11 +36,12 @@ func BenchmarkScan(b *testing.B) {
 					b.Fatalf("NewRunReader: %v", err)
 				}
 
-				tally, err := Scan(context.Background(), rd)
+				summary, err := Scan(context.Background(), rd, DefaultOptions())
 				if err != nil {
 					b.Fatalf("Scan: %v", err)
 				}
 
+				tally := summary.Tally
 				records += tally.Requests + tally.Groups + tally.Users + tally.Errors
 			}
 
@@ -71,7 +72,7 @@ func discardScan(tb testing.TB, header, body []byte, repeats int) {
 		tb.Fatalf("NewRunReader: %v", err)
 	}
 
-	if _, err := Scan(context.Background(), rd); err != nil {
+	if _, err := Scan(context.Background(), rd, DefaultOptions()); err != nil {
 		tb.Fatalf("Scan: %v", err)
 	}
 }

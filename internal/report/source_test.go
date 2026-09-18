@@ -576,7 +576,7 @@ func TestOpenMissingLog(t *testing.T) {
 
 // TestSourceScanRefusesASecondWalk pins the trap that makes a spent reader look
 // like an empty run: both codecs latch their end and keep answering with it, so
-// a second walk returns a tally of nothing and no error at all.
+// a second walk returns a summary of nothing and no error at all.
 func TestSourceScanRefusesASecondWalk(t *testing.T) {
 	t.Parallel()
 
@@ -592,22 +592,22 @@ func TestSourceScanRefusesASecondWalk(t *testing.T) {
 
 	defer func() { _ = src.Close() }()
 
-	first, err := src.Scan(context.Background())
+	first, err := src.Scan(context.Background(), DefaultOptions())
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
 
-	if first.Requests == 0 {
-		t.Fatalf("the corpus run recorded no requests: %+v", first)
+	if first.Tally.Requests == 0 {
+		t.Fatalf("the corpus run recorded no requests: %+v", first.Tally)
 	}
 
-	second, err := src.Scan(context.Background())
+	second, err := src.Scan(context.Background(), DefaultOptions())
 	if !errors.Is(err, ErrSpent) {
-		t.Errorf("a second walk returned %+v, %v; want ErrSpent", second, err)
+		t.Errorf("a second walk returned %+v, %v; want ErrSpent", second.Tally, err)
 	}
 
-	if second != (Tally{}) {
-		t.Errorf("a refused walk returned a tally: %+v", second)
+	if second.Tally != (Tally{}) || second.Options.Percentiles != nil {
+		t.Errorf("a refused walk returned a summary: %+v", second)
 	}
 
 	// Closing spends it too: the reader over a closed file answers from its
@@ -615,7 +615,7 @@ func TestSourceScanRefusesASecondWalk(t *testing.T) {
 	// nothing.
 	_ = src.Close()
 
-	if _, err := src.Scan(context.Background()); !errors.Is(err, ErrSpent) {
+	if _, err := src.Scan(context.Background(), DefaultOptions()); !errors.Is(err, ErrSpent) {
 		t.Errorf("a walk after Close returned %v, want ErrSpent", err)
 	}
 }

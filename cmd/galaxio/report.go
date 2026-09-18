@@ -99,13 +99,13 @@ type reportOptions struct {
 }
 
 // reportOutput is what runReport read: where the run was, what the source said
-// about it, the log format, and the tally of what the log held. Every field but
-// the tally is a value parsec produced.
+// about it, the log format, and the summary of what the log held. Every field
+// but the summary is a value parsec produced.
 type reportOutput struct {
 	Location run.Location
 	Run      model.Run
 	Format   gatling.Format
-	Tally    report.Tally
+	Summary  report.Summary
 }
 
 func newReportCommand() *cobra.Command {
@@ -246,8 +246,8 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		fmt.Fprintf(opts.Stderr, "report: warning: %s\n", printable(w.String()))
 	}
 
-	tally, scanErr := src.Scan(ctx)
-	out.Tally = tally
+	summary, scanErr := src.Scan(ctx, report.DefaultOptions())
+	out.Summary = summary
 
 	// The log is named here, once, so that the failure reads the same whether
 	// it travels alone or beside a write that also failed. Wrapping keeps the
@@ -308,6 +308,8 @@ func plural(n int, noun string) string {
 func formatReport(out reportOutput, verbose bool) string {
 	var b strings.Builder
 
+	tally := out.Summary.Tally
+
 	// The column is one wider than the longest key above, so a key added later
 	// keeps the block aligned; TestReportLineWidth pins the two together.
 	line := func(key, format string, args ...any) {
@@ -334,33 +336,33 @@ func formatReport(out reportOutput, verbose bool) string {
 	line("log", "%s, %s", out.Format, printable(out.Location.Log))
 	line("found by", "%s", out.Location.Found)
 
-	if start, ok := out.Tally.Bounds.Start(); ok {
-		if end, endOK := out.Tally.Bounds.End(); endOK {
+	if start, ok := tally.Bounds.Start(); ok {
+		if end, endOK := tally.Bounds.End(); endOK {
 			line("span", "%s .. %s (%s)", start.UTC().Format(timeLayout), end.UTC().Format(timeLayout), end.Sub(start))
 		}
 	}
 
-	line("requests", "%d (%d ok, %d ko)", out.Tally.Requests, out.Tally.Successes, out.Tally.Failures)
+	line("requests", "%d (%d ok, %d ko)", tally.Requests, tally.Successes, tally.Failures)
 
-	if out.Tally.Unknown > 0 {
-		line("unknown", "%s whose outcome the source lost", plural(out.Tally.Unknown, "request"))
+	if tally.Unknown > 0 {
+		line("unknown", "%s whose outcome the source lost", plural(tally.Unknown, "request"))
 	}
 
-	line("groups", "%s", plural(out.Tally.Groups, "traversal"))
-	line("users", "%s", plural(out.Tally.Users, "event"))
-	line("errors", "%d", out.Tally.Errors)
+	line("groups", "%s", plural(tally.Groups, "traversal"))
+	line("users", "%s", plural(tally.Users, "event"))
+	line("errors", "%d", tally.Errors)
 
 	// A declared assertion reaches a reader in one of two places, and both are
 	// the run's: a source that writes its payloads ahead of the events puts
 	// them on the run description, one that writes them among the events yields
 	// them in the stream. Counting only the second said nothing whatever about
 	// a Gatling run, which always uses the first.
-	if declared := len(out.Run.Assertions) + out.Tally.Assertions; declared > 0 {
+	if declared := len(out.Run.Assertions) + tally.Assertions; declared > 0 {
 		line("assertions", "%s the run declared", plural(declared, "payload"))
 	}
 
-	if out.Tally.Other > 0 {
-		line("other", "%s of a kind this release does not know", plural(out.Tally.Other, "record"))
+	if tally.Other > 0 {
+		line("other", "%s of a kind this release does not know", plural(tally.Other, "record"))
 	}
 
 	if verbose {
