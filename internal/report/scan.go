@@ -21,8 +21,8 @@ const cancelCheckInterval = 1024
 //
 // These are counts of records walked, not statistics: nothing here is a mean,
 // a percentile, a range or a rate. Successes and failures are kept apart from
-// the outcome the source recorded so that the statistics of galaxio-cli#51
-// inherit a split that was never conflated.
+// the outcome the source recorded so that the figures of a Summary inherit a
+// split that was never conflated.
 type Tally struct {
 	// Requests is every sample walked; Successes, Failures and Unknown sum to
 	// it. Unknown counts a sample whose outcome the source lost, which is
@@ -58,8 +58,9 @@ type Tally struct {
 }
 
 // Scan walks the run rd yields once and returns its summary at opts: what the
-// log holds, counted, with the run's bounds extended as it goes. Nothing is
-// retained, so memory does not grow with the log. Options no summary can be
+// log holds, counted, with the run's bounds extended as it goes, and the
+// figures of its successful and failed requests. Nothing is retained, so
+// memory does not grow with the log. Options no summary can be
 // computed at are refused before anything is read.
 //
 // A log cut short — a run killed mid-flight — returns the summary of everything
@@ -104,7 +105,26 @@ func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, erro
 			return s, fmt.Errorf("%w; the run was not read completely", err)
 		}
 
-		s.Tally.count(&item)
+		s.add(&item)
+	}
+}
+
+// add folds one item into the summary: the tally counts every item, and a
+// request feeds the figures of the outcome the source recorded for it. A
+// request whose outcome the source lost stays in Tally.Unknown and feeds
+// nothing, and a group traversal feeds nothing either.
+func (s *Summary) add(item *model.Item) {
+	s.Tally.count(item)
+
+	if item.Kind != model.ItemSample {
+		return
+	}
+
+	switch item.Sample.Outcome {
+	case model.OutcomeSuccess:
+		s.OK.add(item.Sample.Duration)
+	case model.OutcomeFailure:
+		s.Failed.add(item.Sample.Duration)
 	}
 }
 

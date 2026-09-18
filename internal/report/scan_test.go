@@ -161,6 +161,57 @@ func TestScanCountsEveryKind(t *testing.T) {
 	}
 }
 
+// TestScanFeedsOutcomes holds the walk to the outcome the source recorded: a
+// request feeds that outcome's figures and nothing else, one whose outcome the
+// source lost feeds none, a request with no recorded end is counted and timed
+// nowhere, and a group traversal is not a request at all.
+func TestScanFeedsOutcomes(t *testing.T) {
+	t.Parallel()
+
+	at := func(ms int64) time.Time { return time.UnixMilli(ms).UTC() }
+	sample := func(name string, outcome model.Outcome, duration model.Opt[time.Duration]) model.Item {
+		return model.Item{Kind: model.ItemSample, Sample: model.Sample{Name: name, Start: at(1000), Duration: duration, Outcome: outcome}}
+	}
+
+	rd := &stubReader{items: []model.Item{
+		sample("fast", model.OutcomeSuccess, model.Some(10*time.Millisecond)),
+		sample("slow", model.OutcomeSuccess, model.Some(30*time.Millisecond)),
+		sample("never ended", model.OutcomeSuccess, model.Opt[time.Duration]{}),
+		sample("refused", model.OutcomeFailure, model.Some(2*time.Millisecond)),
+		sample("lost", model.OutcomeUnknown, model.Some(5000*time.Millisecond)),
+		{Kind: model.ItemGroup, Group: model.GroupSample{
+			Groups: []string{"g"}, Start: at(1000),
+			Duration: model.Some(9000 * time.Millisecond), CumulatedDuration: model.Some(9000 * time.Millisecond),
+			Outcome: model.OutcomeFailure,
+		}},
+	}}
+
+	summary, err := Scan(context.Background(), rd, DefaultOptions())
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	if got, expected := readingOf(t, summary.OK), (reading{count: 3, minimum: 10, maximum: 30, mean: 20, stdDev: 10, timed: true}); got != expected {
+		t.Errorf("OK = %+v, want %+v", got, expected)
+	}
+
+	if got, expected := readingOf(t, summary.Failed), (reading{count: 1, minimum: 2, maximum: 2, mean: 2, stdDev: 0, timed: true}); got != expected {
+		t.Errorf("Failed = %+v, want %+v: only the one failed request may reach it", got, expected)
+	}
+
+	if got := summary.All().Count(); got != 4 {
+		t.Errorf("All().Count() = %d, want 4: neither the lost outcome nor the group is a request of either outcome", got)
+	}
+
+	if got := summary.Untimed(); got != 1 {
+		t.Errorf("Untimed = %d, want 1", got)
+	}
+
+	if tally := summary.Tally; tally.Requests != 5 || tally.Unknown != 1 || tally.Groups != 1 {
+		t.Errorf("Tally = %+v, want 5 requests, 1 unknown, 1 group: the tally still counts what the figures leave out", tally)
+	}
+}
+
 func TestScanRunWithoutRequests(t *testing.T) {
 	t.Parallel()
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 )
 
 // Options is what a run is summarised at: the percentile ranks to report and
@@ -73,11 +74,67 @@ func (o Options) normalize() (Options, error) {
 }
 
 // Summary is what one pass over a run produced: the tally of what the log
-// holds and the options it was summarised at.
+// holds, the options it was summarised at, and the figures of the run as a
+// whole.
+//
+// A request counts toward the figures of the outcome the source recorded for
+// it, and toward nothing else: a failure never reaches a figure of successful
+// requests, a request whose outcome the source lost reaches no figure at all,
+// and a group traversal is not a request.
 type Summary struct {
 	// Tally counts what the log holds, as milestone v0.13.0 counted it.
 	Tally Tally
 	// Options is what the run was summarised at, its ranks sorted and each
 	// kept once.
 	Options Options
+	// OK and Failed are the figures of the requests the source recorded as
+	// successful and as failed.
+	OK     Figures
+	Failed Figures
+}
+
+// All returns the figures of every request of the run, successful and failed
+// together. Nothing is stored for them: they are the two outcomes combined.
+func (s Summary) All() Figures {
+	return merge(s.OK, s.Failed)
+}
+
+// Untimed returns how many requests have no recorded end. They are counted, and
+// take part in no timing figure.
+func (s Summary) Untimed() int {
+	return s.OK.count - s.OK.timed + s.Failed.count - s.Failed.timed
+}
+
+// Span returns how long the run lasted, from where parsec's bounds say it began
+// to where they say it ended, and false when the bounds cannot place the run in
+// time. A run that began and ended at one instant spans zero.
+func (s Summary) Span() (time.Duration, bool) {
+	start, ok := s.Tally.Bounds.Start()
+	if !ok {
+		return 0, false
+	}
+
+	end, ok := s.Tally.Bounds.End()
+	if !ok {
+		return 0, false
+	}
+
+	return end.Sub(start), true
+}
+
+// Rate returns count requests per second of the run: count divided by the
+// run's span in whole seconds, rounded up, which is the one divisor Gatling
+// uses for every rate of a run. It returns false when the run cannot be
+// timed or spans no time, so that a rate is never shown as infinite and a
+// span is never replaced by a second nobody measured. A count of zero over a
+// known span is a rate of 0.
+func (s Summary) Rate(count int) (float64, bool) {
+	span, ok := s.Span()
+	if !ok || span <= 0 {
+		return 0, false
+	}
+
+	seconds := (span + time.Second - 1) / time.Second
+
+	return float64(count) / float64(seconds), true
 }
