@@ -1,0 +1,76 @@
+[info] welcome to sbt 1.12.15 (Homebrew Java 17.0.10)
+[info] loading global plugins from /Users/i.akhaltsev/.sbt/1.0/plugins
+[info] loading settings for project simulation-build from plugins.sbt...
+[info] loading project definition from /Users/i.akhaltsev/IdeaProjects/personal/parsec/.claude/worktrees/speckit-specify-milestone-15aceb/testdata/corpus/gatling/simulation/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to corpus (in build file:/Users/i.akhaltsev/IdeaProjects/personal/parsec/.claude/worktrees/speckit-specify-milestone-15aceb/testdata/corpus/gatling/simulation/)
+[info] compiling 2 Scala sources to /Users/i.akhaltsev/IdeaProjects/personal/parsec/.claude/worktrees/speckit-specify-milestone-15aceb/testdata/corpus/gatling/simulation/target/scala-2.13/test-classes ...
+[info] done compiling
+Simulation io.galaxio.parsec.corpus.CorpusSimulation started...
+
+========================================================================================================================
+2026-09-06 04:48:18 GMT                                                                               3s elapsed
+---- Requests -----------------------------------------------------------------------|---Total---|-----OK----|----KO----
+> Global                                                                             |       102 |        84 |        18
+> GET /ok                                                                            |         6 |         6 |         0
+> Проверка /ok                                                                       |         6 |         6 |         0
+> outer / GET /ok                                                                    |        66 |        66 |         0
+> outer / inner, with comma / GET /slow                                              |         6 |         6 |         0
+> outer / inner, with comma / GET /fail                                              |         6 |         0 |         6
+> connect refused                                                                    |         6 |         0 |         6
+> unknown host                                                                       |         6 |         0 |         6
+---- Errors ------------------------------------------------------------------------------------------------------------
+> status.find.is(200), found 500                                                                              6    (25%)
+> j.n.ConnectException: Connection refused                                                                    6    (25%)
+> unresolvable url: No attribute named 'undefinedAttribute' is defined                                        6    (25%)
+> j.n.UnknownHostException: nonexistent.invalid                                                               5 (20.83%)
+> j.n.UnknownHostException: nonexistent.invalid: nodename nor servname provided, or not known                 1  (4.17%)
+
+---- Corpus recording --------------------------------------------------------------------------------------------------
+[###############################################################################################################]   100%
+          waiting:         0 / active:         0  / done:         6
+========================================================================================================================
+
+Parsing log file(s)...
+Parsing log file(s) done in 0s.
+Generating reports...
+
+========================================================================================================================
+---- Global Information -------------------------------------------------------------|---Total---|-----OK----|----KO----
+> request count                                                                      |       102 |        84 |        18
+> min response time (ms)                                                             |         0 |         0 |         0
+> max response time (ms)                                                             |     1,502 |     1,502 |         3
+> mean response time (ms)                                                            |        89 |       108 |         1
+> response time std deviation (ms)                                                   |       353 |       387 |         1
+> response time 50th percentile (ms)                                                 |         0 |         0 |         2
+> response time 75th percentile (ms)                                                 |         1 |         1 |         2
+> response time 95th percentile (ms)                                                 |     1,090 |     1,213 |         3
+> response time 99th percentile (ms)                                                 |     1,502 |     1,502 |         3
+> mean throughput (rps)                                                              |      25.5 |        21 |       4.5
+---- Response Time Distribution ----------------------------------------------------------------------------------------
+> OK: t < 800 ms                                                                                             78 (76.47%)
+> OK: 800 ms <= t < 1200 ms                                                                                   0     (0%)
+> OK: t >= 1200 ms                                                                                            6  (5.88%)
+> KO                                                                                                         18 (17.65%)
+---- Errors ------------------------------------------------------------------------------------------------------------
+> unresolvable url: No attribute named 'undefinedAttribute' is defined                                        6    (25%)
+> status.find.is(200), found 500                                                                              6    (25%)
+> j.n.ConnectException: Connection refused                                                                    6    (25%)
+> j.n.UnknownHostException: nonexistent.invalid                                                               5 (20.83%)
+> j.n.UnknownHostException: nonexistent.invalid: nodename nor servname provided, or not known                 1  (4.17%)
+========================================================================================================================
+
+Reports generated, please open the following file: file:///Users/i.akhaltsev/IdeaProjects/personal/parsec/.claude/worktrees/speckit-specify-milestone-15aceb/testdata/corpus/gatling/simulation/target/gatling/corpussimulation-20260906044814356/index.html
+Global: count of all events is 102.0 : true (actual : 102.0)
+Global: count of failed events is 18.0 : true (actual : 18.0)
+Global: max of response time is less than 60000.0 : true (actual : 1502.0)
+GET /ok: percentage of failed events is 0.0 : true (actual : 0.0)
+Проверка /ok: percentage of failed events is 0.0 : true (actual : 0.0)
+outer / GET /ok: percentage of failed events is 0.0 : true (actual : 0.0)
+outer / inner, with comma / GET /slow: percentage of failed events is 0.0 : true (actual : 0.0)
+outer / inner, with comma / GET /fail: percentage of failed events is 100.0 : true (actual : 100.0)
+connect refused: percentage of failed events is 100.0 : true (actual : 100.0)
+unknown host: percentage of failed events is 100.0 : true (actual : 100.0)
+[info] Simulation CorpusSimulation successful.
+[info] Simulation(s) execution ended.
+[success] Total time: 8 s, completed 6 сент. 2026 г., 08:48:18

@@ -1,1 +1,3 @@
 **/simulation.log -text
+**/global_stats.json -text
+**/console.txt -text
