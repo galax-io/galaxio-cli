@@ -26,7 +26,8 @@ var reportCorpus = filepath.Join("..", "..", "internal", "report", "testdata", "
 
 // reportFields parses the command's aligned key-value block, keeping the order
 // the keys appeared in: the contract pins that order, so a test that only had
-// the map could not see it change.
+// the map could not see it change. The block ends at the first blank line,
+// where the summary begins.
 func reportFields(t *testing.T, stdout string) (map[string]string, []string) {
 	t.Helper()
 
@@ -35,7 +36,7 @@ func reportFields(t *testing.T, stdout string) (map[string]string, []string) {
 
 	for _, line := range strings.Split(strings.TrimSuffix(stdout, "\n"), "\n") {
 		if line == "" {
-			continue
+			break
 		}
 
 		if len(line) <= reportKeyWidth {

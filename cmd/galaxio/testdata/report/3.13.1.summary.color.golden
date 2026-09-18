@@ -1,0 +1,13 @@
+102 requests · 25.5 req/s      [32m✓ 84 ok[0m · 82.35 % · 21/s      [31m✗ 18 failed[0m · 17.65 % · 4.5/s
+
+[2mresponse time, ms       min   mean    std    p50    p75    p95    p99    max[0m
+all                       0     89    353      1      1   1427   1502   1503
+[32m✓ ok[0m                      0    108    387      1      1   1502   1502   1503
+[31m✗ failed[0m                  0      1      1      1      2      4      4      4
+
+███████████████[2m░░░░░[0m  76.47 %    78  ok under 800 ms
+[2m░░░░░░░░░░░░░░░░░░░░[0m      0 %     0  ok 800 to 1200 ms
+█[2m░░░░░░░░░░░░░░░░░░░[0m   5.88 %     6  ok 1200 ms and over
+[31m████[0m[2m░░░░░░░░░░░░░░░░[0m  17.65 %    18  failed
+
+[2mtimes in ms · percentiles are galaxio's t-digest estimates, interpolated[0m

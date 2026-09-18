@@ -32,6 +32,11 @@ func isQuiet(cmd *cobra.Command) bool {
 	return globalOptsFromCmd(cmd).quiet
 }
 
+// isNoColor reports whether colour is switched off, by --no-color or NO_COLOR.
+func isNoColor(cmd *cobra.Command) bool {
+	return globalOptsFromCmd(cmd).noColor
+}
+
 func verboseLog(cmd *cobra.Command, format string, args ...any) {
 	opts := globalOptsFromCmd(cmd)
 	if !opts.verbose {

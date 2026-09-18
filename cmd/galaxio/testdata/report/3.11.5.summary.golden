@@ -1,0 +1,13 @@
+36 requests · 9 req/s      ✓ 18 ok · 50 % · 4.5/s      ✗ 18 failed · 50 % · 4.5/s
+
+response time, ms       min   mean    std    p50    p75    p95    p99    max
+all                       0    253    559      2      7   1503   1504   1504
+✓ ok                      0    504    707      7   1503   1504   1504   1504
+✗ failed                  0      2      1      2      2      4      4      4
+
+███████░░░░░░░░░░░░░  33.33 %    12  ok under 800 ms
+░░░░░░░░░░░░░░░░░░░░      0 %     0  ok 800 to 1200 ms
+███░░░░░░░░░░░░░░░░░  16.67 %     6  ok 1200 ms and over
+██████████░░░░░░░░░░     50 %    18  failed
+
+times in ms · percentiles are galaxio's t-digest estimates, interpolated

@@ -31,8 +31,8 @@ nothing else about a sample is kept.
 | sum of squares | 192 bits, kept as three 64-bit words |
 | digest | the library's t-digest at its defaults, created on the first timed request |
 
-A duration is at most 2⁶³−1 ns, under 2⁴³ ms, and a count is at most 2⁶³, so the sum stays
-under 2¹⁰⁶ and the sum of squares under 2¹⁴⁹: neither can wrap, for any run the command can
+A duration is at most 2⁶³−1 ns, under 2⁴⁴ ms, and a count is at most 2⁶³, so the sum stays
+under 2¹⁰⁷ and the sum of squares under 2¹⁵¹: neither can wrap, for any run the command can
 read. A negative duration, which the library promises never to yield, counts as no recorded
 end.
 
@@ -41,17 +41,27 @@ Derived when the summary is produced, in integers: the mean `floor((2·sum + tim
 `4·numerator` with `(2k + 1)²·denominator`; each percentile as the digest's default
 quantile, rounded half up. While `timed` is zero every one of them is **absent**, never 0.
 
-**All requests**: not stored. Count, timed, sum and sum of squares add; minimum and maximum
-combine; its percentiles are read from a fresh digest into which the ok digest and then the
-failed one are merged — never from a clone, whose seed the library draws from the original's
-generator, so that reading the figures in the middle of a walk changes nothing that follows.
-A failure therefore reaches the figures of all requests and never a figure of ok requests.
+**All requests**: their exact figures are not stored. Count, timed, sum and sum of squares
+add; minimum and maximum combine. Their percentiles are read from a third digest, which the
+walk feeds every recorded response time of an ok or failed request in log order, as Gatling
+3.11 feeds its own; two digests merged when they are read are not that digest (research §3).
+Nothing is merged or cloned by a read, so reading the figures in the middle of a walk
+changes nothing that follows. A failure therefore reaches the figures of all requests and
+never a figure of ok requests.
 
 ## What feeds them
 
 Every request sample feeds the figures of its own outcome, and nothing else does. A group
 traversal is counted by the tally of v0.13.0 as before and takes part in no figure — neither
 its cumulated response time nor its wall-clock duration (FR-015).
+
+## When the options are settled
+
+A caller normalizes its options — ranks sorted and each kept once, both refusals
+raised — before it opens a run, so that a rank or a boundary no summary can be computed at is
+the invocation's fault and not the log's: the command answers it with exit 2 and never names
+a file. `Scan` normalizes again for a caller that did not, and `Source.Scan` does it before it
+spends the walk, so a corrected call still reads the run.
 
 ## Not in this model
 
