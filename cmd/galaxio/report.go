@@ -57,6 +57,50 @@ func (f *reportFormatFlag) Set(value string) error {
 	return nil
 }
 
+// ranksFlag is the --percentiles value: the percentile ranks to report, checked
+// as the flag is parsed, so that a bad rank is refused before --help is answered
+// and before anything is read, as -o is.
+type ranksFlag struct {
+	ranks []float64
+}
+
+func newRanksFlag() *ranksFlag {
+	return &ranksFlag{ranks: report.DefaultOptions().Percentiles}
+}
+
+func (f *ranksFlag) String() string {
+	texts := make([]string, len(f.ranks))
+	for i, rank := range f.ranks {
+		texts[i] = strconv.FormatFloat(rank, 'f', -1, 64)
+	}
+
+	return strings.Join(texts, ",")
+}
+
+func (f *ranksFlag) Type() string { return "ranks" }
+
+// Set reads comma-separated ranks, each a number above 0 and at most 100. An
+// empty list, or an empty element, names no rank and is refused like any
+// other value that is not one.
+func (f *ranksFlag) Set(value string) error {
+	var ranks []float64
+
+	for _, text := range strings.Split(value, ",") {
+		text = strings.TrimSpace(text)
+
+		rank, err := strconv.ParseFloat(text, 64)
+		if err != nil || !report.ValidRank(rank) {
+			return fmt.Errorf("percentile rank %q is not a number above 0 and at most 100", text)
+		}
+
+		ranks = append(ranks, rank)
+	}
+
+	f.ranks = ranks
+
+	return nil
+}
+
 // reportFormats is what -o may name, in the order a usage error lists them.
 // Every one is reserved: the command writes no machine-readable format yet, and
 // the first it publishes will be Gatling's own stats.json. An entry leaves this
@@ -92,6 +136,9 @@ type reportOptions struct {
 	Path    string
 	PathSet bool
 
+	// Percentiles are the ranks to report; none means Gatling's defaults.
+	Percentiles []float64
+
 	Quiet   bool
 	Verbose bool
 
@@ -116,6 +163,8 @@ type reportOutput struct {
 func newReportCommand() *cobra.Command {
 	var output reportFormatFlag
 
+	percentiles := newRanksFlag()
+
 	cmd := &cobra.Command{
 		Use:   "report <tool> [PATH]",
 		Short: "Report on finished load-test runs.",
@@ -128,8 +177,8 @@ recorded, requests split into successes and failures.
 
 Below that it summarises the run as a whole: the requests and their rate, ok and
 failed with their share and rate; the minimum, mean, standard deviation, the
-50th, 75th, 95th and 99th percentiles and the maximum response time for all, ok
-and failed requests; and how many successful responses took under 800 ms, from
+percentiles — the 50th, 75th, 95th and 99th unless --percentiles names others —
+and the maximum response time for all, ok and failed requests; and how many successful responses took under 800 ms, from
 800 up to 1200 ms, and 1200 ms or more, and how many requests failed. Times are
 in milliseconds. Percentiles are t-digest estimates, the numbers Gatling 3.11
 gives for the same log. Nothing is shown for a single request or group, and the
@@ -156,12 +205,13 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 			}
 
 			opts := reportOptions{
-				Tool:    args[0],
-				Quiet:   isQuiet(cmd),
-				Verbose: globalOptsFromCmd(cmd).verbose,
-				Color:   !isNoColor(cmd) && ansiTerminal(cmd.OutOrStdout()),
-				Stdout:  cmd.OutOrStdout(),
-				Stderr:  cmd.ErrOrStderr(),
+				Tool:        args[0],
+				Percentiles: percentiles.ranks,
+				Quiet:       isQuiet(cmd),
+				Verbose:     globalOptsFromCmd(cmd).verbose,
+				Color:       !isNoColor(cmd) && ansiTerminal(cmd.OutOrStdout()),
+				Stdout:      cmd.OutOrStdout(),
+				Stderr:      cmd.ErrOrStderr(),
 			}
 			if len(args) == 2 {
 				opts.Path, opts.PathSet = args[1], true
@@ -174,6 +224,7 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 	}
 
 	cmd.Flags().VarP(&output, "output", "o", "report format(s) to produce, comma-separated: stats, global_stats, yml (reserved for later releases)")
+	cmd.Flags().Var(percentiles, "percentiles", "percentile ranks to report, comma-separated, each above 0 and at most 100")
 
 	return cmd
 }
@@ -261,7 +312,12 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		fmt.Fprintf(opts.Stderr, "report: warning: %s\n", printable(w.String()))
 	}
 
-	summary, scanErr := src.Scan(ctx, report.DefaultOptions())
+	options := report.DefaultOptions()
+	if len(opts.Percentiles) > 0 {
+		options.Percentiles = opts.Percentiles
+	}
+
+	summary, scanErr := src.Scan(ctx, options)
 	out.Summary = summary
 
 	// The log is named here, once, so that the failure reads the same whether
