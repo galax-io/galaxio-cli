@@ -52,7 +52,7 @@ func reportFields(t *testing.T, stdout string) (map[string]string, []string) {
 }
 
 // corpusLog reads one corpus recording.
-func corpusLog(t *testing.T, version string) []byte {
+func corpusLog(t testing.TB, version string) []byte {
 	t.Helper()
 
 	data, err := os.ReadFile(filepath.Join(reportCorpus, version, "simulation.log"))

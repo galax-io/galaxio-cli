@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -191,9 +192,11 @@ type reportOptions struct {
 	Quiet   bool
 	Verbose bool
 
-	// Color says whether the summary is drawn in colour: standard output is a
-	// terminal that understands escape sequences and colour is not switched off.
-	Color bool
+	// outputModes is what this invocation may draw, decided once from the
+	// command; Clock is what the progress block's timing reads, time.Now when
+	// nil.
+	outputModes
+	Clock func() time.Time
 
 	Stdout io.Writer
 	Stderr io.Writer
@@ -261,7 +264,7 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 				Bounds:      bounds.bands,
 				Quiet:       isQuiet(cmd),
 				Verbose:     globalOptsFromCmd(cmd).verbose,
-				Color:       !isNoColor(cmd) && ansiTerminal(cmd.OutOrStdout()),
+				outputModes: modesFor(cmd),
 				Stdout:      cmd.OutOrStdout(),
 				Stderr:      cmd.ErrOrStderr(),
 			}
@@ -345,6 +348,25 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		return reportOutput{}, UsageError{Err: report.ErrNoPath}
 	}
 
+	// The options are settled before a run is looked for: a rank or a boundary
+	// no summary can be computed at is this invocation's fault, not the log's,
+	// so it must not be reported against a log that is perfectly good. The
+	// flags refuse both as they are parsed; this holds the same for the seam
+	// runReport is, which the products of #52 will fold over too.
+	options := report.DefaultOptions()
+	if len(opts.Percentiles) > 0 {
+		options.Percentiles = opts.Percentiles
+	}
+
+	if opts.Bounds != (report.Bands{}) {
+		options.Bands = opts.Bounds
+	}
+
+	options, err := options.Normalize()
+	if err != nil {
+		return reportOutput{}, UsageError{Err: err}
+	}
+
 	loc, err := report.Locate(opts.Path)
 	if err != nil {
 		return reportOutput{}, RuntimeError{Err: err}
@@ -365,16 +387,26 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		fmt.Fprintf(opts.Stderr, "report: warning: %s\n", printable(w.String()))
 	}
 
-	options := report.DefaultOptions()
-	if len(opts.Percentiles) > 0 {
-		options.Percentiles = opts.Percentiles
+	// The progress block is drawn from the walk's own ticks and erased as soon
+	// as the walk returns — complete, cut short, damaged or interrupted — so it
+	// is gone before any warning, error or report is written.
+	var block *progress
+
+	var tick func(report.Summary)
+
+	if opts.Block {
+		clock := opts.Clock
+		if clock == nil {
+			clock = time.Now
+		}
+
+		block = newProgress(opts.Stderr, loc.Log, src, clock, opts.BlockColor)
+		tick = block.tick
 	}
 
-	if opts.Bounds != (report.Bands{}) {
-		options.Bands = opts.Bounds
-	}
+	summary, scanErr := src.Scan(ctx, options, tick)
+	block.erase()
 
-	summary, scanErr := src.Scan(ctx, options, nil)
 	out.Summary = summary
 
 	// The log is named here, once, so that the failure reads the same whether
@@ -420,14 +452,17 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 }
 
 // summaryFailures returns what keeps the summary of the run in log from being
-// complete, each naming the log, joined: a span of zero, over which no request
-// rate can be computed, and requests whose outcome the source lost, which
+// complete, each naming the log, joined: a span of zero over which a request
+// rate was to be computed, and requests whose outcome the source lost, which
 // neither ok nor failed counts. A run the bounds cannot place in time is not
-// one of them: its rates are absent, and that is all.
+// one of them: its rates are absent, and that is all. Neither is a run that
+// holds no request, whose span nothing is divided by — a log of virtual users
+// alone, which is what a run stopped right after its injection leaves, reports
+// no request and ends as it did before this milestone.
 func summaryFailures(s report.Summary, log string) error {
 	var failures []error
 
-	if span, ok := s.Span(); ok && span == 0 {
+	if span, ok := s.Span(); ok && span == 0 && s.Tally.Requests > 0 {
 		start, _ := s.Tally.Bounds.Start()
 		end, _ := s.Tally.Bounds.End()
 		failures = append(failures, fmt.Errorf("%s: the run spans no time (%s .. %s): no request rate can be computed",

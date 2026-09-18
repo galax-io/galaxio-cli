@@ -5,8 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +21,8 @@ import (
 
 	"github.com/galax-io/galaxio-cli/internal/report"
 	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
+	"github.com/galax-io/parsec/gatling"
+	"github.com/galax-io/parsec/gatling/simlog"
 	"github.com/galax-io/parsec/model"
 	"github.com/spf13/cobra"
 )
@@ -56,7 +61,7 @@ func runSummary(t *testing.T, dir string, color bool) string {
 
 	var stdout, stderr bytes.Buffer
 
-	if _, err := runReport(context.Background(), reportOptions{Tool: "gatling", Path: dir, Color: color, Stdout: &stdout, Stderr: &stderr}); err != nil {
+	if _, err := runReport(context.Background(), reportOptions{Tool: "gatling", Path: dir, outputModes: outputModes{Color: color}, Stdout: &stdout, Stderr: &stderr}); err != nil {
 		t.Fatalf("runReport: %v; stderr: %s", err, stderr.String())
 	}
 
@@ -95,12 +100,13 @@ func TestReportSummaryGolden(t *testing.T) {
 
 // summaryFigures is what a test reads back from a printed summary: the headline
 // segments, the table's cells by row label, and the four band lines' shares and
-// counts.
+// counts and their labels.
 type summaryFigures struct {
 	headline []string
 	columns  []string
 	rows     map[string][]string
 	bands    [][2]string
+	labels   []string
 }
 
 func parseSummary(t *testing.T, summary string) summaryFigures {
@@ -128,6 +134,7 @@ func parseSummary(t *testing.T, summary string) summaryFigures {
 	for _, line := range strings.Split(parts[2], "\n") {
 		fields := strings.Fields(string([]rune(line)[barCells:]))
 		f.bands = append(f.bands, [2]string{fields[0], fields[2]})
+		f.labels = append(f.labels, strings.Join(fields[3:], " "))
 	}
 
 	return f
@@ -314,38 +321,17 @@ func TestReportChangesNoFile(t *testing.T) {
 	after := [2]map[string]string{snapshot(t, run), snapshot(t, work)}
 
 	for i, dir := range []string{"the run directory", "the working directory"} {
-		if !mapsEqual(before[i], after[i]) {
+		if !maps.Equal(before[i], after[i]) {
 			t.Errorf("%s changed:\nbefore %v\nafter  %v", dir, before[i], after[i])
 		}
 	}
 }
 
-// copyTree copies every regular file under src into dst.
+// copyTree copies every file under src into dst.
 func copyTree(t *testing.T, src, dst string) {
 	t.Helper()
 
-	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		return os.WriteFile(filepath.Join(dst, rel), data, 0o644)
-	})
-	if err != nil {
+	if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
 		t.Fatalf("copy %s: %v", src, err)
 	}
 }
@@ -390,41 +376,11 @@ func snapshot(t *testing.T, root string) map[string]string {
 	return entries
 }
 
-func mapsEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for k, v := range a {
-		if b[k] != v {
-			return false
-		}
-	}
-
-	return true
-}
-
-// itemsReader yields fixed items, as a run reader would.
-type itemsReader struct{ items []model.Item }
-
-func (r *itemsReader) Run() model.Run { return model.Run{} }
-
-func (r *itemsReader) Next() (model.Item, error) {
-	if len(r.items) == 0 {
-		return model.Item{}, io.EOF
-	}
-
-	item := r.items[0]
-	r.items = r.items[1:]
-
-	return item, nil
-}
-
 // summarise builds a summary from hand-made items at the default options.
 func summarise(t *testing.T, items ...model.Item) report.Summary {
 	t.Helper()
 
-	s, err := report.Scan(context.Background(), &itemsReader{items: items}, report.DefaultOptions(), nil)
+	s, err := report.Scan(context.Background(), reporttest.Items(model.Run{}, nil, items...), report.DefaultOptions(), nil)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -637,6 +593,115 @@ func TestAnsiTerminal(t *testing.T) {
 	})
 }
 
+// TestOutputModes holds what an invocation may draw to every combination of its
+// two streams and its flags. Nothing else holds these: with no terminal in a
+// test every mode is off, so drawing the block from standard output's terminal,
+// or losing --no-color, was invisible.
+func TestOutputModes(t *testing.T) {
+	t.Parallel()
+
+	both := streams{color: true, loud: true, stdout: true, stderr: true}
+
+	tests := []struct {
+		name     string
+		streams  streams
+		expected outputModes
+	}{
+		{name: "two terminals", streams: both, expected: outputModes{Color: true, Block: true, BlockColor: true}},
+		{name: "no colour", streams: streams{loud: true, stdout: true, stderr: true}, expected: outputModes{Block: true}},
+		{name: "quiet", streams: streams{color: true, stdout: true, stderr: true}, expected: outputModes{Color: true, BlockColor: true}},
+		{name: "standard output redirected", streams: streams{color: true, loud: true, stderr: true}, expected: outputModes{Block: true, BlockColor: true}},
+		{name: "standard error redirected", streams: streams{color: true, loud: true, stdout: true}, expected: outputModes{Color: true}},
+		{name: "neither is a terminal", streams: streams{color: true, loud: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tt.streams.modes(); got != tt.expected {
+				t.Errorf("modes = %+v, want %+v", got, tt.expected)
+			}
+		})
+	}
+
+	if both.modes() == (streams{color: true, loud: true, stdout: true}.modes()) {
+		t.Errorf("the block is drawn from standard output's terminal, not standard error's")
+	}
+}
+
+// TestModesFor holds the wiring: which stream and which flag each mode is read
+// from. A test has no terminal, so every mode is off; TestOutputModes holds the
+// rule itself.
+func TestModesFor(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		env      string
+		expected outputModes
+	}{
+		{name: "no terminal", args: []string{"probe"}},
+		{name: "--no-color", args: []string{"--no-color", "probe"}},
+		{name: "NO_COLOR", args: []string{"probe"}, env: "1"},
+		{name: "--quiet", args: []string{"--quiet", "probe"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("NO_COLOR", tt.env)
+
+			var got outputModes
+
+			root := newRootCommand()
+			root.AddCommand(&cobra.Command{Use: "probe", RunE: func(cmd *cobra.Command, _ []string) error {
+				got = modesFor(cmd)
+
+				return nil
+			}})
+			root.SetArgs(tt.args)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+
+			if err := root.ExecuteContext(context.Background()); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+
+			if got != tt.expected {
+				t.Errorf("modesFor = %+v, want %+v", got, tt.expected)
+			}
+		})
+	}
+
+	// Each mode reads the stream and the flags it belongs to. Every case here
+	// would be reported as a terminal by a check that asked for a character
+	// device, which is what /dev/null is.
+	device, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+
+	defer func() { _ = device.Close() }()
+
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
+
+	root := newRootCommand()
+	root.AddCommand(&cobra.Command{Use: "probe", RunE: func(cmd *cobra.Command, _ []string) error {
+		if modes := modesFor(cmd); modes != (outputModes{}) {
+			t.Errorf("modesFor over %s = %+v, want nothing drawn", os.DevNull, modes)
+		}
+
+		return nil
+	}})
+	root.SetArgs([]string{"probe"})
+	root.SetOut(device)
+	root.SetErr(device)
+
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+}
+
 func TestIsNoColor(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -674,4 +739,419 @@ func TestIsNoColor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReportPercentilesFlag holds --percentiles to its contract: the ranks named,
+// once each and ascending, and a value that is not a list of ranks refused while
+// the flag is parsed, before help and before any work.
+func TestReportPercentilesFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join(reportCorpus, "3.13.1")
+
+	tests := []struct {
+		name     string
+		value    string
+		expected []string
+	}{
+		{name: "the default", value: "", expected: []string{"min", "mean", "std", "p50", "p75", "p95", "p99", "max"}},
+		{name: "ranks out of order", value: "99.9,90", expected: []string{"min", "mean", "std", "p90", "p99.9", "max"}},
+		{name: "a rank named twice", value: "50,50,99", expected: []string{"min", "mean", "std", "p50", "p99", "max"}},
+		{name: "a rank with a trailing zero", value: "99.90", expected: []string{"min", "mean", "std", "p99.9", "max"}},
+		{name: "spaces around ranks", value: " 25 , 75 ", expected: []string{"min", "mean", "std", "p25", "p75", "max"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := []string{"report", "gatling", dir}
+			if tt.value != "" {
+				args = append(args, "--percentiles", tt.value)
+			}
+
+			code, stdout, stderr := runCLI(args...)
+			if code != exitOK {
+				t.Fatalf("exit code %d; stderr: %s", code, stderr)
+			}
+
+			if f := parseSummary(t, summaryOf(t, stdout)); !slices.Equal(f.columns, tt.expected) {
+				t.Errorf("columns = %v, want %v", f.columns, tt.expected)
+			}
+		})
+	}
+
+	t.Run("the percentiles equal what the default ranks print", func(t *testing.T) {
+		t.Parallel()
+
+		_, named, _ := runCLI("report", "gatling", dir, "--percentiles", "95,50")
+		_, defaults, _ := runCLI("report", "gatling", dir)
+
+		f, d := parseSummary(t, summaryOf(t, named)), parseSummary(t, summaryOf(t, defaults))
+		for _, row := range []string{"all", "✓ ok", "✗ failed"} {
+			for _, column := range []string{"p50", "p95"} {
+				if f.cell(t, row, column) != d.cell(t, row, column) {
+					t.Errorf("%s %s = %s with --percentiles, %s by default", row, column, f.cell(t, row, column), d.cell(t, row, column))
+				}
+			}
+		}
+	})
+
+	for _, value := range []string{"0", "101", "abc", "50,abc", "", "50,", "NaN", "-5"} {
+		for _, help := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%q refused, help %v", value, help), func(t *testing.T) {
+				t.Parallel()
+
+				args := []string{"report", "gatling", dir, "--percentiles", value}
+				if help {
+					args = append(args, "--help")
+				}
+
+				code, stdout, stderr := runCLI(args...)
+				if code != exitUsage || stdout != "" {
+					t.Fatalf("exit code %d, stdout %q; want %d and nothing", code, stdout, exitUsage)
+				}
+
+				if want := fmt.Sprintf("invalid argument %q for \"--percentiles\" flag: percentile rank ", value); !strings.Contains(stderr, want) || !strings.Contains(stderr, "is not a number above 0 and at most 100") {
+					t.Errorf("stderr %q, want it to quote the value", stderr)
+				}
+			})
+		}
+	}
+
+	t.Run("help names the default", func(t *testing.T) {
+		t.Parallel()
+
+		if _, stdout, _ := runCLI("report", "--help"); !strings.Contains(stdout, "--percentiles ranks") || !strings.Contains(stdout, "(default 50,75,95,99)") {
+			t.Errorf("help does not name the flag and its default:\n%s", stdout)
+		}
+	})
+}
+
+// TestReportBoundsFlag holds --bounds to its contract: the bands counted at the
+// boundaries named, against the log's own response times, and a value that is
+// not two boundaries refused while the flag is parsed.
+func TestReportBoundsFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join(reportCorpus, "3.13.1")
+
+	t.Run("5,1000", func(t *testing.T) {
+		t.Parallel()
+
+		code, stdout, stderr := runCLI("report", "gatling", dir, "--bounds", "5,1000")
+		if code != exitOK {
+			t.Fatalf("exit code %d; stderr: %s", code, stderr)
+		}
+
+		f := parseSummary(t, summaryOf(t, stdout))
+
+		if expected := []string{"ok under 5 ms", "ok 5 to 1000 ms", "ok 1000 ms and over", "failed"}; !slices.Equal(f.labels, expected) {
+			t.Errorf("labels = %q, want %q", f.labels, expected)
+		}
+
+		durations, err := reporttest.Durations(openRun(t, dir))
+		if err != nil {
+			t.Fatalf("Durations: %v", err)
+		}
+
+		var counted [3]int
+
+		for _, ms := range durations[1] {
+			switch {
+			case ms < 5:
+				counted[0]++
+			case ms < 1000:
+				counted[1]++
+			default:
+				counted[2]++
+			}
+		}
+
+		sum := 0
+
+		for i, band := range f.bands {
+			n, err := strconv.Atoi(band[1])
+			if err != nil {
+				t.Fatalf("band %d count %q: %v", i+1, band[1], err)
+			}
+
+			sum += n
+
+			if i < 3 && n != counted[i] {
+				t.Errorf("%s = %d, the log holds %d", f.labels[i], n, counted[i])
+			}
+		}
+
+		if f.bands[3] != [2]string{"17.65", "18"} || sum != 102 {
+			t.Errorf("failed band %v and a total of %d, want 18 (17.65 %%) and 102", f.bands[3], sum)
+		}
+	})
+
+	t.Run("both flags", func(t *testing.T) {
+		t.Parallel()
+
+		code, stdout, stderr := runCLI("report", "gatling", dir, "--bounds", "5,1000", "--percentiles", "90")
+		if code != exitOK {
+			t.Fatalf("exit code %d; stderr: %s", code, stderr)
+		}
+
+		f := parseSummary(t, summaryOf(t, stdout))
+		if !slices.Contains(f.columns, "p90") || len(f.columns) != 5 || f.labels[0] != "ok under 5 ms" {
+			t.Errorf("columns %v and labels %q, want p90 alone and the bands at 5 and 1000", f.columns, f.labels)
+		}
+	})
+
+	t.Run("the default", func(t *testing.T) {
+		t.Parallel()
+
+		_, stdout, _ := runCLI("report", "gatling", dir)
+		if f := parseSummary(t, summaryOf(t, stdout)); !slices.Equal(f.labels, []string{"ok under 800 ms", "ok 800 to 1200 ms", "ok 1200 ms and over", "failed"}) {
+			t.Errorf("labels = %q, want Gatling's boundaries", f.labels)
+		}
+
+		if _, help, _ := runCLI("report", "--help"); !strings.Contains(help, "--bounds low,high") || !strings.Contains(help, "(default 800,1200)") {
+			t.Errorf("help does not name the flag and its default:\n%s", help)
+		}
+	})
+
+	for _, value := range []string{"1200,800", "800,800", "-1,5", "800", "1,2,3", "a,b", "1.5,2", ""} {
+		t.Run(fmt.Sprintf("%q refused", value), func(t *testing.T) {
+			t.Parallel()
+
+			code, stdout, stderr := runCLI("report", "gatling", dir, "--bounds", value)
+			if code != exitUsage || stdout != "" {
+				t.Fatalf("exit code %d, stdout %q; want %d and nothing", code, stdout, exitUsage)
+			}
+
+			if want := fmt.Sprintf("invalid argument %q for \"--bounds\" flag: boundaries are two whole, non-negative numbers of milliseconds, the second greater than the first", value); !strings.Contains(stderr, want) {
+				t.Errorf("stderr %q, want %q", stderr, want)
+			}
+		})
+	}
+}
+
+// openRun opens the simulation.log of a run directory as a run reader.
+func openRun(t *testing.T, dir string) simlog.RunReader {
+	t.Helper()
+
+	f, err := os.Open(filepath.Join(dir, "simulation.log"))
+	if err != nil {
+		t.Fatalf("open the log: %v", err)
+	}
+
+	t.Cleanup(func() { _ = f.Close() })
+
+	rd, err := simlog.NewRunReader(f)
+	if err != nil {
+		t.Fatalf("NewRunReader: %v", err)
+	}
+
+	return rd
+}
+
+// untimedRun is a text log of two requests, the second of which has no recorded
+// end, which Gatling writes as an end of 0.
+var untimedRun = []byte("RUN\tio.galaxio.Sim\tsim\t1788379676999\t \t3.12.0\n" +
+	"REQUEST\t\tGET /ok\t1788379677000\t1788379677010\tOK\t \n" +
+	"REQUEST\t\tGET /lost\t1788379678000\t0\tOK\t \n")
+
+// TestSummaryFailures holds the failures of a summary that is not complete to
+// the contract's words, alone and together, and to nothing for a run that is
+// complete or merely cannot be placed in time.
+func TestSummaryFailures(t *testing.T) {
+	t.Parallel()
+
+	const log = "/runs/x/simulation.log"
+
+	lost := func(at int64) model.Item { return request(at, 10, model.OutcomeUnknown) }
+
+	zeroSpan := "/runs/x/simulation.log: the run spans no time (2023-11-14T22:13:20.000Z .. 2023-11-14T22:13:20.000Z): no request rate can be computed"
+
+	tests := []struct {
+		name     string
+		items    []model.Item
+		expected []string
+	}{
+		{name: "a complete run", items: []model.Item{request(1_700_000_000_000, 10, model.OutcomeSuccess), request(1_700_000_002_000, 10, model.OutcomeFailure)}},
+		{name: "a run no bound can place", items: []model.Item{request(-1, 10, model.OutcomeSuccess)}},
+		{name: "a run of one instant that holds no request", items: []model.Item{
+			{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserStart, At: time.UnixMilli(1_700_000_000_000).UTC()}},
+			{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserEnd, At: time.UnixMilli(1_700_000_000_000).UTC()}},
+		}},
+		{name: "a span of zero", items: []model.Item{request(1_700_000_000_000, 0, model.OutcomeSuccess)}, expected: []string{zeroSpan}},
+		{name: "one lost outcome", items: []model.Item{request(1_700_000_000_000, 10, model.OutcomeSuccess), lost(1_700_000_001_000)}, expected: []string{
+			"/runs/x/simulation.log: 1 request has an outcome the source lost: it is neither ok nor failed and the summary does not add up",
+		}},
+		{name: "several lost outcomes", items: []model.Item{request(1_700_000_000_000, 10, model.OutcomeSuccess), lost(1_700_000_001_000), lost(1_700_000_002_000)}, expected: []string{
+			"/runs/x/simulation.log: 2 requests have an outcome the source lost: they are neither ok nor failed and the summary does not add up",
+		}},
+		{name: "both", items: []model.Item{request(1_700_000_000_000, 0, model.OutcomeSuccess), request(1_700_000_000_000, 0, model.OutcomeUnknown)}, expected: []string{
+			zeroSpan,
+			"/runs/x/simulation.log: 1 request has an outcome the source lost: it is neither ok nor failed and the summary does not add up",
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := summaryFailures(summarise(t, tt.items...), log)
+
+			if len(tt.expected) == 0 {
+				if err != nil {
+					t.Errorf("summaryFailures = %v, want none", err)
+				}
+
+				return
+			}
+
+			if err == nil || err.Error() != strings.Join(tt.expected, "\n") {
+				t.Errorf("summaryFailures = %v, want\n%s", err, strings.Join(tt.expected, "\n"))
+			}
+		})
+	}
+
+	if got := untimedWarning(1); got != "1 request has no recorded end and takes part in no timing figure" {
+		t.Errorf("untimedWarning(1) = %q", got)
+	}
+
+	if got := untimedWarning(3); got != "3 requests have no recorded end and take part in no timing figure" {
+		t.Errorf("untimedWarning(3) = %q", got)
+	}
+}
+
+// TestReportFailsOnAnIncompleteSummary holds the command to printing the summary
+// of a run that cannot be summarised completely and then exiting 1, naming why.
+func TestReportFailsOnAnIncompleteSummary(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a run that spans no time", func(t *testing.T) {
+		t.Parallel()
+
+		dir := filepath.Join("testdata", "report", "zero-span")
+
+		code, stdout, stderr := runCLI("report", "gatling", dir)
+		if code != exitRuntime {
+			t.Fatalf("exit code %d, want %d; stderr: %s", code, exitRuntime, stderr)
+		}
+
+		f := parseSummary(t, summaryOf(t, stdout))
+		if expected := []string{"1 request · - req/s", "✓ 1 ok · 100 % · -/s", "✗ 0 failed · 0 % · -/s"}; !slices.Equal(f.headline, expected) {
+			t.Errorf("headline = %q, want every rate -", f.headline)
+		}
+
+		want := filepath.Join(dir, "simulation.log") + ": the run spans no time (2026-09-02T20:07:57.529Z .. 2026-09-02T20:07:57.529Z): no request rate can be computed"
+		if !strings.Contains(stderr, "Error: "+want) {
+			t.Errorf("stderr %q, want %q", stderr, want)
+		}
+	})
+
+	t.Run("--quiet keeps the exit code and the warning", func(t *testing.T) {
+		t.Parallel()
+
+		// --quiet is how a CI job asks for the exit code alone, so a run that
+		// is not complete must still fail under it, and the warning that
+		// qualifies the figures must still be written.
+		zeroSpan := filepath.Join("testdata", "report", "zero-span")
+
+		code, stdout, stderr := runCLI("report", "gatling", zeroSpan, "--quiet")
+		if code != exitRuntime {
+			t.Errorf("a run that spans no time exits %d under --quiet, want %d", code, exitRuntime)
+		}
+
+		if summary := strings.Index(stdout, "response time, ms"); summary >= 0 {
+			t.Errorf("--quiet printed the summary: %q", stdout)
+		}
+
+		if !strings.Contains(stderr, "the run spans no time") {
+			t.Errorf("stderr %q, want the failure named", stderr)
+		}
+
+		untimed := writeRun(t, untimedRun)
+
+		code, _, stderr = runCLI("report", "gatling", untimed, "--quiet")
+		if code != exitOK || !strings.Contains(stderr, "no recorded end") {
+			t.Errorf("exit %d, stderr %q; want 0 and the warning for a request with no recorded end", code, stderr)
+		}
+	})
+
+	t.Run("a failed request with no recorded end is counted", func(t *testing.T) {
+		t.Parallel()
+
+		// Untimed() adds both outcomes; a failure with no end was left out of
+		// the warning by any mutation that forgot the failed term.
+		items := []model.Item{
+			request(1_700_000_000_000, 10, model.OutcomeSuccess),
+			{Kind: model.ItemSample, Sample: model.Sample{Name: "r", Start: time.UnixMilli(1_700_000_001_000).UTC(), Outcome: model.OutcomeFailure}},
+		}
+
+		if n := summarise(t, items...).Untimed(); n != 1 {
+			t.Errorf("Untimed = %d, want the failed request with no recorded end counted", n)
+		}
+	})
+
+	t.Run("options no summary can be computed at are the invocation's fault", func(t *testing.T) {
+		t.Parallel()
+
+		// The flags refuse both as they are parsed, so this holds the seam the
+		// products of #52 will fold over: the refusal is a usage error, it does
+		// not name the log, and it arrives before a run is looked for — the path
+		// here is one no run is under.
+		for _, tt := range []struct {
+			name     string
+			opts     reportOptions
+			expected string
+		}{
+			{name: "a rank of zero", opts: reportOptions{Percentiles: []float64{0}}, expected: "percentile rank 0"},
+			{name: "boundaries that do not increase", opts: reportOptions{Bounds: report.Bands{Lower: 5, Upper: 1}}, expected: "band boundaries 5 and 1"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				opts := tt.opts
+				opts.Tool, opts.Path, opts.PathSet = "gatling", filepath.Join(t.TempDir(), "nowhere"), true
+				opts.Stdout, opts.Stderr = io.Discard, io.Discard
+
+				_, err := runReport(context.Background(), opts)
+
+				var usage UsageError
+				if !errors.As(err, &usage) || !strings.Contains(err.Error(), tt.expected) {
+					t.Errorf("runReport = %v, want a UsageError naming %q", err, tt.expected)
+				}
+
+				if strings.Contains(err.Error(), "nowhere") {
+					t.Errorf("runReport blamed the path for options it was given: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("a log cut short prints its summary and keeps the truncation", func(t *testing.T) {
+		t.Parallel()
+
+		dir := writeRun(t, corpusLog(t, "3.15.1")[:2000])
+
+		var stdout, stderr bytes.Buffer
+
+		_, err := runReport(context.Background(), reportOptions{Tool: "gatling", Path: dir, Stdout: &stdout, Stderr: &stderr})
+
+		var cutShort *gatling.TruncationError
+		if !errors.As(err, &cutShort) {
+			t.Fatalf("runReport = %v, want the truncation in the chain", err)
+		}
+
+		if parseSummary(t, summaryOf(t, stdout.String())).rows["all"] == nil {
+			t.Errorf("no summary of what the log held: %q", stdout.String())
+		}
+	})
+
+	t.Run("-o is refused with the new flags present", func(t *testing.T) {
+		t.Parallel()
+
+		code, stdout, stderr := runCLI("report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--percentiles", "90", "--bounds", "5,1000", "-o", "stats")
+		if code != exitUsage || stdout != "" || !strings.Contains(stderr, `report format "stats" is not available yet`) {
+			t.Errorf("exit %d, stdout %q, stderr %q; want exit 2 refusing -o", code, stdout, stderr)
+		}
+	})
 }
