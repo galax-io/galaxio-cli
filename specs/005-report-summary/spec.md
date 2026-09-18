@@ -651,14 +651,17 @@ standard error received.
   prints periodic lines into a CI log is out of scope. A terminal is recognised with the
   standard library alone, and its width is never asked for: the block fits 80 columns by
   construction.
-- **Issue #51 needs amending to match.** Its text still asks for `-o json`, which
+- **Issue #51 was amended to match, on 2026-09-17.** Its text asked for `-o json`, which
   constitution v2.1.0 Principle I no longer permits on this command (the machine-readable
-  form is the `stats.json` of #52), and its amendment of 2026-09-16 describes exact
+  form is the `stats.json` of #52), and its amendment of 2026-09-16 described exact
   percentiles from a millisecond histogram with a capped pool and a refusal on overflow,
   which this decision supersedes. Its requirement that the text output carry the figures per
   request, and its first amendment's requirement that the wall clock of a group traversal be
   selectable, are deferred to the `-o` products (clarified 2026-09-17). Its definitions of
-  every non-percentile figure stand and are the requirements above.
+  every non-percentile figure stand and are the requirements above. A third dated
+  "Amended" section of [the issue](https://github.com/galax-io/galaxio-cli/issues/51),
+  added with the maintainer's go-ahead (T022), records all of this, the percentiles equal
+  to Gatling 3.11's under constitution v3.0.0, and the acceptance criteria restated.
 - The figures Gatling recorded for the corpus are the acceptance reference for non-percentile
   figures: a console summary for 3.13.1, 3.14.9 and 3.15.1, a `global_stats.json` for 3.11.5,
   3.12.0 and 3.13.1. They are recorded in the shared library's corpus; this repository's
