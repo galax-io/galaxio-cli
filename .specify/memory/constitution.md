@@ -1,42 +1,41 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 2.1.0 → 2.2.0
-Bump rationale: MINOR. Principle II's percentile clause is widened and its guidance
-materially expanded; nothing is redefined in a backward-incompatible way. An exact percentile
-is as compliant as it was under v2.1.0. What is new is that a percentile may also be an
-estimate read from a bounded-memory sketch, on conditions the clause states — deterministic,
-labelled wherever it is printed, its estimator recorded, its values for the recorded corpus
-pinned in tests, a known divergence documented with an example — where v2.1.0 required a
-refusal. The refusal stays for every other figure. No work that satisfied v2.1.0 fails
-v2.2.0, and nothing in the repository computes a percentile yet. MAJOR was considered and
-rejected on the reading of the versioning policy that 2.1.0 recorded; a maintainer who reads
-the change as a redefinition should say so in review.
+Version change: 2.2.0 → 3.0.0
+Bump rationale: MAJOR. Principle II's parity clause is redefined in a backward-incompatible
+way: v2.2.0 said digit-for-digit parity with Gatling's percentiles is not a defined target
+and MUST NOT be asserted in a test; v3.0.0 names Gatling 3.11.x and 3.12.x as the reference
+and requires every percentile to equal theirs, with tests that assert it. A test suite that
+satisfied v2.2.0 by holding no percentile to Gatling's fails v3.0.0.
 
-Principles modified: II (a percentile may be a deterministic, labelled estimate from a
-bounded-memory sketch; counts, minimum, maximum, mean and standard deviation stay exact, with
-a refusal).
+Principles modified: II (percentiles equal those Gatling 3.11.x and 3.12.x compute for the
+same log, asserted by tests; later Gatling versions are not a reference).
 
 Added sections: none. Removed sections: none.
 
-Why now (galaxio-cli#114):
-- On 2026-09-17 the maintainer decided that `galaxio report` estimates percentiles with a
-  t-digest, `github.com/caio/go-tdigest/v5` read with its default quantile (galaxio-cli#51,
-  specs/005-report-summary). v2.1.0 required every percentile to be exact and a refusal
-  otherwise, so that specification failed gate II on a clause no implementation of the
-  decision could pass.
-- The conflict is permanent rather than a gap to wait out: an exact percentile needs every
-  sample or a histogram as wide as the range of values, and a log of any size bounds neither.
-  Two digests of a whole run held 0.06 MiB of heap after 100 million requests.
-- The estimate is deterministic — the library seeds its own generator with a constant, and
-  two reads of every corpus run gave identical percentiles — and its known divergence is
-  concrete: for the recorded 3.13.1 run the default quantile gives 1427 ms as the 95th
-  percentile of all requests, where the request at that rank took 1502 ms and none took
-  between 8 and 1501 ms. caio/go-tdigest#42 proposes a read by rank that returns 1502; taking
-  it is a later change that the pinned values make visible.
-- Parity with Gatling stays undefined, and the clause that says so is unchanged: Gatling
-  printed 1072 ms for that run, a value that comes from a defect in com.tdunning:t-digest 3.3
-  (tdunning/t-digest#230).
+Why now (galaxio-cli#51, maintainer, 2026-09-17):
+- `galaxio report` replaces the report Gatling builds, so its numbers have to be Gatling's.
+  The maintainer asked for tests that show the same numbers, with Gatling 3.11 as the
+  reference, and for this amendment to land as its own commit in the milestone pull request.
+- Gatling 3.11.5 and 3.12.0 compute a percentile as `Math.round(quantile(rank / 100))` over
+  `AVLTreeDigest(100)` of com.tdunning:t-digest 3.1, fed in log order (read from their
+  bytecode). caio/go-tdigest v5 at compression 100, which this repository reads, gives a
+  value that digest gives on every recorded run — all 60 percentiles of the five corpus runs
+  and all 60 of the five live runs of specs/005-report-summary — and equals every percentile
+  Gatling 3.11.5 and 3.12.0 printed for their live runs, 24 each. On one shorter run that was
+  not kept, one value in 24 was an exact half, 398.5, which floating point put below the half
+  and so rounded to 398 where Math.round gave 399; rounding must treat such a value as the
+  half.
+- That digest draws on an unseeded random generator, so Gatling 3.11 does not always give
+  one value for one log: on the live 3.12.0 run its 99th percentile of successful requests
+  is 1585 or 1586 depending on the seed. Equality is therefore with a value the digest gives
+  for that log.
+- From 3.13.0 Gatling uses t-digest 3.3, whose AVLTreeDigest miscounts
+  (tdunning/t-digest#230): 1072 ms printed where 3.11's digest gives 1427 for the same log.
+  Those versions are not a reference.
+- MergingDigest, the digest t-digest 3.3 recommends, has no such defect but groups and reads
+  differently: 1502 for that run, and 682 ms on a live run where Gatling 3.11 and this
+  repository give 813. It is not a reference either.
 
 Templates:
 - ✅ .specify/templates/plan-template.md — Constitution Check row II reworded to the amended
@@ -122,12 +121,16 @@ contract be tested without a terminal.
   corpus MUST be pinned in tests, so that changing any of the three fails a test instead of
   moving printed numbers in silence. Where an estimate is known to differ from the value
   recorded at the percentile's rank, the documentation MUST say so with an example.
-- Percentiles MUST NOT be presented as reproducing another tool's. Gatling estimates its own
-  with a randomized digest that does not reproduce its output between runs of the same data,
-  so digit-for-digit parity is not a defined target: it MUST NOT be claimed, asserted in a
-  golden test, or offered as a diff. Every output carrying a percentile MUST say whose
-  definition it is and, where it is reproducing another tool's file, name the fields that can
-  differ and why.
+- A percentile of a Gatling run MUST equal the one Gatling 3.11.x and 3.12.x compute for the
+  same log: `Math.round(quantile(rank / 100))` over `AVLTreeDigest(100)` of
+  com.tdunning:t-digest 3.1, fed in log order. Tests MUST assert that equality on every
+  recorded run, against that digest run over the log and against what Gatling 3.11.x or
+  3.12.x printed where it recorded the run. The digest draws on an unseeded random
+  generator, so where two of its seeds give different values for one log, either value is
+  equal. Percentiles of Gatling 3.13.0 and later come from the defect of
+  tdunning/t-digest#230 and are not a reference; a test MAY describe them, and the
+  documentation MUST say why they differ. Every output carrying a percentile MUST say whose
+  definition it is.
 - Accumulation MUST work in one pass without retaining every sample: memory MUST NOT grow
   with the sample count, and a plan for a report feature states its peak-memory goal.
 - What a source cannot provide is reported as absent — never as a zero, an average or a
@@ -381,4 +384,4 @@ contradict.
   justification. At every minor release the maintainer re-reads Principles I–VI against the
   milestone's merged PRs and files an issue for each gap in the next milestone.
 
-**Version**: 2.2.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-17
+**Version**: 3.0.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-17
