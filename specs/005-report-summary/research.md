@@ -77,10 +77,41 @@ centroid holding the rank and never a value between two centroids. That read, me
 recorded value in all 60 percentiles of the five runs above. It is open and unreleased; this
 milestone does not depend on it and does not copy it (FR-022).
 
-**Why Gatling's percentiles are not a reference**: for the 3.13.1 run Gatling printed 1072.
-That comes from a defect in `com.tdunning:t-digest:3.3`, reported as
-[tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230); two thousand
-rebuilds of that digest from the same samples gave 1072, 916 or 1061.
+**The rule of how a percentile may differ from what the run recorded** (maintainer
+request, 2026-09-17: the difference must be proved by tests, not only described):
+
+- **While an outcome holds at most 200 requests**, a percentile is the linear interpolation
+  between the two recorded response times around the position rank/100·(n−1), rounded half
+  up: it lies between them, and it differs from the request at the percentile's rank by at
+  most their gap. A digest merges no centroid before it holds 200 values, so it holds the
+  run itself and reads it as definition R-7 does. On the 3.13.1 run the neighbours of the
+  95th percentile of all 102 requests are 7 ms and 1502 ms: 1427 is printed, 1502 is the
+  request at the rank.
+- **At any size**, a percentile misplaces its rank among the recorded requests by at most
+  4·q·(1−q)/100 of them plus one request: the share of requests below the printed value and
+  the share at or below it bracket q = rank/100 to within that tolerance. 4·n·q·(1−q)/100 is
+  the most the library merges into one centroid around q, and one request is the step
+  between two recorded values. At the 95th percentile the tolerance is 0.19 percentage
+  points plus one request; at the median, one point; at the 99th, 0.04. The rule bounds the
+  rank, not the value: where response times have a gap, the value can be anywhere across it.
+
+Measured before it was stated: five distributions — log-normal around 40 ms with 0.5 % at
+60 s, 95 % at most 10 ms and 5 % near 1500 ms, six distinct values, uniform to 5 s, and two
+modes at 50 and 800 ms — at 201, 1 000, 12 000, 200 000 and 1 000 000 requests and three seeds
+each, ranks 50 to 99.9. No read passed the tolerance; the worst came to 0.79 of it, and
+at 12 000 requests and more to 0.40. `TestPercentilesRule` holds every corpus run to both
+halves of the rule and the synthetic runs to the second; the live Gatling runs of T010 hold
+real runs of about 12 000 requests to the second.
+
+**Which of Gatling's percentiles are a reference**: those of 3.11.x and 3.12.x, which use
+`com.tdunning:t-digest` 3.1. They are held to the same rank rule over the same log —
+never to this tool's numbers, and never asserted equal to them — and they satisfy it
+(`TestGatlingPercentilesAsReference`). From 3.13.0 Gatling uses t-digest 3.3, whose
+`AVLTreeDigest` loses counts: for the 3.13.1 run it printed 1072 where the request at the
+rank took 1502, a defect reported as
+[tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230), and two thousand
+rebuilds of that digest from the same samples gave 1072, 916 or 1061. Those numbers
+describe the defect, not the run, and no test uses them.
 
 **Alternatives considered**: carrying this repository's own read by rank over
 `ForEachCentroid` until the upstream change ships (measured, exact on the corpus; not taken —

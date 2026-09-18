@@ -196,7 +196,10 @@ is printed and the exit code is 1. A damaged log prints no summary, as in v0.13.
 - Counts, minimum, maximum, mean and standard deviation are exact; they equal what Gatling
   recorded for every run of the corpus.
 - Percentiles are estimates from a t-digest at the library's defaults, labelled as this
-  tool's, never compared with Gatling's. The same log always gives the same percentiles.
+  tool's, never presented as Gatling's. The same log always gives the same percentiles. Up
+  to 200 requests an outcome's percentile lies between the two recorded response times
+  around its position; at any size it misplaces its rank by at most 4·q·(1−q)/100 of the
+  requests plus one (research.md §2).
 - Two summaries of the same run are identical, whether or not a progress block was shown
   while reading.
 - A run whose author changed Gatling's percentile ranks or band boundaries is reported at

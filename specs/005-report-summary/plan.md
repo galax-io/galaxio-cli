@@ -58,8 +58,12 @@ use the standard library only.
 bands and their bar cells, the rate, group traversals taking part in nothing, requests with
 no end and lost outcomes. Corpus tests comparing every non-percentile whole-run figure with
 the `global_stats.json` Gatling wrote (3.11.5, 3.12.0, 3.13.1) and with its console (3.13.1,
-3.14.9, 3.15.1); no test reads a percentile Gatling recorded. Pinned percentiles per corpus
-run. Golden files for the console summary, plain and coloured. Command tests through
+3.14.9, 3.15.1); no test compares a percentile Gatling recorded with one this tool prints.
+Pinned percentiles per corpus run, and every percentile held to the rule of how it may differ
+from the recorded response times (research.md §2) on the corpus, on synthetic runs and on
+live Gatling runs from galaxio's own template, with Gatling 3.11.x and 3.12.x percentiles
+held to the same rule as the reference. Golden files for the console summary, plain and
+coloured. Command tests through
 `runCLI` for every acceptance scenario and exit code, including the `failed` wording of the
 description, no escape sequence off a terminal, and the run directory left byte-for-byte as
 it was. The progress block is tested through an injected redraw check and clock: the frames
