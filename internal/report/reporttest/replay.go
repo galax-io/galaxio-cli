@@ -1,4 +1,6 @@
-// Package reporttest builds synthetic Gatling logs for tests and benchmarks.
+// Package reporttest is what the tests and benchmarks of internal/report share:
+// synthetic Gatling logs, the comparison of a summary with what Gatling
+// recorded, and the service the live Gatling runs load.
 //
 // A recorded log is a few kilobytes; the memory goal is about logs of
 // gigabytes. Replay yields a text log of any size from one recording without
