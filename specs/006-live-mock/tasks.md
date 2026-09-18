@@ -59,7 +59,7 @@ The mock, US1 and US2 land in one commit. The mock is tested only by the Gatling
 
 ## Phase 3: Polish & Validation
 
-- [ ] T003 Run quickstart.md §1 to §5 and record what was observed, dated, under each section of `specs/006-live-mock/quickstart.md` → commit `docs(speckit): record 006-live-mock quickstart evidence (#117)`
+- [X] T003 Run quickstart.md §1 to §5 and record what was observed, dated, under each section of `specs/006-live-mock/quickstart.md` → commit `docs(speckit): record 006-live-mock quickstart evidence (#117)`
 
 ---
 

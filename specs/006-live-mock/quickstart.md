@@ -23,6 +23,9 @@ go test -race -count=1 ./...
 Expected: `0` packages the command links are `reporttest`. `grep` finds nothing: the mock neither
 sleeps nor draws a random number. The ordinary suite is green, with no test added to it.
 
+Observed 2026-09-18 at 2ef2976, Go 1.27.1, darwin/arm64: `0`; `grep` printed nothing and exited 1;
+all ten packages with tests `ok` under the race detector.
+
 ## 2. Every Gatling version against the mock (US1, US2, FR-004, FR-005, FR-008, SC-001, SC-002)
 
 ```bash
@@ -46,6 +49,21 @@ Expected:
 - `TestLiveGatlingRunsWereServedTheSameResponses` passes on the new set: every version holds the
   same number of requests.
 
+Observed 2026-09-18 at 2ef2976, OpenJDK 17.0.10, sbt 1.12.13, from 16:19:48 to 16:27:15 UTC:
+
+- `--- PASS` for 3.11.5 (89.9 s), 3.12.0 (90.8 s), 3.13.1 (88.1 s), 3.14.9 (86.3 s) and 3.15.1
+  (87.3 s). `servedEverything` passed in both console formats, `(OK=n KO=m)` up to 3.13.1 and
+  columns from 3.14.9.
+- No difference was reported. Every note was `MergingDigest gives …`, where it differs from
+  Gatling 3.11's digest, or, for 3.13.1, 3.14.9 and 3.15.1, the p95 or p99 Gatling printed, with
+  `tdunning/t-digest#230` (3.15.1: printed 237 and 1101, where the digest and this tool give
+  235 and 1100).
+- The summary of the 3.11.5 run: `3576 requests · 50.37 req/s`, `✓ 3576 ok · 100 %`,
+  `✗ 0 failed`. The all row reads min 3, mean 49, std 185, p50 4, p75 6, p95 245, p99 1113,
+  max 1189. The bands: 3 480 ok under 800 ms (97.32 %) and 96 ok from 800 to 1 200 ms (2.68 %).
+- `TestLiveGatlingRunsWereServedTheSameResponses`: `--- PASS`. Every version holds `3576
+  requests (3576 ok, 0 failed)`.
+
 ## 3. A broken endpoint fails the Gatling run (FR-008, SC-005)
 
 ```bash
@@ -58,6 +76,17 @@ cp /tmp/mock.go.keep internal/report/reporttest/mock.go && git diff --exit-code 
 
 Expected: the test fails on two lines, the failed requests Gatling printed and no successful
 `GET /export`. The mock is restored unchanged.
+
+Observed 2026-09-18 at 2ef2976, once with 3.11.5 and once with 3.15.1, to cover both console
+formats. Each failed with exactly:
+
+```text
+    live_integration_test.go:242: Gatling printed 51 failed requests where the mock fails none
+    live_integration_test.go:242: Gatling printed no successful GET /export: the mock or the live scenario is broken
+--- FAIL: TestReportLiveGatling
+```
+
+`git diff --exit-code` found the mock unchanged afterwards, both times.
 
 ## 4. The committed recordings (FR-006)
 
@@ -72,6 +101,9 @@ are untouched. The new `testdata/live/scenario/` is the two committed Scala file
 recording. The tests of the recordings pass, and `livePlan` is still readable at `v0.14.0`,
 where `RECORDING.md` says it is.
 
+Observed 2026-09-18 at 2ef2976: `RECORDING.md | 7 +++++--` alone under `testdata/live/gatling/`;
+`ok` for the three tests; `34:func livePlan(i uint64) (time.Duration, int) {`.
+
 ## 5. Gates
 
 ```bash
@@ -82,3 +114,6 @@ go mod tidy && git diff --exit-code -- go.mod go.sum && echo tidy-clean
 ```
 
 Expected: `fmt-clean`, `vet-clean`, green with total coverage at least 80 %, `tidy-clean`.
+
+Observed 2026-09-18 at 2ef2976: `fmt-clean`, `vet-clean`, ten packages `ok`, `total: 87.5%`,
+`tidy-clean`.
