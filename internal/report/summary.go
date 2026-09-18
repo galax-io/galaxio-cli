@@ -91,12 +91,44 @@ type Summary struct {
 	// successful and as failed.
 	OK     Figures
 	Failed Figures
+	// Under, Between and Over are the response-time bands: how many successful
+	// responses took less than the lower boundary, from the lower boundary to
+	// less than the upper one, and the upper boundary or more. Failed requests
+	// are a band of their own, Failed.Count(), whatever their time, and a
+	// successful request with no recorded end is in no band, so the three add
+	// up to the successful requests that have one.
+	Under, Between, Over int
+}
+
+// band counts a successful response of ms milliseconds into its band. The
+// boundaries are lower-inclusive, as Gatling's are.
+func (s *Summary) band(ms int64) {
+	switch {
+	case ms < s.Options.Bands.Lower:
+		s.Under++
+	case ms < s.Options.Bands.Upper:
+		s.Between++
+	default:
+		s.Over++
+	}
 }
 
 // All returns the figures of every request of the run, successful and failed
 // together. Nothing is stored for them: they are the two outcomes combined.
 func (s Summary) All() Figures {
 	return merge(s.OK, s.Failed)
+}
+
+// Share returns count as a percentage of all requests of the run, and false
+// when the run holds none. It divides before it multiplies, as Gatling does:
+// 12 of 36 is 33.33333333333333, where 100·12/36 would be 33.333333333333336.
+func (s Summary) Share(count int) (float64, bool) {
+	total := s.OK.count + s.Failed.count
+	if total == 0 {
+		return 0, false
+	}
+
+	return float64(count) / float64(total) * 100, true
 }
 
 // Untimed returns how many requests have no recorded end. They are counted, and

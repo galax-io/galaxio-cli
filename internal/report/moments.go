@@ -33,16 +33,17 @@ type Figures struct {
 	squares [3]uint64
 }
 
-// add counts one request of this outcome. A request whose end the source did
-// not record is counted and takes part in no timing figure; so is a negative
-// duration, which parsec promises never to yield and its own bounds already
-// treat as no end.
-func (f *Figures) add(duration model.Opt[time.Duration]) {
+// add counts one request of this outcome and returns its response time in
+// whole milliseconds, and whether it has one. A request whose end the source
+// did not record is counted and takes part in no timing figure; so is a
+// negative duration, which parsec promises never to yield and its own bounds
+// already treat as no end.
+func (f *Figures) add(duration model.Opt[time.Duration]) (int64, bool) {
 	f.count++
 
 	d, ok := duration.Get()
 	if !ok || d < 0 {
-		return
+		return 0, false
 	}
 
 	ms := d.Milliseconds()
@@ -66,6 +67,8 @@ func (f *Figures) add(duration model.Opt[time.Duration]) {
 	f.squares[0], carry = bits.Add64(f.squares[0], low, 0)
 	f.squares[1], carry = bits.Add64(f.squares[1], high, carry)
 	f.squares[2] += carry
+
+	return ms, true
 }
 
 // merge returns the figures of a and b together, exactly as if every request

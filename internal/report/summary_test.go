@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -156,6 +157,82 @@ func TestScanOptions(t *testing.T) {
 	}
 }
 
+// TestSummaryBands holds the bands to Gatling's: lower-inclusive boundaries,
+// successful responses only, and a failure counted as failed whatever its time.
+func TestSummaryBands(t *testing.T) {
+	t.Parallel()
+
+	sample := func(ms int64, outcome model.Outcome) model.Item {
+		return model.Item{Kind: model.ItemSample, Sample: model.Sample{
+			Name: "r", Start: time.UnixMilli(1000).UTC(), Duration: model.Some(time.Duration(ms) * time.Millisecond), Outcome: outcome,
+		}}
+	}
+
+	untimed := model.Item{Kind: model.ItemSample, Sample: model.Sample{Name: "r", Start: time.UnixMilli(1000).UTC(), Outcome: model.OutcomeSuccess}}
+
+	tests := []struct {
+		name                   string
+		bands                  Bands
+		items                  []model.Item
+		under, between, over   int
+		expectedFailed, timeOK int
+	}{
+		{
+			name:  "gatling's boundaries include their lower end",
+			bands: Bands{Lower: 800, Upper: 1200},
+			items: []model.Item{
+				sample(799, model.OutcomeSuccess), sample(800, model.OutcomeSuccess),
+				sample(1199, model.OutcomeSuccess), sample(1200, model.OutcomeSuccess),
+			},
+			under: 1, between: 2, over: 1, timeOK: 4,
+		},
+		{
+			name:  "a slow failure is failed and in no timing band",
+			bands: Bands{Lower: 800, Upper: 1200},
+			items: []model.Item{sample(5000, model.OutcomeFailure), sample(10, model.OutcomeSuccess)},
+			under: 1, expectedFailed: 1, timeOK: 1,
+		},
+		{
+			name:    "a success with no recorded end is in no band",
+			bands:   Bands{Lower: 800, Upper: 1200},
+			items:   []model.Item{untimed, sample(900, model.OutcomeSuccess)},
+			between: 1, timeOK: 1,
+		},
+		{
+			name:  "the caller's own boundaries",
+			bands: Bands{Lower: 5, Upper: 1000},
+			items: []model.Item{
+				sample(4, model.OutcomeSuccess), sample(5, model.OutcomeSuccess),
+				sample(999, model.OutcomeSuccess), sample(1000, model.OutcomeSuccess),
+			},
+			under: 1, between: 2, over: 1, timeOK: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := DefaultOptions()
+			opts.Bands = tt.bands
+
+			summary, err := Scan(context.Background(), &stubReader{items: tt.items}, opts)
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+
+			got := [4]int{summary.Under, summary.Between, summary.Over, summary.Failed.Count()}
+			if expected := [4]int{tt.under, tt.between, tt.over, tt.expectedFailed}; got != expected {
+				t.Errorf("under/between/over/failed = %v, want %v", got, expected)
+			}
+
+			if sum, timed := summary.Under+summary.Between+summary.Over, summary.OK.Count()-summary.Untimed(); sum != tt.timeOK || sum != timed {
+				t.Errorf("the timing bands hold %d, want %d, the successful requests with a recorded end", sum, timed)
+			}
+		})
+	}
+}
+
 // TestSummaryAll holds the figures of all requests to both outcomes, and each
 // outcome to its own requests: a failure reaches every figure of all requests
 // and no figure of the successful ones.
@@ -170,6 +247,25 @@ func TestSummaryAll(t *testing.T) {
 
 	if got, expected := readingOf(t, s.OK), (reading{count: 2, minimum: 10, maximum: 20, mean: 15, stdDev: 5, timed: true}); got != expected {
 		t.Errorf("OK = %+v, want %+v: a failure reached a figure of successful requests", got, expected)
+	}
+}
+
+// TestSummaryShare divides before it multiplies, as Gatling does, and has no
+// share of a run that holds no request.
+func TestSummaryShare(t *testing.T) {
+	t.Parallel()
+
+	eighteen := make([]int64, 18)
+	s := Summary{OK: figuresOf(eighteen...), Failed: figuresOf(eighteen...)}
+
+	// 12 of 36, as 3.11.5 and 3.12.0 recorded it. The other order of
+	// operations gives 33.333333333333336.
+	if share, ok := s.Share(12); !ok || share != 33.33333333333333 {
+		t.Errorf("Share(12) of 36 = %v (%v), want 33.33333333333333", share, ok)
+	}
+
+	if share, ok := (Summary{}).Share(0); ok {
+		t.Errorf("Share of a run with no request = %v, want absent", share)
 	}
 }
 
@@ -270,6 +366,14 @@ func TestSummaryRate(t *testing.T) {
 type gatlingFigures struct {
 	count, minimum, maximum, mean, stdDev [3]int64
 	rate                                  [3]float64
+
+	// bands counts the successful responses under 800 ms, from 800 ms to under
+	// 1200 ms and at 1200 ms or more, then the failed requests; shares are
+	// their percentages. A console prints a share to two decimals, a
+	// global_stats.json as the double itself, and roundedShares says which.
+	bands         [4]int64
+	shares        [4]float64
+	roundedShares bool
 }
 
 // recordedGlobalStats is what a test reads from a global_stats.json Gatling
@@ -281,6 +385,15 @@ type recordedGlobalStats struct {
 	MeanResponseTime              recordedTriple[int64]   `json:"meanResponseTime"`
 	StandardDeviation             recordedTriple[int64]   `json:"standardDeviation"`
 	MeanNumberOfRequestsPerSecond recordedTriple[float64] `json:"meanNumberOfRequestsPerSecond"`
+	Group1                        recordedBand            `json:"group1"`
+	Group2                        recordedBand            `json:"group2"`
+	Group3                        recordedBand            `json:"group3"`
+	Group4                        recordedBand            `json:"group4"`
+}
+
+type recordedBand struct {
+	Count      int64   `json:"count"`
+	Percentage float64 `json:"percentage"`
 }
 
 type recordedTriple[T int64 | float64] struct {
@@ -314,6 +427,8 @@ func readGlobalStats(t *testing.T, version, file string) gatlingFigures {
 		mean:    recorded.MeanResponseTime.values(),
 		stdDev:  recorded.StandardDeviation.values(),
 		rate:    recorded.MeanNumberOfRequestsPerSecond.values(),
+		bands:   [4]int64{recorded.Group1.Count, recorded.Group2.Count, recorded.Group3.Count, recorded.Group4.Count},
+		shares:  [4]float64{recorded.Group1.Percentage, recorded.Group2.Percentage, recorded.Group3.Percentage, recorded.Group4.Percentage},
 	}
 }
 
@@ -342,32 +457,35 @@ func TestSummaryMatchesGatling(t *testing.T) {
 			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.13.1", "js/global_stats.json") },
 		},
 		{
-			// 3.13.1/console.txt, lines 44–53.
+			// 3.13.1/console.txt, lines 44–58.
 			name: "3.13.1 console", version: "3.13.1",
 			expected: func(*testing.T) gatlingFigures {
 				return gatlingFigures{
 					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1503, 1503, 4},
 					mean: [3]int64{89, 108, 1}, stdDev: [3]int64{353, 387, 1}, rate: [3]float64{25.5, 21, 4.5},
+					bands: [4]int64{78, 0, 6, 18}, shares: [4]float64{76.47, 0, 5.88, 17.65}, roundedShares: true,
 				}
 			},
 		},
 		{
-			// 3.14.9/console.txt, lines 41–50.
+			// 3.14.9/console.txt, lines 41–55.
 			name: "3.14.9 console", version: "3.14.9",
 			expected: func(*testing.T) gatlingFigures {
 				return gatlingFigures{
 					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1502, 1502, 12},
 					mean: [3]int64{90, 108, 3}, stdDev: [3]int64{353, 387, 4}, rate: [3]float64{25.5, 21, 4.5},
+					bands: [4]int64{78, 0, 6, 18}, shares: [4]float64{76.47, 0, 5.88, 17.65}, roundedShares: true,
 				}
 			},
 		},
 		{
-			// 3.15.1/console.txt, lines 40–49.
+			// 3.15.1/console.txt, lines 40–54.
 			name: "3.15.1 console", version: "3.15.1",
 			expected: func(*testing.T) gatlingFigures {
 				return gatlingFigures{
 					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1502, 1502, 3},
 					mean: [3]int64{89, 108, 1}, stdDev: [3]int64{353, 387, 1}, rate: [3]float64{25.5, 21, 4.5},
+					bands: [4]int64{78, 0, 6, 18}, shares: [4]float64{76.47, 0, 5.88, 17.65}, roundedShares: true,
 				}
 			},
 		},
@@ -402,6 +520,25 @@ func TestSummaryMatchesGatling(t *testing.T) {
 				rate, ok := summary.Rate(figures.Count())
 				if !ok || rate != expected.rate[i] {
 					t.Errorf("%s rate = %v (%v), Gatling recorded %v", columns[i], rate, ok, expected.rate[i])
+				}
+			}
+
+			bandNames := [4]string{"under 800 ms", "800 to 1200 ms", "1200 ms and over", "failed"}
+
+			for i, count := range [4]int{summary.Under, summary.Between, summary.Over, summary.Failed.Count()} {
+				if int64(count) != expected.bands[i] {
+					t.Errorf("band %s = %d, Gatling recorded %d", bandNames[i], count, expected.bands[i])
+				}
+
+				share, ok := summary.Share(count)
+
+				matches := share == expected.shares[i]
+				if expected.roundedShares {
+					matches = strconv.FormatFloat(share, 'f', 2, 64) == strconv.FormatFloat(expected.shares[i], 'f', 2, 64)
+				}
+
+				if !ok || !matches {
+					t.Errorf("band %s share = %v (%v), Gatling recorded %v", bandNames[i], share, ok, expected.shares[i])
 				}
 			}
 		})

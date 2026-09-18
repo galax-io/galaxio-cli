@@ -109,8 +109,9 @@ func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, erro
 	}
 }
 
-// add folds one item into the summary: the tally counts every item, and a
-// request feeds the figures of the outcome the source recorded for it. A
+// add folds one item into the summary: the tally counts every item, a request
+// feeds the figures of the outcome the source recorded for it, and a
+// successful one with a recorded end falls into a response-time band. A
 // request whose outcome the source lost stays in Tally.Unknown and feeds
 // nothing, and a group traversal feeds nothing either.
 func (s *Summary) add(item *model.Item) {
@@ -122,7 +123,9 @@ func (s *Summary) add(item *model.Item) {
 
 	switch item.Sample.Outcome {
 	case model.OutcomeSuccess:
-		s.OK.add(item.Sample.Duration)
+		if ms, timed := s.OK.add(item.Sample.Duration); timed {
+			s.band(ms)
+		}
 	case model.OutcomeFailure:
 		s.Failed.add(item.Sample.Duration)
 	}
