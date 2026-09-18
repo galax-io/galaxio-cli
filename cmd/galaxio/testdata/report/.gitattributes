@@ -1,1 +1,2 @@
 *.golden -text
+**/simulation.log -text
