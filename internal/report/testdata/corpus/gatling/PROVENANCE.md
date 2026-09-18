@@ -2,9 +2,9 @@
 
 Copied unchanged from `github.com/galax-io/parsec` **v0.1.0**, `testdata/corpus/gatling/`
 (MIT licence; notice below). Each `simulation.log` is exactly what Gatling wrote; a
-recording is captured once and is never edited or re-made. Only the logs and the
-`lastRun.txt` marker are copied; the HTML reports, console captures and parsec's own
-golden files are not.
+recording is captured once and is never edited or re-made. The logs, the `lastRun.txt`
+marker and the figures Gatling itself recorded for the runs (below) are copied; the HTML
+reports, `stats.json` and parsec's own golden files are not.
 
 | Entry | Format | Recorded | Requests (console summary) | Groups | User events | Errors |
 |---|---|---|---|---|---|---|
@@ -24,8 +24,28 @@ The 3.11.5 and 3.12.0 runs were made by an earlier version of parsec's probe sim
 simulation otherwise: one request outside any group, the rest under `outer` and
 `outer / inner, with comma`; six virtual users; one run-level error per user.
 
-`.gitattributes` marks every `simulation.log` as `-text` so no checkout rewrites the
-binary logs' bytes or the text logs' line endings.
+`.gitattributes` marks every `simulation.log`, `global_stats.json` and `console.txt` as
+`-text` so no checkout rewrites the binary logs' bytes, the text logs' line endings or the
+recorded figures.
+
+## What Gatling recorded
+
+The figures Gatling computed for a run are what the report summary is tested against
+(galaxio-cli#51). Each file is Gatling's own output, copied byte for byte from the same
+parsec release, and is read by tests only: `galaxio report` writes no such file.
+
+| File | Run | What it holds |
+|---|---|---|
+| `3.11.5/global_stats.json` | 3.11.5 | the whole-run figures Gatling wrote beside its HTML report |
+| `3.12.0/global_stats.json` | 3.12.0 | the same |
+| `3.13.1/js/global_stats.json` | 3.13.1 | the same, in the `js/` directory 3.13.1 wrote it to |
+| `3.13.1/console.txt` | 3.13.1 | the standard output of the run, captured while it was recorded, its `Global Information` summary included |
+| `3.14.9/console.txt` | 3.14.9 | the same; from 3.13.5 Gatling writes no `global_stats.json` |
+| `3.15.1/console.txt` | 3.15.1 | the same |
+
+`stats.json`, which holds the figures of every request and group, is not copied: nothing
+reads it before galaxio-cli#52. No test reads a percentile from any of these files, because
+Gatling's percentiles are not a reference (galaxio-cli#51).
 
 ## Licence notice
 
