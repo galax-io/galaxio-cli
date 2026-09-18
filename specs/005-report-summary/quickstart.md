@@ -176,3 +176,19 @@ Expected: no formatting diff, vet clean, tests green with the race detector, tot
 at or above 80 %, `go mod tidy` leaving no diff, integration tests green, and `govulncheck`
 reporting no vulnerability — run by hand and its result recorded here, because no CI job
 runs it.
+
+Observed 2026-09-17 at 79cb8c7, Go 1.27.1, darwin/arm64:
+
+```text
+gofmt:        no diff
+vet:          clean
+vet (tags):   clean
+tests:        10 packages ok (race on)
+coverage:     87.9% total, floor 80.0%
+report pkgs:  internal/report 98.7%, reporttest 88.8%, cmd/galaxio 90.6%
+mod tidy:     no diff
+mod verify:   all modules verified
+integration:  10 packages ok (race on), TestEtalonRecordings run with a JDK, not skipped
+shell suites: 8 ok
+govulncheck:  No vulnerabilities found. (govulncheck v1.8.0, DB updated 2026-09-15)
+```
