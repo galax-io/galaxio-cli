@@ -79,6 +79,24 @@ func formatSummary(s report.Summary, color bool) string {
 	return b.String()
 }
 
+// failedStyle is how the failed outcome is drawn: red once the run holds a
+// failure, and like any other text while it holds none, so that a run that
+// failed nothing is not coloured as though it had.
+func failedStyle(s report.Summary) style {
+	if s.Failed.Count() > 0 {
+		return red
+	}
+
+	return plain
+}
+
+// label draws a row's label and pads it to the table's label column. The
+// padding is written outside the paint, so that no colour runs into the
+// figures beside it.
+func label(text string, st style, p painter) string {
+	return p.paint(text, st) + strings.Repeat(" ", max(0, summaryLabelWidth-utf8.RuneCountInString(text)))
+}
+
 // segment is one part of the headline, as drawn and as measured.
 type segment struct {
 	drawn string
@@ -90,21 +108,16 @@ type segment struct {
 func headline(s report.Summary, all report.Figures, p painter) string {
 	outcome := func(label string, count int, st style) segment {
 		mark := fmt.Sprintf(label, count)
-		rest := fmt.Sprintf(" · %s %% · %s/s", share(s.Share(count)), rate(s.Rate(count)))
+		rest := fmt.Sprintf(" · %s %% · %s/s", rate(s.Share(count)), rate(s.Rate(count)))
 
 		return segment{drawn: p.paint(mark, st) + rest, width: utf8.RuneCountInString(mark + rest)}
-	}
-
-	failedStyle := plain
-	if s.Failed.Count() > 0 {
-		failedStyle = red
 	}
 
 	first := fmt.Sprintf("%s · %s req/s", plural(all.Count(), "request"), rate(s.Rate(all.Count())))
 	segments := []segment{
 		{drawn: first, width: utf8.RuneCountInString(first)},
 		outcome("✓ %d ok", s.OK.Count(), green),
-		outcome("✗ %d failed", s.Failed.Count(), failedStyle),
+		outcome("✗ %d failed", s.Failed.Count(), failedStyle(s)),
 	}
 
 	return joinHeadline(segments)
@@ -138,11 +151,6 @@ func responseTimeTable(s report.Summary, all report.Figures, p painter) string {
 
 	headers = append(headers, "max")
 
-	failedStyle := plain
-	if s.Failed.Count() > 0 {
-		failedStyle = red
-	}
-
 	rows := []struct {
 		label   string
 		st      style
@@ -150,7 +158,7 @@ func responseTimeTable(s report.Summary, all report.Figures, p painter) string {
 	}{
 		{"all", plain, all},
 		{"✓ ok", green, s.OK},
-		{"✗ failed", failedStyle, s.Failed},
+		{"✗ failed", failedStyle(s), s.Failed},
 	}
 
 	cells := make([][]string, len(rows))
@@ -182,8 +190,7 @@ func responseTimeTable(s report.Summary, all report.Figures, p painter) string {
 	b.WriteString("\n")
 
 	for i, row := range rows {
-		b.WriteString(p.paint(row.label, row.st))
-		b.WriteString(strings.Repeat(" ", summaryLabelWidth-utf8.RuneCountInString(row.label)))
+		b.WriteString(label(row.label, row.st, p))
 
 		for j, cell := range cells[i] {
 			b.WriteString(padLeft(cell, widths[j]))
@@ -227,7 +234,7 @@ func bandLines(s report.Summary, total int, p painter) string {
 
 		b.WriteString(p.paint(strings.Repeat("█", filled), filledStyle))
 		b.WriteString(p.paint(strings.Repeat("░", barCells-filled), faint))
-		b.WriteString(padLeft(share(s.Share(line.count)), summaryShareWidth))
+		b.WriteString(padLeft(rate(s.Share(line.count)), summaryShareWidth))
 		b.WriteString(" %")
 		b.WriteString(padLeft(strconv.Itoa(line.count), countWidth))
 		b.WriteString("  ")
@@ -272,18 +279,15 @@ func decimal(v float64) string {
 	return strings.TrimSuffix(strings.TrimRight(strconv.FormatFloat(v, 'f', 2, 64), "0"), ".")
 }
 
-// rate renders a rate, or "-" for a run that cannot be timed.
+// rate renders a rate or a share, or "-" for a figure that does not exist — a
+// run that cannot be timed, or one that holds no request — which is never shown
+// as 0.
 func rate(v float64, ok bool) string {
 	if !ok {
 		return "-"
 	}
 
 	return decimal(v)
-}
-
-// share renders a share of all requests, or "-" for a run that holds none.
-func share(v float64, ok bool) string {
-	return rate(v, ok)
 }
 
 func padLeft(text string, width int) string {
