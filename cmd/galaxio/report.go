@@ -101,6 +101,53 @@ func (f *ranksFlag) Set(value string) error {
 	return nil
 }
 
+// boundsFlag is the --bounds value: the two boundaries of the response-time
+// bands, checked as the flag is parsed, as --percentiles is.
+type boundsFlag struct {
+	bands report.Bands
+}
+
+func newBoundsFlag() *boundsFlag {
+	return &boundsFlag{bands: report.DefaultOptions().Bands}
+}
+
+func (f *boundsFlag) String() string {
+	return strconv.FormatInt(f.bands.Lower, 10) + "," + strconv.FormatInt(f.bands.Upper, 10)
+}
+
+func (f *boundsFlag) Type() string { return "low,high" }
+
+// Set reads LOW,HIGH: two whole, non-negative numbers of milliseconds, the
+// second greater than the first.
+func (f *boundsFlag) Set(value string) error {
+	refused := errors.New("boundaries are two whole, non-negative numbers of milliseconds, the second greater than the first")
+
+	texts := strings.Split(value, ",")
+	if len(texts) != 2 {
+		return refused
+	}
+
+	var bounds [2]int64
+
+	for i, text := range texts {
+		n, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+		if err != nil {
+			return refused
+		}
+
+		bounds[i] = n
+	}
+
+	bands := report.Bands{Lower: bounds[0], Upper: bounds[1]}
+	if !bands.Valid() {
+		return refused
+	}
+
+	f.bands = bands
+
+	return nil
+}
+
 // reportFormats is what -o may name, in the order a usage error lists them.
 // Every one is reserved: the command writes no machine-readable format yet, and
 // the first it publishes will be Gatling's own stats.json. An entry leaves this
@@ -136,8 +183,10 @@ type reportOptions struct {
 	Path    string
 	PathSet bool
 
-	// Percentiles are the ranks to report; none means Gatling's defaults.
+	// Percentiles are the ranks to report, and Bounds the boundaries of the
+	// response-time bands; none, or the zero Bands, means Gatling's defaults.
 	Percentiles []float64
+	Bounds      report.Bands
 
 	Quiet   bool
 	Verbose bool
@@ -164,6 +213,7 @@ func newReportCommand() *cobra.Command {
 	var output reportFormatFlag
 
 	percentiles := newRanksFlag()
+	bounds := newBoundsFlag()
 
 	cmd := &cobra.Command{
 		Use:   "report <tool> [PATH]",
@@ -178,11 +228,12 @@ recorded, requests split into successes and failures.
 Below that it summarises the run as a whole: the requests and their rate, ok and
 failed with their share and rate; the minimum, mean, standard deviation, the
 percentiles — the 50th, 75th, 95th and 99th unless --percentiles names others —
-and the maximum response time for all, ok and failed requests; and how many successful responses took under 800 ms, from
-800 up to 1200 ms, and 1200 ms or more, and how many requests failed. Times are
-in milliseconds. Percentiles are t-digest estimates, the numbers Gatling 3.11
-gives for the same log. Nothing is shown for a single request or group, and the
-command writes no file.
+and the maximum response time for all, ok and failed requests; and how many
+successful responses took under 800 ms, from 800 up to 1200 ms, and 1200 ms or
+more — or at the boundaries --bounds names — and how many requests failed. Times
+are in milliseconds. Percentiles are t-digest estimates, the numbers Gatling
+3.11 gives for the same log. Nothing is shown for a single request or group, and
+the command writes no file.
 
 PATH is a run directory, its simulation.log, or a results root holding run
 directories. Without it the Maven and sbt results root target/gatling is
@@ -207,6 +258,7 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 			opts := reportOptions{
 				Tool:        args[0],
 				Percentiles: percentiles.ranks,
+				Bounds:      bounds.bands,
 				Quiet:       isQuiet(cmd),
 				Verbose:     globalOptsFromCmd(cmd).verbose,
 				Color:       !isNoColor(cmd) && ansiTerminal(cmd.OutOrStdout()),
@@ -225,6 +277,7 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 
 	cmd.Flags().VarP(&output, "output", "o", "report format(s) to produce, comma-separated: stats, global_stats, yml (reserved for later releases)")
 	cmd.Flags().Var(percentiles, "percentiles", "percentile ranks to report, comma-separated, each above 0 and at most 100")
+	cmd.Flags().Var(bounds, "bounds", "the two boundaries of the response-time bands, in whole milliseconds")
 
 	return cmd
 }
@@ -315,6 +368,10 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	options := report.DefaultOptions()
 	if len(opts.Percentiles) > 0 {
 		options.Percentiles = opts.Percentiles
+	}
+
+	if opts.Bounds != (report.Bands{}) {
+		options.Bands = opts.Bounds
 	}
 
 	summary, scanErr := src.Scan(ctx, options)

@@ -182,7 +182,7 @@ all requests           41.2M              0     47     38    212    840  60000
 |---|---|---|
 | 0 | the run was read to the end and summarised | — |
 | 1 | runtime failure while executing a valid invocation | `<log>: the run spans no time (<start> .. <end>): no request rate can be computed`, after the summary with every rate `-`; `<log>: <N> requests have an outcome the source lost: they are neither ok nor failed and the summary does not add up`, after the summary. Both at once, or one of them and a log cut short, are joined into one error. **Both were exit 0 in v0.13.0**; no Gatling log is known to produce either |
-| 2 | usage failure, nothing on standard output | `invalid argument "0" for "--percentiles" flag: percentile rank "0" is not a number above 0 and at most 100`; `invalid argument "1200,800" for "--bounds" flag: boundaries are two whole numbers of milliseconds, the second greater than the first` |
+| 2 | usage failure, nothing on standard output | `invalid argument "0" for "--percentiles" flag: percentile rank "0" is not a number above 0 and at most 100`; `invalid argument "1200,800" for "--bounds" flag: boundaries are two whole, non-negative numbers of milliseconds, the second greater than the first` |
 
 A log cut short keeps the behaviour of v0.13.0 and extends it: the summary of what was read
 is printed and the exit code is 1. A damaged log prints no summary, as in v0.13.0.
