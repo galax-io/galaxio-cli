@@ -10,9 +10,10 @@ import (
 )
 
 // BenchmarkScan replays the 3.12.0 recording into logs of 64 MiB and 2 GiB and
-// reads them, reporting throughput and allocations. The memory goal is not
+// summarises them, reporting throughput and allocations at the cost of every
+// figure, one digest insertion per request included. The memory goal is not
 // measured here: a benchmark is an instrument for comparing, and the goal needs
-// a gate CI runs, which is TestScanMemoryDoesNotGrowWithTheLog.
+// a gate CI runs, which is TestSummaryMemoryDoesNotGrowWithTheLog.
 func BenchmarkScan(b *testing.B) {
 	header, body := splitCorpus(b, "3.12.0")
 
@@ -62,9 +63,9 @@ func replayCount(tb testing.TB, size int64, body []byte) int {
 	return int(size / int64(len(body)))
 }
 
-// discardScan reads one replay to the end and returns nothing but its error, so
-// that a caller measuring memory holds no record of its own.
-func discardScan(tb testing.TB, header, body []byte, repeats int) {
+// scanReplay reads one replay to the end and returns its summary and nothing
+// else, so that a caller measuring memory holds no record of its own.
+func scanReplay(tb testing.TB, header, body []byte, repeats int) Summary {
 	tb.Helper()
 
 	rd, err := simlog.NewRunReader(reporttest.Replay(header, body, repeats))
@@ -72,7 +73,10 @@ func discardScan(tb testing.TB, header, body []byte, repeats int) {
 		tb.Fatalf("NewRunReader: %v", err)
 	}
 
-	if _, err := Scan(context.Background(), rd, DefaultOptions()); err != nil {
+	summary, err := Scan(context.Background(), rd, DefaultOptions())
+	if err != nil {
 		tb.Fatalf("Scan: %v", err)
 	}
+
+	return summary
 }
