@@ -188,7 +188,7 @@ curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/i
 ```sh
 galaxio --help          # show commands and flags
 galaxio version         # print build info
-galaxio report gatling  # read the latest Gatling run and report what it holds
+galaxio report gatling  # read the latest Gatling run, describe it and summarise it
 galaxio --verbose ...   # verbose diagnostic output
 galaxio --quiet ...     # suppress non-error output
 galaxio --no-color ...  # disable colour
@@ -227,31 +227,47 @@ for the selected identities and rejected alternatives.
 
 ### Read a finished run
 
-`galaxio report <tool> [PATH]` reads a finished run once and reports what it holds. It
-computes no statistic and writes no data format; statistics and Gatling's own `stats.json`
-follow in later releases.
+`galaxio report <tool> [PATH]` reads a finished run once, describes it, and summarises it as
+a whole. It writes no file and prints no row for a single request or group: those, and
+every form a program reads, arrive with the reserved `-o` products of later releases.
 
 ```sh
 galaxio report gatling                               # the latest run under target/gatling
 galaxio report gatling target/gatling/mysim-20260906044741110
 galaxio report gatling path/to/simulation.log
 galaxio report gatling build/reports/gatling         # a results root: lastRun.txt, else the newest run
+galaxio report gatling --percentiles 90,99.9         # other percentile ranks
+galaxio report gatling --bounds 5,1000               # other response-time bands
 galaxio report                                       # help
 ```
 
 ```text
 run         io.galaxio.parsec.corpus.CorpusSimulation
 id          io.galaxio.parsec.corpus.CorpusSimulation
-started     2026-09-06T04:48:14.356Z
-tool        gatling 3.15.1
-log         binary, target/gatling/mysim-20260906044741110/simulation.log
+started     2026-09-06T04:47:41.110Z
+tool        gatling 3.13.1
+log         binary, internal/report/testdata/corpus/gatling/3.13.1/simulation.log
 found by    path
-span        2026-09-06T04:48:14.885Z .. 2026-09-06T04:48:18.117Z (3.232s)
+span        2026-09-06T04:47:41.603Z .. 2026-09-06T04:47:44.829Z (3.226s)
 requests    102 (84 ok, 18 failed)
 groups      12 traversals
 users       12 events
 errors      6
 assertions  10 payloads the run declared
+
+102 requests · 25.5 req/s      ✓ 84 ok · 82.35 % · 21/s      ✗ 18 failed · 17.65 % · 4.5/s
+
+response time, ms       min   mean    std    p50    p75    p95    p99    max
+all                       0     89    353      1      1   1427   1502   1503
+✓ ok                      0    108    387      1      1   1502   1502   1503
+✗ failed                  0      1      1      1      2      4      4      4
+
+███████████████░░░░░  76.47 %    78  ok under 800 ms
+░░░░░░░░░░░░░░░░░░░░      0 %     0  ok 800 to 1200 ms
+█░░░░░░░░░░░░░░░░░░░   5.88 %     6  ok 1200 ms and over
+████░░░░░░░░░░░░░░░░  17.65 %    18  failed
+
+times in ms · percentiles are galaxio's t-digest estimates, interpolated
 ```
 
 **Tool.** The first argument names the tool that produced the run. `gatling` is the only
@@ -266,19 +282,77 @@ With no path the Maven and sbt results root `target/gatling` is searched (Gradle
 it still exists, otherwise the most recently modified run. The report says which run was
 read and by which rule.
 
-**What the report says.** `started` is the run's own recorded start and `span` is the
-interval the run actually covers, which is a different quantity; the span line is left out
-when the log holds an item the source could not place in time. `requests` splits by the
-outcome the source recorded, never inferred, and a further `unknown` line appears only when
-the source lost a sample's outcome, counting those requests apart rather than guessing
-either way. `groups` counts traversals and `users` counts events, each saying so, because a
-run enters a group once per iteration and emits a start and an end per virtual user.
-`assertions` counts the opaque payloads the run declared, wherever the log put them, and is
-left out when it declared none. Anything the log recorded is quoted if it is not printable,
-so a run from somebody else's CI cannot colour your terminal or erase the line it is on.
-`--quiet` suppresses the report and leaves errors, and the unverified-version warning, which
-qualifies every number under it; `--verbose` adds what this source can never record, such as
-a response code, which Gatling does not put in its log.
+**The description.** `started` is the run's own recorded start and `span` is the interval
+the run actually covers, which is a different quantity; the span line is left out when the
+log holds an item the source could not place in time. `requests` splits by the outcome the
+source recorded, never inferred, and a further `unknown` line appears only when the source
+lost a sample's outcome, counting those requests apart rather than guessing either way.
+`groups` counts traversals and `users` counts events, each saying so, because a run enters a
+group once per iteration and emits a start and an end per virtual user. `assertions` counts
+the opaque payloads the run declared, wherever the log put them, and is left out when it
+declared none. Anything the log recorded is quoted if it is not printable, so a run from
+somebody else's CI cannot colour your terminal or erase the line it is on. `--quiet`
+suppresses the description, the summary and the progress block, and leaves errors and the
+warnings, which qualify every number under them; `--verbose` adds what this source can never
+record, such as a response code, which Gatling does not put in its log.
+
+**The summary.** A headline with the number of requests and their rate, then ok and failed
+with their share of all requests and their rate; a table of response times with a row for
+all, ok and failed requests; the response-time bands as bars, each with its share of all
+requests and its count; and a closing line with the unit of every time and what the
+percentiles are. The layout is this tool's own, the same for every tool the command reads.
+Every figure but the percentiles is exact:
+
+- **count** — the requests of that outcome; **share** — the count over all requests, at most
+  two decimals.
+- **rate** — the count over the run's span in whole seconds, rounded up, which is the divisor
+  Gatling uses; `-` when the run cannot be placed in time.
+- **min** and **max** — over the requests with a recorded end.
+- **mean** — rounded half up to a whole millisecond; **std** — the population standard
+  deviation, rounded the same way.
+- **bands** — successful responses under the lower boundary, from it to under the upper one,
+  and at the upper one or more (`t < LOW`, `LOW <= t < HIGH`, `t >= HIGH`); the `failed` band
+  holds every failed request whatever its time. A bar fills its share rounded to a
+  twentieth, at least one cell for a band that holds a request and never all twenty for one
+  that does not hold them all.
+- `-` marks a figure that does not exist — the times of an outcome no request reached, or
+  every share of a run with no request — never `0`.
+
+**Percentiles.** Estimates from a t-digest, `github.com/caio/go-tdigest` at compression 100
+read with its default quantile: the numbers Gatling 3.11 and 3.12 print for the same log,
+which compute them as `Math.round(quantile(rank / 100))` over `AVLTreeDigest(100)` of
+t-digest 3.1. The tests assert that equality on every recorded run against t-digest 3.1
+itself. Gatling 3.13.0 and later print other numbers because t-digest 3.3's `AVLTreeDigest`
+miscounts ([tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230)): for the
+recorded 3.13.1 run Gatling printed 1072 ms as the 95th percentile of all requests, where
+Gatling 3.11's digest and this command give 1427.
+
+**Known limitation.** The default quantile interpolates between neighbouring response
+times, as Gatling 3.11's does, so where a run's response times have a gap a percentile can
+be a value no request had. For the recorded 3.13.1 run the 95th percentile of all requests
+is printed as 1427 ms, while the request at that rank took 1502 ms and no request took
+between 8 and 1501 ms. [caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42)
+proposes a read by rank that would print 1502, and so part from Gatling 3.11's numbers.
+
+**`--percentiles` and `--bounds`.** `--percentiles 90,99.9` reports those ranks instead of
+the default `50,75,95,99`, each once and in increasing order; a rank is a number above 0
+and at most 100. `--bounds 5,1000` sets the two boundaries of the bands instead of the
+default `800,1200`, in whole, non-negative milliseconds with the second greater than the
+first. A value that is neither exits 2 quoting it, while the flag is parsed and so before
+any help.
+
+**Colour.** On a terminal whose `TERM` is set and is not `dumb`, `ok` is green, `failed` is
+red when anything failed, and the headings, the empty part of a bar and the closing line are
+faint. Written to a pipe or a file, and with `--no-color` or `NO_COLOR`, the same text
+carries no escape sequence.
+
+**Progress.** A long read shows a block of six lines on standard error: how much of the log
+has been read, the time left, and the count, share and times so far of all, ok and failed
+requests. It appears 500 ms into the read, is redrawn in place a few times a second, and is
+erased before anything else is written. It is shown only when standard error is a terminal
+whose `TERM` is set and is not `dumb`, and never with `--quiet`; standard output and the exit
+code are the same with and without it. No terminal mode is changed, so a terminal narrower
+than 80 columns wraps the block and may keep remains of it.
 
 **`-o`.** Reserved for report formats later releases produce: `stats` and `global_stats`
 (Gatling's own `stats.json` and `global_stats.json`) and `yml` (the OpenNFR YAML report).
@@ -289,14 +363,20 @@ not get past it either. There is no `-o json` and no `-o text`: the first machin
 output this command publishes will be Gatling's own `stats.json`, in Gatling's schema and
 with Gatling's numbers.
 
-**Exit codes.** `0` when the run was read to the end; `1` for a runtime failure — no run
-under the directory, a path that cannot be read, a log that is not a Gatling `simulation.log`,
-an unsupported version, a log cut short (the counts of what it did hold are still reported,
-so a script cannot mistake a partial run for a complete one), or a damaged log (no counts,
-because the records before the damage are not a result); `2` for a usage error — an
-unsupported tool, an empty or third argument, an unknown flag, or any `-o`, which is
-rejected while the flag is parsed and so before any help. An interrupt cancels the read and
-exits 1 naming the log it stopped in.
+**Exit codes.** `0` when the run was read to the end and summarised; `1` for a runtime
+failure — no run under the directory, a path that cannot be read, a log that is not a
+Gatling `simulation.log`, an unsupported version, a log cut short (the description and the
+summary of what it did hold are still printed, so a script cannot mistake a partial run for a
+complete one), a damaged log (nothing is printed, because the records before the damage are
+not a result), a run that spans no time (the summary is printed with every rate `-`, because
+no rate can be computed), or a run holding requests whose outcome the source lost (the
+summary is printed, and its outcomes do not add up to its requests); `2` for a usage error —
+an unsupported tool, an empty or third argument, an unknown flag, a bad `--percentiles` or
+`--bounds`, or any `-o`, each rejected while the flag is parsed and so before any help. An
+interrupt cancels the read and exits 1 naming the log it stopped in. The two exits for a run
+that spans no time and for lost outcomes were `0` before this release; no Gatling log is
+known to produce either. Requests with no recorded end are counted, take part in no timing
+figure, and are named in a warning on standard error.
 
 ## Template Workflow
 
