@@ -134,7 +134,7 @@ func TestSyntheticRunsEqualGatling311(t *testing.T) {
 		t.Run(run.name, func(t *testing.T) {
 			t.Parallel()
 
-			summary, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil, run.items()...), DefaultOptions())
+			summary, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil, run.items()...), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}

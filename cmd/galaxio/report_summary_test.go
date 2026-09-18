@@ -424,7 +424,7 @@ func (r *itemsReader) Next() (model.Item, error) {
 func summarise(t *testing.T, items ...model.Item) report.Summary {
 	t.Helper()
 
-	s, err := report.Scan(context.Background(), &itemsReader{items: items}, report.DefaultOptions())
+	s, err := report.Scan(context.Background(), &itemsReader{items: items}, report.DefaultOptions(), nil)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}

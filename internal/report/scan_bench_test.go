@@ -37,7 +37,7 @@ func BenchmarkScan(b *testing.B) {
 					b.Fatalf("NewRunReader: %v", err)
 				}
 
-				summary, err := Scan(context.Background(), rd, DefaultOptions())
+				summary, err := Scan(context.Background(), rd, DefaultOptions(), nil)
 				if err != nil {
 					b.Fatalf("Scan: %v", err)
 				}
@@ -73,7 +73,7 @@ func scanReplay(tb testing.TB, header, body []byte, repeats int) Summary {
 		tb.Fatalf("NewRunReader: %v", err)
 	}
 
-	summary, err := Scan(context.Background(), rd, DefaultOptions())
+	summary, err := Scan(context.Background(), rd, DefaultOptions(), nil)
 	if err != nil {
 		tb.Fatalf("Scan: %v", err)
 	}

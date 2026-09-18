@@ -2,16 +2,14 @@ package report
 
 import (
 	"context"
-	"encoding/json"
 	"math"
-	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
 	"github.com/galax-io/parsec/model"
 )
 
@@ -107,7 +105,7 @@ func TestScanOptions(t *testing.T) {
 		given := []float64{99, 50, 99.9, 50, 90}
 		opts := Options{Percentiles: given, Bands: Bands{Lower: 5, Upper: 1000}}
 
-		summary, err := Scan(context.Background(), &stubReader{}, opts)
+		summary, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil), opts, nil)
 		if err != nil {
 			t.Fatalf("Scan: %v", err)
 		}
@@ -122,6 +120,18 @@ func TestScanOptions(t *testing.T) {
 
 		if expected := []float64{99, 50, 99.9, 50, 90}; !slices.Equal(given, expected) {
 			t.Errorf("Scan reordered the caller's ranks: %v", given)
+		}
+	})
+
+	t.Run("the caller normalizes before it opens a run", func(t *testing.T) {
+		t.Parallel()
+
+		if _, err := (Options{Percentiles: []float64{50}, Bands: Bands{Lower: 800, Upper: 1200}}).Normalize(); err != nil {
+			t.Errorf("Normalize refused options a summary can be computed at: %v", err)
+		}
+
+		if _, err := (Options{}).Normalize(); err == nil {
+			t.Errorf("Normalize accepted options naming no rank")
 		}
 	})
 
@@ -141,17 +151,19 @@ func TestScanOptions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			rd := &stubReader{items: []model.Item{{Kind: model.ItemSample, Sample: model.Sample{
-				Name: "r", Start: time.UnixMilli(1000).UTC(), Duration: model.Some(10 * time.Millisecond), Outcome: model.OutcomeSuccess,
-			}}}}
+			var handed int
 
-			summary, err := Scan(context.Background(), rd, tt.opts)
+			rd := reporttest.Items(model.Run{}, &handed, model.Item{Kind: model.ItemSample, Sample: model.Sample{
+				Name: "r", Start: time.UnixMilli(1000).UTC(), Duration: model.Some(10 * time.Millisecond), Outcome: model.OutcomeSuccess,
+			}})
+
+			summary, err := Scan(context.Background(), rd, tt.opts, nil)
 			if err == nil || !strings.Contains(err.Error(), tt.expected) {
 				t.Fatalf("Scan = %v, want an error containing %q", err, tt.expected)
 			}
 
-			if len(rd.items) != 1 || summary.Tally != (Tally{}) {
-				t.Errorf("Scan read the run although its options were refused: %+v, %d items left", summary.Tally, len(rd.items))
+			if handed != 0 || summary.Tally != (Tally{}) {
+				t.Errorf("Scan read the run although its options were refused: %+v, %d items taken", summary.Tally, handed)
 			}
 		})
 	}
@@ -216,7 +228,7 @@ func TestSummaryBands(t *testing.T) {
 			opts := DefaultOptions()
 			opts.Bands = tt.bands
 
-			summary, err := Scan(context.Background(), &stubReader{items: tt.items}, opts)
+			summary, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil, tt.items...), opts, nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -312,6 +324,16 @@ func TestSummaryRate(t *testing.T) {
 			expectedRate: 1, rateKnown: true,
 		},
 		{
+			// A damaged timestamp leaves the span at the largest a duration
+			// holds, about 292 years; rounding it up before dividing wrapped it
+			// negative and made every rate of the run -0.
+			name:         "a span the clock saturates has a rate, not a negative one",
+			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, math.MaxInt64/int64(time.Millisecond))},
+			count:        2,
+			expectedSpan: time.Duration(math.MaxInt64/int64(time.Millisecond)) * time.Millisecond, spanKnown: true,
+			expectedRate: 2 / math.Ceil(float64(math.MaxInt64/int64(time.Millisecond))/1000), rateKnown: true,
+		},
+		{
 			name:         "a count of zero over a known span is a rate of 0",
 			items:        []model.Item{userEvent(model.UserStart, 0), userEvent(model.UserEnd, 3226)},
 			count:        0,
@@ -342,7 +364,7 @@ func TestSummaryRate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			summary, err := Scan(context.Background(), &stubReader{items: tt.items}, DefaultOptions())
+			summary, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil, tt.items...), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -360,187 +382,28 @@ func TestSummaryRate(t *testing.T) {
 	}
 }
 
-// gatlingFigures are the whole-run figures Gatling itself recorded for a run,
-// for all, successful and failed requests in that order. No percentile is
-// among them: Gatling's are never a target for this tool's.
-type gatlingFigures struct {
-	count, minimum, maximum, mean, stdDev [3]int64
-	rate                                  [3]float64
-
-	// bands counts the successful responses under 800 ms, from 800 ms to under
-	// 1200 ms and at 1200 ms or more, then the failed requests; shares are
-	// their percentages. A console prints a share to two decimals, a
-	// global_stats.json as the double itself, and roundedShares says which.
-	bands         [4]int64
-	shares        [4]float64
-	roundedShares bool
-}
-
-// recordedGlobalStats is what a test reads from a global_stats.json Gatling
-// wrote, and deliberately nothing more.
-type recordedGlobalStats struct {
-	NumberOfRequests              recordedTriple[int64]   `json:"numberOfRequests"`
-	MinResponseTime               recordedTriple[int64]   `json:"minResponseTime"`
-	MaxResponseTime               recordedTriple[int64]   `json:"maxResponseTime"`
-	MeanResponseTime              recordedTriple[int64]   `json:"meanResponseTime"`
-	StandardDeviation             recordedTriple[int64]   `json:"standardDeviation"`
-	MeanNumberOfRequestsPerSecond recordedTriple[float64] `json:"meanNumberOfRequestsPerSecond"`
-	Group1                        recordedBand            `json:"group1"`
-	Group2                        recordedBand            `json:"group2"`
-	Group3                        recordedBand            `json:"group3"`
-	Group4                        recordedBand            `json:"group4"`
-}
-
-type recordedBand struct {
-	Count      int64   `json:"count"`
-	Percentage float64 `json:"percentage"`
-}
-
-type recordedTriple[T int64 | float64] struct {
-	Total T `json:"total"`
-	OK    T `json:"ok"`
-	KO    T `json:"ko"`
-}
-
-func (r recordedTriple[T]) values() [3]T {
-	return [3]T{r.Total, r.OK, r.KO}
-}
-
-// readGlobalStats reads the figures Gatling wrote beside a corpus run.
-func readGlobalStats(t *testing.T, version, file string) gatlingFigures {
-	t.Helper()
-
-	data, err := os.ReadFile(filepath.Join(corpusDir, version, file))
-	if err != nil {
-		t.Fatalf("read %s: %v", file, err)
-	}
-
-	var recorded recordedGlobalStats
-	if err := json.Unmarshal(data, &recorded); err != nil {
-		t.Fatalf("decode %s: %v", file, err)
-	}
-
-	return gatlingFigures{
-		count:   recorded.NumberOfRequests.values(),
-		minimum: recorded.MinResponseTime.values(),
-		maximum: recorded.MaxResponseTime.values(),
-		mean:    recorded.MeanResponseTime.values(),
-		stdDev:  recorded.StandardDeviation.values(),
-		rate:    recorded.MeanNumberOfRequestsPerSecond.values(),
-		bands:   [4]int64{recorded.Group1.Count, recorded.Group2.Count, recorded.Group3.Count, recorded.Group4.Count},
-		shares:  [4]float64{recorded.Group1.Percentage, recorded.Group2.Percentage, recorded.Group3.Percentage, recorded.Group4.Percentage},
-	}
-}
-
 // TestSummaryMatchesGatling holds every non-percentile whole-run figure of every
 // corpus run to what Gatling itself recorded for that run: its global_stats.json
 // where it wrote one, and the Global Information block of its console where it
-// did not, or as well.
+// did not. Both are read by reporttest, which the live recordings are compared
+// through as well, so there is one reader of Gatling's figures and one rule for
+// what equal means.
 func TestSummaryMatchesGatling(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		version  string
-		expected func(*testing.T) gatlingFigures
-	}{
-		{
-			name: "3.11.5 global_stats.json", version: "3.11.5",
-			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.11.5", "global_stats.json") },
-		},
-		{
-			name: "3.12.0 global_stats.json", version: "3.12.0",
-			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.12.0", "global_stats.json") },
-		},
-		{
-			name: "3.13.1 global_stats.json", version: "3.13.1",
-			expected: func(t *testing.T) gatlingFigures { return readGlobalStats(t, "3.13.1", "js/global_stats.json") },
-		},
-		{
-			// 3.13.1/console.txt, lines 44–58.
-			name: "3.13.1 console", version: "3.13.1",
-			expected: func(*testing.T) gatlingFigures {
-				return gatlingFigures{
-					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1503, 1503, 4},
-					mean: [3]int64{89, 108, 1}, stdDev: [3]int64{353, 387, 1}, rate: [3]float64{25.5, 21, 4.5},
-					bands: [4]int64{78, 0, 6, 18}, shares: [4]float64{76.47, 0, 5.88, 17.65}, roundedShares: true,
-				}
-			},
-		},
-		{
-			// 3.14.9/console.txt, lines 41–55.
-			name: "3.14.9 console", version: "3.14.9",
-			expected: func(*testing.T) gatlingFigures {
-				return gatlingFigures{
-					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1502, 1502, 12},
-					mean: [3]int64{90, 108, 3}, stdDev: [3]int64{353, 387, 4}, rate: [3]float64{25.5, 21, 4.5},
-					bands: [4]int64{78, 0, 6, 18}, shares: [4]float64{76.47, 0, 5.88, 17.65}, roundedShares: true,
-				}
-			},
-		},
-		{
-			// 3.15.1/console.txt, lines 40–54.
-			name: "3.15.1 console", version: "3.15.1",
-			expected: func(*testing.T) gatlingFigures {
-				return gatlingFigures{
-					count: [3]int64{102, 84, 18}, minimum: [3]int64{0, 0, 0}, maximum: [3]int64{1502, 1502, 3},
-					mean: [3]int64{89, 108, 1}, stdDev: [3]int64{353, 387, 1}, rate: [3]float64{25.5, 21, 4.5},
-					bands: [4]int64{78, 0, 6, 18}, shares: [4]float64{76.47, 0, 5.88, 17.65}, roundedShares: true,
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, version := range reporttest.Versions {
+		t.Run(version, func(t *testing.T) {
 			t.Parallel()
 
-			expected := tt.expected(t)
+			log := corpusLog(t, version)
 
-			summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, tt.version)), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
 
-			columns := [3]string{"all", "ok", "failed"}
-
-			for i, figures := range [3]Figures{summary.All(), summary.OK, summary.Failed} {
-				r := readingOf(t, figures)
-				if !r.timed {
-					t.Fatalf("%s: no timing figure, though Gatling recorded them", columns[i])
-				}
-
-				got := [5]int64{int64(r.count), r.minimum, r.maximum, r.mean, r.stdDev}
-				want := [5]int64{expected.count[i], expected.minimum[i], expected.maximum[i], expected.mean[i], expected.stdDev[i]}
-
-				if got != want {
-					t.Errorf("%s count/min/max/mean/std = %v, Gatling recorded %v", columns[i], got, want)
-				}
-
-				rate, ok := summary.Rate(figures.Count())
-				if !ok || rate != expected.rate[i] {
-					t.Errorf("%s rate = %v (%v), Gatling recorded %v", columns[i], rate, ok, expected.rate[i])
-				}
-			}
-
-			bandNames := [4]string{"under 800 ms", "800 to 1200 ms", "1200 ms and over", "failed"}
-
-			for i, count := range [4]int{summary.Under, summary.Between, summary.Over, summary.Failed.Count()} {
-				if int64(count) != expected.bands[i] {
-					t.Errorf("band %s = %d, Gatling recorded %d", bandNames[i], count, expected.bands[i])
-				}
-
-				share, ok := summary.Share(count)
-
-				matches := share == expected.shares[i]
-				if expected.roundedShares {
-					matches = strconv.FormatFloat(share, 'f', 2, 64) == strconv.FormatFloat(expected.shares[i], 'f', 2, 64)
-				}
-
-				if !ok || !matches {
-					t.Errorf("band %s share = %v (%v), Gatling recorded %v", bandNames[i], share, ok, expected.shares[i])
-				}
-			}
+			recorded := corpusRecorded(t, filepath.Join(corpusDir, version))
+			report(t, reporttest.Compare(observed(summary), recorded, outcomeDurations(t, log)), nil)
 		})
 	}
 }

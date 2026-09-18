@@ -63,7 +63,7 @@ func TestScanCorpus(t *testing.T) {
 		t.Run(tt.version, func(t *testing.T) {
 			t.Parallel()
 
-			summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, tt.version)), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, tt.version)), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -104,43 +104,22 @@ func TestScanCorpus(t *testing.T) {
 	}
 }
 
-// stubReader yields fixed items over a fixed run description, for the shapes no
-// Gatling log produces.
-type stubReader struct {
-	run   model.Run
-	items []model.Item
-}
-
-func (s *stubReader) Run() model.Run { return s.run }
-
-func (s *stubReader) Next() (model.Item, error) {
-	if len(s.items) == 0 {
-		return model.Item{}, io.EOF
-	}
-
-	item := s.items[0]
-	s.items = s.items[1:]
-
-	return item, nil
-}
-
 func TestScanCountsEveryKind(t *testing.T) {
 	t.Parallel()
 
 	at := func(ms int64) time.Time { return time.UnixMilli(ms).UTC() }
 
-	rd := &stubReader{items: []model.Item{
-		{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserStart, At: at(1000)}},
-		{Kind: model.ItemSample, Sample: model.Sample{Name: "ok", Start: at(1100), Duration: model.Some(10 * time.Millisecond), Outcome: model.OutcomeSuccess}},
-		{Kind: model.ItemSample, Sample: model.Sample{Name: "failed", Start: at(1200), Duration: model.Some(20 * time.Millisecond), Outcome: model.OutcomeFailure}},
-		{Kind: model.ItemSample, Sample: model.Sample{Name: "lost", Start: at(1300), Duration: model.Some(30 * time.Millisecond)}},
-		{Kind: model.ItemGroup, Group: model.GroupSample{Groups: []string{"g"}, Start: at(1000), Duration: model.Some(400 * time.Millisecond), Outcome: model.OutcomeSuccess}},
-		{Kind: model.ItemError, Error: model.RunError{Message: "boom", At: at(1350)}},
-		{Kind: model.ItemAssertion, Assertion: "payload"},
-		{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserEnd, At: at(1400)}},
-	}}
+	rd := reporttest.Items(model.Run{}, nil,
+		model.Item{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserStart, At: at(1000)}},
+		model.Item{Kind: model.ItemSample, Sample: model.Sample{Name: "ok", Start: at(1100), Duration: model.Some(10 * time.Millisecond), Outcome: model.OutcomeSuccess}},
+		model.Item{Kind: model.ItemSample, Sample: model.Sample{Name: "failed", Start: at(1200), Duration: model.Some(20 * time.Millisecond), Outcome: model.OutcomeFailure}},
+		model.Item{Kind: model.ItemSample, Sample: model.Sample{Name: "lost", Start: at(1300), Duration: model.Some(30 * time.Millisecond)}},
+		model.Item{Kind: model.ItemGroup, Group: model.GroupSample{Groups: []string{"g"}, Start: at(1000), Duration: model.Some(400 * time.Millisecond), Outcome: model.OutcomeSuccess}},
+		model.Item{Kind: model.ItemError, Error: model.RunError{Message: "boom", At: at(1350)}},
+		model.Item{Kind: model.ItemAssertion, Assertion: "payload"},
+		model.Item{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserEnd, At: at(1400)}})
 
-	summary, err := Scan(context.Background(), rd, DefaultOptions())
+	summary, err := Scan(context.Background(), rd, DefaultOptions(), nil)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -174,20 +153,19 @@ func TestScanFeedsOutcomes(t *testing.T) {
 		return model.Item{Kind: model.ItemSample, Sample: model.Sample{Name: name, Start: at(1000), Duration: duration, Outcome: outcome}}
 	}
 
-	rd := &stubReader{items: []model.Item{
+	rd := reporttest.Items(model.Run{}, nil,
 		sample("fast", model.OutcomeSuccess, model.Some(10*time.Millisecond)),
 		sample("slow", model.OutcomeSuccess, model.Some(30*time.Millisecond)),
 		sample("never ended", model.OutcomeSuccess, model.Opt[time.Duration]{}),
 		sample("refused", model.OutcomeFailure, model.Some(2*time.Millisecond)),
 		sample("lost", model.OutcomeUnknown, model.Some(5000*time.Millisecond)),
-		{Kind: model.ItemGroup, Group: model.GroupSample{
+		model.Item{Kind: model.ItemGroup, Group: model.GroupSample{
 			Groups: []string{"g"}, Start: at(1000),
 			Duration: model.Some(9000 * time.Millisecond), CumulatedDuration: model.Some(9000 * time.Millisecond),
 			Outcome: model.OutcomeFailure,
-		}},
-	}}
+		}})
 
-	summary, err := Scan(context.Background(), rd, DefaultOptions())
+	summary, err := Scan(context.Background(), rd, DefaultOptions(), nil)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -216,7 +194,7 @@ func TestScanFeedsOutcomes(t *testing.T) {
 func TestScanRunWithoutRequests(t *testing.T) {
 	t.Parallel()
 
-	summary, err := Scan(context.Background(), &stubReader{}, DefaultOptions())
+	summary, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil), DefaultOptions(), nil)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -235,12 +213,12 @@ func TestScanRunWithoutRequests(t *testing.T) {
 func TestScanTruncated(t *testing.T) {
 	t.Parallel()
 
-	summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, "3.15.1")[:2000]), DefaultOptions())
+	summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, "3.15.1")[:2000]), DefaultOptions(), nil)
 	got := summary.Tally
 
 	var cutShort *gatling.TruncationError
 	if !errors.As(err, &cutShort) {
-		t.Fatalf("Scan(cut log) = %v, want a wrapped *gatling.TruncationError", err)
+		t.Fatalf("Scan(cut log, nil) = %v, want a wrapped *gatling.TruncationError", err)
 	}
 
 	if !strings.Contains(err.Error(), "the run was not read to the end") {
@@ -277,12 +255,12 @@ func TestScanDamaged(t *testing.T) {
 	lines[20] = "BOGUS\tnot a record"
 	damaged := append(append([]byte(nil), header...), []byte(strings.Join(lines, "\n"))...)
 
-	summary, scanErr := Scan(context.Background(), openBytes(t, damaged), DefaultOptions())
+	summary, scanErr := Scan(context.Background(), openBytes(t, damaged), DefaultOptions(), nil)
 	got := summary.Tally
 
 	var syntaxErr *gatling.SyntaxError
 	if !errors.As(scanErr, &syntaxErr) {
-		t.Fatalf("Scan(damaged log) = %v, want a wrapped *gatling.SyntaxError", scanErr)
+		t.Fatalf("Scan(damaged log, nil) = %v, want a wrapped *gatling.SyntaxError", scanErr)
 	}
 
 	if !strings.Contains(scanErr.Error(), "the run was not read completely") {
@@ -300,10 +278,10 @@ func TestScanCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	summary, err := Scan(ctx, openBytes(t, corpusLog(t, "3.12.0")), DefaultOptions())
+	summary, err := Scan(ctx, openBytes(t, corpusLog(t, "3.12.0")), DefaultOptions(), nil)
 
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("Scan(cancelled) = %v, want context.Canceled", err)
+		t.Fatalf("Scan(cancelled, nil) = %v, want context.Canceled", err)
 	}
 
 	if (summary.Tally != Tally{}) {
@@ -328,6 +306,11 @@ func TestSummaryMemoryDoesNotGrowWithTheLog(t *testing.T) {
 
 	header, body := splitCorpus(t, "3.12.0")
 
+	// What the summary holds when the walk is over, collected first, as
+	// TestSummaryMemoryDoesNotGrowWithNames measures it. A live heap is a much
+	// tighter number than the heap in use on either side of the walk, which
+	// carries the allocator's own spans: the slack below is a megabyte rather
+	// than eight, and four times the log catches what sixteen times had to.
 	heapFor := func(size int64) uint64 {
 		repeats := replayCount(t, size, body)
 
@@ -336,41 +319,45 @@ func TestSummaryMemoryDoesNotGrowWithTheLog(t *testing.T) {
 		var before, after runtime.MemStats
 
 		runtime.ReadMemStats(&before)
+
 		summary := scanReplay(t, header, body, repeats)
+
+		runtime.GC()
 		runtime.ReadMemStats(&after)
 		runtime.KeepAlive(summary)
 
-		if after.HeapInuse < before.HeapInuse {
+		if after.HeapAlloc < before.HeapAlloc {
 			return 0
 		}
 
-		return after.HeapInuse - before.HeapInuse
+		return after.HeapAlloc - before.HeapAlloc
 	}
 
 	const (
 		small = 16 << 20
-		large = 256 << 20
+		large = 64 << 20
 	)
 
 	smallHeap, largeHeap := heapFor(small), heapFor(large)
-	t.Logf("heap in use: %.2f MiB over %d MiB, %.2f MiB over %d MiB",
+	t.Logf("heap a summary holds: %.2f MiB over %d MiB, %.2f MiB over %d MiB",
 		float64(smallHeap)/(1<<20), small>>20, float64(largeHeap)/(1<<20), large>>20)
 
 	for _, m := range []struct {
 		name string
 		heap uint64
-	}{{"16 MiB log", smallHeap}, {"256 MiB log", largeHeap}} {
+	}{{"16 MiB log", smallHeap}, {"64 MiB log", largeHeap}} {
 		if m.heap > maxHeapGoal {
-			t.Errorf("%s: heap in use grew by %.1f MiB, over the %d MiB goal", m.name, float64(m.heap)/(1<<20), maxHeapGoal>>20)
+			t.Errorf("%s: the summary holds %.1f MiB, over the %d MiB goal", m.name, float64(m.heap)/(1<<20), maxHeapGoal>>20)
 		}
 	}
 
-	// Sixteen times the log must not cost meaningfully more heap. The slack
-	// covers the allocator's own noise and the race detector's overhead; a read
-	// path that retained records would blow past it by orders of magnitude.
-	const slack = 8 << 20
+	// Four times the log must not cost meaningfully more heap. The slack covers
+	// the allocator's own noise and the race detector's overhead; a read path
+	// that retained a word per request would hold megabytes at this size and
+	// blow past it.
+	const slack = 1 << 20
 	if largeHeap > smallHeap+slack {
-		t.Errorf("heap grew with the log: %.1f MiB for 16 MiB against %.1f MiB for 256 MiB", float64(smallHeap)/(1<<20), float64(largeHeap)/(1<<20))
+		t.Errorf("heap grew with the log: %.1f MiB for 16 MiB against %.1f MiB for 64 MiB", float64(smallHeap)/(1<<20), float64(largeHeap)/(1<<20))
 	}
 }
 
@@ -410,10 +397,12 @@ func (r *namedRequests) Next() (model.Item, error) {
 // shares one name.
 func TestSummaryMemoryDoesNotGrowWithNames(t *testing.T) {
 	if testing.Short() {
-		t.Skip("walks two million requests")
+		t.Skip("walks two hundred thousand requests")
 	}
 
-	const requests = 1_000_000
+	// A summary that kept a name would hold megabytes at this count, which the
+	// slack below is a fraction of; walking more only makes the suite slower.
+	const requests = 100_000
 
 	held := func(distinct bool) (uint64, Summary) {
 		runtime.GC()
@@ -422,7 +411,7 @@ func TestSummaryMemoryDoesNotGrowWithNames(t *testing.T) {
 
 		runtime.ReadMemStats(&before)
 
-		summary, err := Scan(context.Background(), &namedRequests{n: requests, distinct: distinct}, DefaultOptions())
+		summary, err := Scan(context.Background(), &namedRequests{n: requests, distinct: distinct}, DefaultOptions(), nil)
 		if err != nil {
 			t.Fatalf("Scan: %v", err)
 		}
@@ -441,16 +430,119 @@ func TestSummaryMemoryDoesNotGrowWithNames(t *testing.T) {
 	one, oneName := held(false)
 	many, manyNames := held(true)
 
-	t.Logf("heap a summary holds: %.1f KiB with one name, %.1f KiB with a million", float64(one)/(1<<10), float64(many)/(1<<10))
+	t.Logf("heap a summary holds: %.1f KiB with one name, %.1f KiB with %d", float64(one)/(1<<10), float64(many)/(1<<10), requests)
 
 	if oneName.Tally.Requests != requests || manyNames.Tally.Requests != requests {
 		t.Fatalf("walked %d and %d requests, want %d each", oneName.Tally.Requests, manyNames.Tally.Requests, requests)
 	}
 
-	// A summary that kept anything per name would hold tens of megabytes for a
-	// million of them; the slack covers the allocator's noise.
+	// A summary that kept anything per name would hold megabytes for this many
+	// of them; the slack covers the allocator's noise.
 	const slack = 1 << 20
 	if many > one+slack {
-		t.Errorf("a million names cost %.1f KiB where one costs %.1f KiB", float64(many)/(1<<10), float64(one)/(1<<10))
+		t.Errorf("%d names cost %.1f KiB where one costs %.1f KiB", requests, float64(many)/(1<<10), float64(one)/(1<<10))
+	}
+}
+
+// replayItems reads a replay of the 3.12.0 recording into memory, every item
+// copied, so that a walk and a walk of its prefix see the same requests.
+func replayItems(t *testing.T, repeats int) []model.Item {
+	t.Helper()
+
+	header, body := splitCorpus(t, "3.12.0")
+
+	rd, err := simlog.NewRunReader(reporttest.Replay(header, body, repeats))
+	if err != nil {
+		t.Fatalf("NewRunReader: %v", err)
+	}
+
+	var items []model.Item
+
+	for {
+		item, err := rd.Next()
+		if errors.Is(err, io.EOF) {
+			return items
+		}
+
+		if err != nil {
+			t.Fatalf("Next: %v", err)
+		}
+
+		item.Sample.Groups = append([]string(nil), item.Sample.Groups...)
+		item.Group.Groups = append([]string(nil), item.Group.Groups...)
+		items = append(items, item)
+	}
+}
+
+// TestScanTicks holds the tick to its contract: every 1024 items and once at
+// the start, with counts that only grow, figures that equal a full read of the
+// same prefix, and a walk that ends as it would without one.
+func TestScanTicks(t *testing.T) {
+	t.Parallel()
+
+	items := replayItems(t, 100)
+
+	type seen struct {
+		items, requests int
+		mean, p95       int64
+	}
+
+	var ticks []seen
+
+	walked := 0
+	counting := reporttest.Items(model.Run{}, &walked, items...)
+
+	withTicks, err := Scan(context.Background(), counting, DefaultOptions(), func(s Summary) {
+		all := s.All()
+		mean, _ := all.Mean()
+		p95, _ := all.Percentile(95)
+		ticks = append(ticks, seen{items: walked, requests: s.Tally.Requests, mean: mean, p95: p95})
+	})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	if expected := len(items)/cancelCheckInterval + 1; len(ticks) != expected {
+		t.Fatalf("%d ticks over %d items, want %d", len(ticks), len(items), expected)
+	}
+
+	for i, tick := range ticks {
+		if tick.items != i*cancelCheckInterval {
+			t.Errorf("tick %d came after %d items, want %d", i, tick.items, i*cancelCheckInterval)
+		}
+
+		if i > 0 && tick.requests < ticks[i-1].requests {
+			t.Errorf("tick %d saw %d requests after %d", i, tick.requests, ticks[i-1].requests)
+		}
+	}
+
+	// The figures a tick reads are those of the items walked so far.
+	middle := ticks[len(ticks)/2]
+
+	prefix, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil, items[:middle.items]...), DefaultOptions(), nil)
+	if err != nil {
+		t.Fatalf("Scan of the prefix: %v", err)
+	}
+
+	mean, _ := prefix.All().Mean()
+	p95, _ := prefix.All().Percentile(95)
+
+	if prefix.Tally.Requests != middle.requests || mean != middle.mean || p95 != middle.p95 {
+		t.Errorf("a tick after %d items saw %d requests, mean %d, p95 %d; a read of that prefix gives %d, %d, %d",
+			middle.items, middle.requests, middle.mean, middle.p95, prefix.Tally.Requests, mean, p95)
+	}
+
+	without, err := Scan(context.Background(), reporttest.Items(model.Run{}, nil, items...), DefaultOptions(), nil)
+	if err != nil {
+		t.Fatalf("Scan without a tick: %v", err)
+	}
+
+	for _, rank := range []float64{50, 95, 99} {
+		a, _ := withTicks.All().Percentile(rank)
+		b, _ := without.All().Percentile(rank)
+
+		if a != b || withTicks.Tally != without.Tally {
+			t.Errorf("p%v = %d with ticks and %d without; tallies %+v and %+v", rank, a, b, withTicks.Tally, without.Tally)
+		}
 	}
 }

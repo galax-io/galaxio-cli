@@ -105,13 +105,18 @@ type Source struct {
 	Reader simlog.RunReader
 
 	file *os.File
+	// read counts the bytes the reader has taken from the file, and size is
+	// what the file held when it was opened, or 0 when that is unknown.
+	read *countingReader
+	size int64
 	// spent says the reader has nothing left to yield, either because it was
 	// walked or because the file under it was closed.
 	spent bool
 }
 
 // Scan walks the run once and summarises it at opts, and refuses to walk it
-// again.
+// again. Options no summary can be computed at are refused before the walk is
+// spent, so that a caller can correct them and try again.
 //
 // A reader yields its items once: both codecs latch their end and answer every
 // later call with it, so a second pass returns a summary of nothing and no error
@@ -119,18 +124,64 @@ type Source struct {
 // could tell the two apart. A closed source is the same: the latched end means
 // the file is never touched, so reading one succeeds too.
 //
-// This matters ahead of its time. The statistics of galaxio-cli#51 and the
-// stats.json writer of galaxio-cli#52 fold over this same pass, and the first
-// caller to fold twice would have shipped a report of zero requests for a full
-// run and exited 0.
-func (s *Source) Scan(ctx context.Context, opts Options) (Summary, error) {
+// This is why the summary of galaxio-cli#51 and the stats.json writer of
+// galaxio-cli#52 fold over one pass rather than one each: the first caller to
+// fold twice would have shipped a report of zero requests for a full run and
+// exited 0.
+func (s *Source) Scan(ctx context.Context, opts Options, tick func(Summary)) (Summary, error) {
 	if s.spent {
 		return Summary{}, ErrSpent
 	}
 
+	opts, err := opts.Normalize()
+	if err != nil {
+		return Summary{}, err
+	}
+
 	s.spent = true
 
-	return Scan(ctx, s.Reader, opts)
+	return Scan(ctx, s.Reader, opts, tick)
+}
+
+// BytesRead returns how many bytes of the log the reader has taken so far. The
+// reader buffers, so it runs ahead of the items walked by at most its buffer.
+// A source no file was opened for has read nothing, as it has no size.
+func (s *Source) BytesRead() int64 {
+	if s.read == nil {
+		return 0
+	}
+
+	return s.read.n
+}
+
+// Size returns the size the log had when it was opened, and false when that is
+// unknown: a file that is not a regular one, or one that was empty then.
+func (s *Source) Size() (int64, bool) {
+	return s.size, s.size > 0
+}
+
+// countingReader counts the bytes read through it. The walk and whoever reads
+// the count share one goroutine, so the count needs no lock.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+
+	return n, err
+}
+
+// knownSize returns the size of a file as it was opened, or 0 when it has none
+// to go by: a device, a pipe or an empty file.
+func knownSize(info fs.FileInfo) int64 {
+	if !info.Mode().IsRegular() {
+		return 0
+	}
+
+	return info.Size()
 }
 
 // Open opens the run at loc. The format is identified from the log's leading
@@ -164,14 +215,23 @@ func Open(loc run.Location) (*Source, error) {
 		return nil, fmt.Errorf("%s: %w", loc.Log, err)
 	}
 
-	rd, err := simlog.NewRunReader(f)
+	var size int64
+	if info, err := f.Stat(); err == nil {
+		size = knownSize(info)
+	}
+
+	// The count starts after detection, which reads with ReadAt and moves no
+	// offset, so it counts every byte the reader takes and nothing else.
+	read := &countingReader{r: f}
+
+	rd, err := simlog.NewRunReader(read)
 	if err != nil {
 		_ = f.Close()
 
 		return nil, fmt.Errorf("%s: %w", loc.Log, err)
 	}
 
-	return &Source{Format: format, Reader: rd, file: f}, nil
+	return &Source{Format: format, Reader: rd, file: f, read: read, size: size}, nil
 }
 
 // detect reads the log's leading bytes and names its format, leaving the file

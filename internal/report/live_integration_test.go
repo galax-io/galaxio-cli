@@ -181,7 +181,7 @@ func TestReportLiveGatling(t *testing.T) {
 				t.Fatalf("read simulation.log: %v", err)
 			}
 
-			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -192,14 +192,14 @@ func TestReportLiveGatling(t *testing.T) {
 			}
 
 			durations := outcomeDurations(t, log)
-			reference := strings.HasPrefix(version, "3.11.") || strings.HasPrefix(version, "3.12.")
+			reference := reporttest.IsReference(version)
 
 			printed, err := reporttest.ParseConsole(string(console))
 			if err != nil {
 				t.Fatalf("parse the console: %v", err)
 			}
 
-			given := runEtalon(t, log)
+			given := runEtalon(t, openBytes(t, log))
 
 			etalon, err := reporttest.ReadEtalon(given)
 			if err != nil {
