@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,12 +82,16 @@ func TestReportIntegrationReadsALargeRun(t *testing.T) {
 		t.Fatalf("galaxio report: %v; stderr: %s", err, stderr.String())
 	}
 
-	// The 3.12.0 recording holds 36 requests, 18 of each outcome, per replay.
+	// The 3.12.0 recording holds 36 requests, 18 of each outcome, per replay:
+	// the description and the summary's headline count them alike.
 	for _, want := range []string{
 		"requests    720000 (360000 ok, 360000 failed)",
 		"groups      240000 traversals",
 		"users       240000 events",
 		"tool        gatling 3.12.0",
+		"720000 requests · ",
+		"✓ 360000 ok · 50 % · ",
+		"✗ 360000 failed · 50 % · ",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("expected the report to contain %q, got:\n%s", want, stdout.String())
@@ -98,6 +103,8 @@ func TestReportIntegrationReadsALargeRun(t *testing.T) {
 	}
 }
 
+// TestReportIntegrationIsDeterministic reads one run a hundred times (SC-003):
+// every summary, percentiles included, is the same bytes.
 func TestReportIntegrationIsDeterministic(t *testing.T) {
 	bin := buildGalaxio(t)
 	dir := filepath.Join(reportCorpus, "3.15.1")
@@ -113,13 +120,73 @@ func TestReportIntegrationIsDeterministic(t *testing.T) {
 		return out
 	}
 
-	if first, second := read(), read(); !bytes.Equal(first, second) {
-		t.Fatalf("two reads of the same run differ:\n%s\nversus\n%s", first, second)
+	first := read()
+
+	for i := 2; i <= 100; i++ {
+		if again := read(); !bytes.Equal(first, again) {
+			t.Fatalf("read %d of the same run differs from the first:\n%s\nversus\n%s", i, first, again)
+		}
+	}
+}
+
+// TestReportIntegrationPiped holds the binary's output through a pipe: no escape
+// byte on standard output, whatever TERM says, and nothing on standard error.
+func TestReportIntegrationPiped(t *testing.T) {
+	bin := buildGalaxio(t)
+
+	cmd := exec.Command(bin, "report", "gatling", filepath.Join(reportCorpus, "3.13.1"))
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("galaxio report: %v; stderr: %s", err, stderr.String())
+	}
+
+	if bytes.Contains(stdout.Bytes(), []byte{0x1b}) || stderr.Len() != 0 {
+		t.Errorf("piped output carries an escape byte, or standard error %q is not empty", stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "times in ms · percentiles are galaxio's t-digest estimates, interpolated") {
+		t.Errorf("the summary is missing from the piped output:\n%s", stdout.String())
+	}
+}
+
+// TestReportIntegrationWritesNoFile holds the binary to leaving the run directory
+// and its working directory as they were.
+func TestReportIntegrationWritesNoFile(t *testing.T) {
+	bin := buildGalaxio(t)
+
+	run := t.TempDir()
+	copyTree(t, filepath.Join(reportCorpus, "3.13.1"), run)
+
+	work := t.TempDir()
+	before := [2]map[string]string{snapshot(t, run), snapshot(t, work)}
+
+	cmd := exec.Command(bin, "report", "gatling", run)
+	cmd.Dir = work
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("galaxio report: %v\n%s", err, out)
+	}
+
+	after := [2]map[string]string{snapshot(t, run), snapshot(t, work)}
+
+	for i, dir := range []string{"the run directory", "the working directory"} {
+		if !maps.Equal(before[i], after[i]) {
+			t.Errorf("%s changed:\nbefore %v\nafter  %v", dir, before[i], after[i])
+		}
 	}
 }
 
 func TestReportIntegrationExitCodes(t *testing.T) {
 	bin := buildGalaxio(t)
+
+	cutShort := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cutShort, "simulation.log"), corpusLog(t, "3.15.1")[:2000], 0o644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -130,6 +197,10 @@ func TestReportIntegrationExitCodes(t *testing.T) {
 		{name: "no run under the directory", args: []string{"report", "gatling", t.TempDir()}, code: 1},
 		{name: "an unsupported tool", args: []string{"report", "jmeter"}, code: 2},
 		{name: "a reserved report format", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "-o", "stats"}, code: 2},
+		{name: "a bad --percentiles", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--percentiles", "0"}, code: 2},
+		{name: "a bad --bounds", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--bounds", "1200,800"}, code: 2},
+		{name: "a log cut short", args: []string{"report", "gatling", cutShort}, code: 1},
+		{name: "a run that spans no time", args: []string{"report", "gatling", filepath.Join("testdata", "report", "zero-span")}, code: 1},
 		{name: "no arguments prints help", args: []string{"report"}, code: 0},
 	}
 
