@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -314,11 +315,13 @@ func TestScanCancelled(t *testing.T) {
 // it for a log of any size.
 const maxHeapGoal = 32 << 20
 
-// TestScanMemoryDoesNotGrowWithTheLog is the gate the plan's memory goal needs.
-// It runs in the ordinary suite, which CI runs, rather than in a benchmark,
-// which CI does not; and it measures the difference a scan makes to the heap
-// rather than the whole process's, so the number is the read path's own.
-func TestScanMemoryDoesNotGrowWithTheLog(t *testing.T) {
+// TestSummaryMemoryDoesNotGrowWithTheLog is the gate the plan's memory goal
+// needs. It runs in the ordinary suite, which CI runs, rather than in a
+// benchmark, which CI does not; and it measures the difference a summary makes
+// to the heap rather than the whole process's — the walk, the exact
+// accumulators and both digests, held until the measurement is taken — so the
+// number is the read path's own.
+func TestSummaryMemoryDoesNotGrowWithTheLog(t *testing.T) {
 	if testing.Short() {
 		t.Skip("replays a quarter of a gigabyte")
 	}
@@ -333,8 +336,9 @@ func TestScanMemoryDoesNotGrowWithTheLog(t *testing.T) {
 		var before, after runtime.MemStats
 
 		runtime.ReadMemStats(&before)
-		discardScan(t, header, body, repeats)
+		summary := scanReplay(t, header, body, repeats)
 		runtime.ReadMemStats(&after)
+		runtime.KeepAlive(summary)
 
 		if after.HeapInuse < before.HeapInuse {
 			return 0
@@ -367,5 +371,86 @@ func TestScanMemoryDoesNotGrowWithTheLog(t *testing.T) {
 	const slack = 8 << 20
 	if largeHeap > smallHeap+slack {
 		t.Errorf("heap grew with the log: %.1f MiB for 16 MiB against %.1f MiB for 256 MiB", float64(smallHeap)/(1<<20), float64(largeHeap)/(1<<20))
+	}
+}
+
+// namedRequests yields n successful requests one at a time, never holding them:
+// each named after its position when distinct is set and "r" otherwise, and
+// each taking its position modulo 1000 milliseconds, so the two runs feed the
+// digests the same response times.
+type namedRequests struct {
+	n, next  int
+	distinct bool
+}
+
+func (r *namedRequests) Run() model.Run { return model.Run{} }
+
+func (r *namedRequests) Next() (model.Item, error) {
+	if r.next == r.n {
+		return model.Item{}, io.EOF
+	}
+
+	name := "r"
+	if r.distinct {
+		name = "r" + strconv.Itoa(r.next)
+	}
+
+	item := model.Item{Kind: model.ItemSample, Sample: model.Sample{
+		Name: name, Start: time.UnixMilli(1_700_000_000_000 + int64(r.next)).UTC(),
+		Duration: model.Some(time.Duration(r.next%1000) * time.Millisecond), Outcome: model.OutcomeSuccess,
+	}}
+	r.next++
+
+	return item, nil
+}
+
+// TestSummaryMemoryDoesNotGrowWithNames holds the summary to keeping nothing per
+// request name (FR-033): after a walk of a million requests with a million
+// distinct names, the heap the summary holds is what it holds when every request
+// shares one name.
+func TestSummaryMemoryDoesNotGrowWithNames(t *testing.T) {
+	if testing.Short() {
+		t.Skip("walks two million requests")
+	}
+
+	const requests = 1_000_000
+
+	held := func(distinct bool) (uint64, Summary) {
+		runtime.GC()
+
+		var before, after runtime.MemStats
+
+		runtime.ReadMemStats(&before)
+
+		summary, err := Scan(context.Background(), &namedRequests{n: requests, distinct: distinct}, DefaultOptions())
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+
+		runtime.GC()
+		runtime.ReadMemStats(&after)
+		runtime.KeepAlive(summary)
+
+		if after.HeapAlloc < before.HeapAlloc {
+			return 0, summary
+		}
+
+		return after.HeapAlloc - before.HeapAlloc, summary
+	}
+
+	one, oneName := held(false)
+	many, manyNames := held(true)
+
+	t.Logf("heap a summary holds: %.1f KiB with one name, %.1f KiB with a million", float64(one)/(1<<10), float64(many)/(1<<10))
+
+	if oneName.Tally.Requests != requests || manyNames.Tally.Requests != requests {
+		t.Fatalf("walked %d and %d requests, want %d each", oneName.Tally.Requests, manyNames.Tally.Requests, requests)
+	}
+
+	// A summary that kept anything per name would hold tens of megabytes for a
+	// million of them; the slack covers the allocator's noise.
+	const slack = 1 << 20
+	if many > one+slack {
+		t.Errorf("a million names cost %.1f KiB where one costs %.1f KiB", float64(many)/(1<<10), float64(one)/(1<<10))
 	}
 }
