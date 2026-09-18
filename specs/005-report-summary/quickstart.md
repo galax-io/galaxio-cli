@@ -53,15 +53,16 @@ dist/galaxio report gatling $C/3.13.1 --percentiles 99.9,90 | grep -E '^response
 dist/galaxio report gatling $C/3.13.1 --percentiles 0; echo "exit=$?"
 dist/galaxio report gatling $C/3.13.1 --percentiles 50,abc; echo "exit=$?"
 grep -n -E 'go-tdigest/pull/42|1427' README.md
-grep -rn -E 'percentiles[1-4]' --include='*_test.go' . ; echo "tests reading a Gatling percentile: $?"
+grep -rln -E 'percentiles[1-4]' --include='*_test.go' .
 ```
 
 Expected: the `all` row carries `1427` under `p95` and `1502` under `p99`, and the closing
 line says the percentiles are galaxio's t-digest estimates and not Gatling's; the heading
 line of the second command carries `p90` then `p99.9` and no other rank; exit 2 with nothing
 on standard output for both bad values, the error quoting the value; the README names the
-1427/1502 example and the upstream pull request; the last `grep` finds nothing (exit 1),
-because no test reads a percentile Gatling recorded.
+1427/1502 example, the upstream pull request and the rule; the last `grep` lists only the
+tests that hold Gatling 3.11.x and 3.12.x percentiles to the rank rule as a reference —
+no test compares a Gatling percentile with one this tool prints.
 
 ## 3. Bands at other boundaries (US3)
 

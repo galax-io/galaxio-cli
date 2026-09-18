@@ -113,8 +113,11 @@ description and of whether colour is on.
 
 The digest's default quantile interpolates between neighbouring recorded values, so where
 response times have a gap a percentile can be a value no request had: 1427 ms for the 95th
-percentile of the recorded 3.13.1 run, whose request at that rank took 1502 ms. The tests
-pin it, the README explains it, and
+percentile of the recorded 3.13.1 run, whose request at that rank took 1502 ms. How far a
+percentile may differ is a rule the tests hold every percentile to (research.md §2): up to
+200 requests it lies between the two recorded values around its position, and at any size
+it misplaces its rank by at most 4·q·(1−q)/100 of the requests plus one. The tests pin the
+corpus values and hold them to that rule, the README explains both, and
 [caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42) removes it upstream. No
 field or flag of this model exists for it: taking the upstream read is a later change to
 one call.

@@ -2,14 +2,20 @@ package report
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	tdigest "github.com/caio/go-tdigest/v5"
+	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
 	"github.com/galax-io/parsec/model"
 )
 
@@ -224,4 +230,237 @@ func TestPercentilesReadingMidWalkChangesNothing(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestPercentilesRule holds every percentile this tool prints to the rule
+// research.md §2 states for how one may differ from the response times the run
+// recorded, so that the difference is proved rather than described:
+//
+//   - While the figures hold at most 200 requests, a percentile is the
+//     interpolation between the two recorded response times around its
+//     position, rounded half up. It lies between them, and differs from the
+//     request at the percentile's rank by at most their gap: 1427 against 1502
+//     for the 95th percentile of the 3.13.1 run, whose neighbours are 7 and 1502.
+//   - At any size, it misplaces its rank among the recorded requests by at most
+//     4·q·(1−q)/100 of them, plus one request.
+func TestPercentilesRule(t *testing.T) {
+	t.Parallel()
+
+	ranks := []float64{1, 5, 25, 50, 75, 90, 95, 99, 99.9, 100}
+
+	outcomes := []struct {
+		name    string
+		keep    func(model.Outcome) bool
+		figures func(Summary) Figures
+	}{
+		{name: "all", keep: func(o model.Outcome) bool { return o == model.OutcomeSuccess || o == model.OutcomeFailure }, figures: Summary.All},
+		{name: "ok", keep: func(o model.Outcome) bool { return o == model.OutcomeSuccess }, figures: func(s Summary) Figures { return s.OK }},
+		{name: "failed", keep: func(o model.Outcome) bool { return o == model.OutcomeFailure }, figures: func(s Summary) Figures { return s.Failed }},
+	}
+
+	t.Run("the corpus runs, below 200 requests", func(t *testing.T) {
+		t.Parallel()
+
+		for _, version := range []string{"3.11.5", "3.12.0", "3.13.1", "3.14.9", "3.15.1"} {
+			log := corpusLog(t, version)
+
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			if err != nil {
+				t.Fatalf("%s: Scan: %v", version, err)
+			}
+
+			for _, outcome := range outcomes {
+				sorted, err := reporttest.Durations(openBytes(t, log), outcome.keep)
+				if err != nil {
+					t.Fatalf("%s: Durations: %v", version, err)
+				}
+
+				if len(sorted) > 200 {
+					t.Fatalf("%s %s holds %d requests, past the interpolation rule", version, outcome.name, len(sorted))
+				}
+
+				figures := outcome.figures(summary)
+
+				for _, rank := range ranks {
+					got, _ := figures.Percentile(rank)
+					interpolated, lower, upper := reporttest.Interpolated(sorted, rank)
+					atRank := reporttest.AtRank(sorted, rank)
+					where := fmt.Sprintf("%s %s p%v = %d (neighbours %d and %d, request at the rank %d)", version, outcome.name, rank, got, lower, upper, atRank)
+
+					if want := int64(math.Floor(interpolated + 0.5)); got != want {
+						t.Errorf("%s: want the interpolation %v rounded half up, %d", where, interpolated, want)
+					}
+
+					if got < lower || got > upper || abs(got-atRank) > upper-lower {
+						t.Errorf("%s: outside its neighbours, or further from the request at the rank than their gap", where)
+					}
+
+					if misplaced, tolerance := reporttest.RankMisplacement(sorted, got, rank), reporttest.RankTolerance(rank, len(sorted)); misplaced > tolerance {
+						t.Errorf("%s: misplaces the rank by %.5f, over %.5f", where, misplaced, tolerance)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("synthetic runs, at any size", func(t *testing.T) {
+		t.Parallel()
+
+		distributions := []struct {
+			name string
+			ms   func(*rand.Rand) int64
+		}{
+			{name: "log-normal around 40 ms with 0.5 % at 60 s", ms: func(r *rand.Rand) int64 {
+				if r.IntN(200) == 0 {
+					return 60000
+				}
+
+				return int64(math.Round(math.Exp(math.Log(40) + 0.6*r.NormFloat64())))
+			}},
+			{name: "95 % at most 10 ms and 5 % near 1500 ms", ms: func(r *rand.Rand) int64 {
+				if r.IntN(20) == 0 {
+					return 1500 + int64(r.IntN(5))
+				}
+
+				return int64(r.IntN(11))
+			}},
+			{name: "six distinct values", ms: func(r *rand.Rand) int64 { return int64(r.IntN(6)) }},
+			{name: "uniform up to 5 s", ms: func(r *rand.Rand) int64 { return int64(r.IntN(5001)) }},
+			{name: "two modes, 50 ms and 800 ms", ms: func(r *rand.Rand) int64 {
+				if r.IntN(2) == 0 {
+					return max(0, int64(math.Round(50+5*r.NormFloat64())))
+				}
+
+				return max(0, int64(math.Round(800+50*r.NormFloat64())))
+			}},
+		}
+
+		for d, distribution := range distributions {
+			for _, size := range []int{201, 12000, 100000} {
+				rng := rand.New(rand.NewPCG(uint64(d+1), uint64(size)))
+
+				var s Summary
+
+				s.Options = DefaultOptions()
+
+				sorted := map[string][]int64{}
+
+				for range size {
+					ms := distribution.ms(rng)
+
+					outcome := model.OutcomeSuccess
+					if rng.IntN(20) == 0 {
+						outcome = model.OutcomeFailure
+					}
+
+					item := model.Item{Kind: model.ItemSample, Sample: model.Sample{
+						Name: "r", Start: time.UnixMilli(1000).UTC(), Duration: model.Some(time.Duration(ms) * time.Millisecond), Outcome: outcome,
+					}}
+					s.add(&item)
+
+					for _, outcomeRow := range outcomes {
+						if outcomeRow.keep(outcome) {
+							sorted[outcomeRow.name] = append(sorted[outcomeRow.name], ms)
+						}
+					}
+				}
+
+				for _, outcome := range outcomes {
+					values := sorted[outcome.name]
+					if len(values) == 0 {
+						continue
+					}
+
+					slices.Sort(values)
+					figures := outcome.figures(s)
+
+					for _, rank := range ranks {
+						got, _ := figures.Percentile(rank)
+
+						if misplaced, tolerance := reporttest.RankMisplacement(values, got, rank), reporttest.RankTolerance(rank, len(values)); misplaced > tolerance {
+							t.Errorf("%s, %d requests, %s p%v = %d: misplaces the rank by %.5f, over %.5f", distribution.name, size, outcome.name, rank, got, misplaced, tolerance)
+						}
+					}
+				}
+			}
+		}
+	})
+}
+
+// TestGatlingPercentilesAsReference holds the percentiles Gatling itself
+// recorded to the same rank rule, for the versions whose digest has no known
+// defect: 3.11.5 and 3.12.0, which use com.tdunning:t-digest 3.1. They are a
+// reference, not a target: each is held to the response times the run recorded
+// and never to this tool's percentile, and nothing asserts the two equal.
+//
+// From 3.13.0 Gatling uses t-digest 3.3, whose AVLTreeDigest miscounts
+// (tdunning/t-digest#230). For the recorded 3.13.1 run it printed 1072 ms as
+// the 95th percentile of all requests, where the request at that rank took
+// 1502 ms, and rebuilding its digest from the same requests gives 916 or 1061
+// as well; 3.14.9 and 3.15.1 printed 1060 and 1090. Those numbers describe the
+// defect, not the run, so those versions are left out on purpose.
+func TestGatlingPercentilesAsReference(t *testing.T) {
+	t.Parallel()
+
+	type recordedTriple struct {
+		Total int64 `json:"total"`
+		OK    int64 `json:"ok"`
+		KO    int64 `json:"ko"`
+	}
+
+	type recordedPercentiles struct {
+		P50 recordedTriple `json:"percentiles1"`
+		P75 recordedTriple `json:"percentiles2"`
+		P95 recordedTriple `json:"percentiles3"`
+		P99 recordedTriple `json:"percentiles4"`
+	}
+
+	keep := [3]func(model.Outcome) bool{
+		func(o model.Outcome) bool { return o == model.OutcomeSuccess || o == model.OutcomeFailure },
+		func(o model.Outcome) bool { return o == model.OutcomeSuccess },
+		func(o model.Outcome) bool { return o == model.OutcomeFailure },
+	}
+	columns := [3]string{"total", "ok", "ko"}
+
+	for _, version := range []string{"3.11.5", "3.12.0"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(filepath.Join(corpusDir, version, "global_stats.json"))
+			if err != nil {
+				t.Fatalf("read global_stats.json: %v", err)
+			}
+
+			var recorded recordedPercentiles
+			if err := json.Unmarshal(data, &recorded); err != nil {
+				t.Fatalf("decode global_stats.json: %v", err)
+			}
+
+			byRank := map[float64]recordedTriple{50: recorded.P50, 75: recorded.P75, 95: recorded.P95, 99: recorded.P99}
+			log := corpusLog(t, version)
+
+			for i := range columns {
+				sorted, err := reporttest.Durations(openBytes(t, log), keep[i])
+				if err != nil {
+					t.Fatalf("Durations: %v", err)
+				}
+
+				for rank, triple := range byRank {
+					value := [3]int64{triple.Total, triple.OK, triple.KO}[i]
+
+					if misplaced, tolerance := reporttest.RankMisplacement(sorted, value, rank), reporttest.RankTolerance(rank, len(sorted)); misplaced > tolerance {
+						t.Errorf("Gatling %s %s p%v = %d misplaces the rank by %.5f, over %.5f", version, columns[i], rank, value, misplaced, tolerance)
+					}
+				}
+			}
+		})
+	}
+}
+
+func abs(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+
+	return v
 }

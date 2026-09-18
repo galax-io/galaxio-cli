@@ -106,6 +106,14 @@ reproduce it between two readings of the same log.
   output; `ko` is Gatling's word. The requests line of the run description, published with
   `v0.13.0` as `102 (84 ok, 18 ko)`, becomes `102 (84 ok, 18 failed)`: the maintainer
   approved that change of published text in this clarification.
+- Q: The digest's percentiles differ from what a run recorded, and Gatling's differ again —
+  is a description of that enough? → A: No. Every percentile is held, by tests, to a stated
+  rule of how far it may differ from the response times the run recorded, on the corpus, on
+  synthetic runs and on live Gatling runs of 3 to 5 minutes at 50 rps made from galaxio's
+  own template, with the same responses served to every Gatling version. Gatling 3.11.x and
+  3.12.x, whose digest has no known defect, are the reference: their recorded percentiles
+  are held to the same rule over the same log; from 3.13.0 Gatling's percentiles come from
+  a defective digest and are not used.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -420,8 +428,11 @@ standard error received.
   yield the same percentiles.
 - **FR-019**: Every output carrying a percentile MUST say that it is this tool's estimate and
   how it is defined. A percentile MUST NOT be presented as reproducing Gatling's, MUST NOT be
-  asserted against a percentile Gatling recorded in any test, and MUST NOT be offered as a
-  difference from one.
+  asserted equal to a percentile Gatling recorded in any test, and MUST NOT be offered as a
+  difference from one. A test MAY hold a percentile Gatling 3.11.x or 3.12.x recorded to the
+  rank rule of FR-021 over the same log, as the reference; percentiles Gatling 3.13.0 and
+  later recorded MUST NOT be used, because they come from the digest defect of
+  [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230).
 - **FR-020**: The README MUST state the known limitation in the same change: the default
   quantile interpolates, so where response times have a gap a printed percentile can be a
   value no request had. It MUST give the recorded 3.13.1 run as the example — 1427 ms printed
@@ -430,7 +441,14 @@ standard error received.
   removes it.
 - **FR-021**: The tests MUST pin the percentiles of the recorded runs as this tool computes
   them, the 3.13.1 example included, so that taking the upstream read later is a visible,
-  deliberate change of those expectations rather than a silent one.
+  deliberate change of those expectations rather than a silent one. They MUST also hold
+  every printed percentile to the rule of how it may differ from the response times the run
+  recorded: while an outcome holds at most 200 requests, the interpolation between the two
+  recorded values around its position, lying between them; at any size, a rank misplaced by
+  at most 4·q·(1−q)/100 of the requests plus one. The rule MUST be proved on the corpus, on
+  synthetic runs up to 100 000 requests, and on live Gatling runs of at least 3 minutes at
+  50 rps per version, made from galaxio's own `gatling/scala-sbt` template and served the
+  same responses whatever the version.
 - **FR-022**: Taking the read by rank once a release of the library carries it is NOT part of
   this milestone. When it is done it MUST be its own change, MUST update the pinned
   expectations and the README together, and MUST be called out in the changelog, because it
@@ -555,6 +573,10 @@ standard error received.
 - **SC-011**: Nothing in the output is Gatling's own: for each of the five recorded runs, no
   line names an outcome `ko` or `KO`, and the summary has no element that exists only for
   Gatling — verifiable by reading the output.
+- **SC-012**: On live Gatling runs of 3.11.5, 3.12.0, 3.13.1, 3.14.9 and 3.15.1, each about
+  12 000 requests at 50 rps and each served the same responses, every non-percentile
+  whole-run figure equals the one Gatling printed, every percentile satisfies the rank rule
+  over the run's own log, and so does every percentile Gatling 3.11.5 and 3.12.0 printed.
 
 ## Assumptions
 
