@@ -385,23 +385,75 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	}
 
 	// A log cut short still has a report worth printing: the counts of what it
-	// did hold, which is what the run recorded before it was killed.
+	// did hold, which is what the run recorded before it was killed. Any other
+	// failure leaves nothing to stand behind, and nothing is printed.
 	var cutShort *gatling.TruncationError
-	if !opts.Quiet && (scanErr == nil || errors.As(scanErr, &cutShort)) {
-		// The description, a blank line and the summary go out in one write, so
-		// that a reader that went away is reported once.
-		if _, err := io.WriteString(opts.Stdout, formatReport(out, opts.Verbose)+"\n"+formatSummary(out.Summary, opts.Color)); err != nil {
-			// Both failures matter: the write is why the user sees nothing,
-			// and scanErr is why the run is not a complete one.
-			return out, RuntimeError{Err: errors.Join(fmt.Errorf("writing report: %w", err), scanErr)}
-		}
-	}
-
-	if scanErr != nil {
+	if scanErr != nil && !errors.As(scanErr, &cutShort) {
 		return out, RuntimeError{Err: scanErr}
 	}
 
+	// Like a version warning, this qualifies the numbers below it, so it is
+	// printed even under --quiet.
+	if n := summary.Untimed(); n > 0 {
+		fmt.Fprintf(opts.Stderr, "report: warning: %s\n", untimedWarning(n))
+	}
+
+	// The summary is printed before any failure it carries is returned, so that
+	// a run that spans no time still shows its counts.
+	failed := errors.Join(scanErr, summaryFailures(summary, loc.Log))
+
+	if !opts.Quiet {
+		// The description, a blank line and the summary go out in one write, so
+		// that a reader that went away is reported once.
+		if _, err := io.WriteString(opts.Stdout, formatReport(out, opts.Verbose)+"\n"+formatSummary(out.Summary, opts.Color)); err != nil {
+			// Every failure matters: the write is why the user sees nothing,
+			// and the rest are why the run is not a complete one.
+			return out, RuntimeError{Err: errors.Join(fmt.Errorf("writing report: %w", err), failed)}
+		}
+	}
+
+	if failed != nil {
+		return out, RuntimeError{Err: failed}
+	}
+
 	return out, nil
+}
+
+// summaryFailures returns what keeps the summary of the run in log from being
+// complete, each naming the log, joined: a span of zero, over which no request
+// rate can be computed, and requests whose outcome the source lost, which
+// neither ok nor failed counts. A run the bounds cannot place in time is not
+// one of them: its rates are absent, and that is all.
+func summaryFailures(s report.Summary, log string) error {
+	var failures []error
+
+	if span, ok := s.Span(); ok && span == 0 {
+		start, _ := s.Tally.Bounds.Start()
+		end, _ := s.Tally.Bounds.End()
+		failures = append(failures, fmt.Errorf("%s: the run spans no time (%s .. %s): no request rate can be computed",
+			log, start.UTC().Format(timeLayout), end.UTC().Format(timeLayout)))
+	}
+
+	if n := s.Tally.Unknown; n > 0 {
+		verb, pronoun := "have", "they are"
+		if n == 1 {
+			verb, pronoun = "has", "it is"
+		}
+
+		failures = append(failures, fmt.Errorf("%s: %s %s an outcome the source lost: %s neither ok nor failed and the summary does not add up",
+			log, plural(n, "request"), verb, pronoun))
+	}
+
+	return errors.Join(failures...)
+}
+
+// untimedWarning says how many requests have no recorded end.
+func untimedWarning(n int) string {
+	if n == 1 {
+		return "1 request has no recorded end and takes part in no timing figure"
+	}
+
+	return fmt.Sprintf("%d requests have no recorded end and take part in no timing figure", n)
 }
 
 // printable renders free text a log supplied. A value that is valid UTF-8 and
