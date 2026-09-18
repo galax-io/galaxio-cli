@@ -44,8 +44,10 @@ parsec release, and is read by tests only: `galaxio report` writes no such file.
 | `3.15.1/console.txt` | 3.15.1 | the same |
 
 `stats.json`, which holds the figures of every request and group, is not copied: nothing
-reads it before galaxio-cli#52. No test reads a percentile from any of these files, because
-Gatling's percentiles are not a reference (galaxio-cli#51).
+reads it before galaxio-cli#52. The only percentiles read from these files are those of
+3.11.5 and 3.12.0, held to the rank rule over their own logs as the reference; no test
+compares a percentile Gatling recorded with this tool's (galaxio-cli#51). The live runs
+under `../../live/gatling/` have their own record, `RECORDING.md`.
 
 ## Licence notice
 

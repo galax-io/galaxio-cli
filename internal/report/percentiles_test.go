@@ -2,7 +2,6 @@ package report
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -402,19 +401,6 @@ func TestPercentilesRule(t *testing.T) {
 func TestGatlingPercentilesAsReference(t *testing.T) {
 	t.Parallel()
 
-	type recordedTriple struct {
-		Total int64 `json:"total"`
-		OK    int64 `json:"ok"`
-		KO    int64 `json:"ko"`
-	}
-
-	type recordedPercentiles struct {
-		P50 recordedTriple `json:"percentiles1"`
-		P75 recordedTriple `json:"percentiles2"`
-		P95 recordedTriple `json:"percentiles3"`
-		P99 recordedTriple `json:"percentiles4"`
-	}
-
 	keep := [3]func(model.Outcome) bool{
 		func(o model.Outcome) bool { return o == model.OutcomeSuccess || o == model.OutcomeFailure },
 		func(o model.Outcome) bool { return o == model.OutcomeSuccess },
@@ -431,12 +417,11 @@ func TestGatlingPercentilesAsReference(t *testing.T) {
 				t.Fatalf("read global_stats.json: %v", err)
 			}
 
-			var recorded recordedPercentiles
-			if err := json.Unmarshal(data, &recorded); err != nil {
+			recorded, err := reporttest.ReadGlobalStats(data)
+			if err != nil {
 				t.Fatalf("decode global_stats.json: %v", err)
 			}
 
-			byRank := map[float64]recordedTriple{50: recorded.P50, 75: recorded.P75, 95: recorded.P95, 99: recorded.P99}
 			log := corpusLog(t, version)
 
 			for i := range columns {
@@ -445,8 +430,8 @@ func TestGatlingPercentilesAsReference(t *testing.T) {
 					t.Fatalf("Durations: %v", err)
 				}
 
-				for rank, triple := range byRank {
-					value := [3]int64{triple.Total, triple.OK, triple.KO}[i]
+				for j, rank := range reporttest.GatlingRanks {
+					value := recorded.Percentiles[j][i].N
 
 					if misplaced, tolerance := reporttest.RankMisplacement(sorted, value, rank), reporttest.RankTolerance(rank, len(sorted)); misplaced > tolerance {
 						t.Errorf("Gatling %s %s p%v = %d misplaces the rank by %.5f, over %.5f", version, columns[i], rank, value, misplaced, tolerance)

@@ -320,9 +320,11 @@ produce either (spec, Assumptions), and the change is listed under gate V.
 `global_stats.json` for 3.11.5 and 3.12.0, `js/global_stats.json` for 3.13.1, and
 `console.txt` for 3.13.1, 3.14.9 and 3.15.1. Whole-run figures are compared with the JSON
 files by reading them; for 3.14.9 and 3.15.1, which have a console only, they are a table in
-the test citing the console line. No percentile in any of those files is ever read by a test
+the test citing the console line. The only percentiles read from those files are those of
+3.11.5 and 3.12.0, held to the rank rule of §2 as the reference, never to this tool's
 (FR-019). `stats.json`, which holds the rows per request, is not copied: nothing reads it
-before #52.
+before #52. The live runs of §17 bring their own recordings, under
+`internal/report/testdata/live/gatling/`.
 
 **Rationale**: milestone v0.13.0 left them out because nothing read them (its research §9).
 They are MIT with the rest of the corpus; `PROVENANCE.md` gains the rows.
@@ -473,3 +475,65 @@ columns of the same three rows (90 columns wide; offered as the default and not 
 k6-style metric lines, `min=0 mean=89 …` (numbers do not line up, so ok and failed are hard
 to compare); the Gatling-like table of the first draft (rejected by the maintainer); a
 thousands separator (not taken: §5).
+
+## 17. Live Gatling runs
+
+**Decision** (maintainer, 2026-09-17: a live test with Gatling running 3 to 5 minutes at
+50 rps, the same data on every version, galaxio's own template, 3.11 as the reference): the
+summary and the percentile rule are proved on real Gatling runs as well as on the corpus.
+
+- **The load** comes from galaxio's own `gatling/scala-sbt` template, rendered by the galaxio
+  binary's `template init` and changed only through its inputs: the Gatling version,
+  gatling-picatinny 1.27.0 — which builds and runs on every version from 3.11.5 to 3.15.1,
+  measured — gatling-sbt 4.19.1, the stub's URL, `Intensity=3000 rpm`, a 10-second ramp and
+  4 minutes steady. Its `Stability` simulation sends `GET /` with a `status is 200` check:
+  12 250 requests a run.
+- **The same data on every version**: the stub answers request i by a plan seeded with i
+  alone (`livePlan`, seed 20260917) — 85 % wait 5–40 ms, 8 % 80–400 ms, 3 % 800–1199 ms, 2 %
+  1200–2000 ms, and 2 % answer 500 within 5 ms. Every version is served the same waits and
+  fails the same requests; what differs is the milliseconds each JVM, scheduler and HTTP
+  client adds, which the logs record as they are.
+- **What is held**: every non-percentile whole-run figure equal to the console's Global
+  Information block and, up to 3.13.x, to `global_stats.json`; every percentile within the
+  rank rule of §2 over the run's own log; the percentiles Gatling 3.11.x and 3.12.x printed
+  within the same rule, as the reference; later versions' described in the test log and not
+  held, because of tdunning/t-digest#230.
+- **Two layers**: `TestReportLiveGatling` (integration tag, `GALAXIO_LIVE_GATLING=1`) runs
+  Gatling itself; `TestSummaryMatchesLiveGatlingRuns` holds the committed recordings under
+  `internal/report/testdata/live/gatling/` to the same assertions in the ordinary suite,
+  without a JDK. `GALAXIO_LIVE_RECORD` writes a new set, and `GALAXIO_LIVE_RECORDINGS` points
+  the ordinary test at one.
+- **The recordings** (`RECORDING.md` beside them): five runs of 2026-09-17, one version after
+  another on one machine, each keeping its `simulation.log` byte for byte (compressed), the
+  Global Information block of its console — the rest of the console names paths on the
+  recording machine — and `js/global_stats.json` up to 3.13.1. They were rendered from
+  templates-gatling as merged at 564da8b (pack 0.15.1). The harness renders the published
+  pack and sets the two sbt versions the published pack's defaults changed back to 0.15.1's,
+  because a registry cannot pin a pack to a commit: galaxio appends the pack's version to a
+  GitHub source as its ref.
+
+**Measured** on the recordings, all requests; a misplacement is a fraction of the run's
+12 250 requests, and the rule allows 0.00198 at p95 and 0.00048 at p99:
+
+| Gatling | Requests (ok, failed) | Request at the p95 / p99 rank | This tool p95 / p99 | Gatling printed p95 / p99 | Gatling's p99 misplaced by | Gatling's percentiles |
+|---|---|---|---|---|---|---|
+| 3.11.5 | 12 250 (12 010, 240) | 815 / 1578 | 813 / 1575 | 813 / 1575 | 0.00012 | held, the reference |
+| 3.12.0 | 12 250 (12 010, 240) | 814 / 1578 | 814 / 1576 | 814 / 1576 | 0.00012 | held, the reference |
+| 3.13.1 | 12 250 (12 010, 240) | 815 / 1578 | 813 / 1580 | 723 / 1670 | 0.00167 | described |
+| 3.14.9 | 12 250 (12 010, 240) | 816 / 1577 | 813 / 1575 | 721 / 1670 | 0.00167 | described |
+| 3.15.1 | 12 250 (12 010, 240) | 815 / 1577 | 813 / 1575 | 704 / 1671 | 0.00167 | described |
+
+Every other whole-run figure equals Gatling's on every version, the rates and shares to the
+two decimals of the console and exactly to `global_stats.json`. This tool's percentiles
+misplace their rank by at most 0.00012 on every run, and every version's p50 and p75, Gatling's
+included, by nothing. Gatling 3.11.5 and 3.12.0 printed the same four percentiles as this
+tool on their own runs: that is measured here and asserted nowhere (FR-019). From 3.13.1
+Gatling's p95 lands between 400 and 800 ms, where the stub sends no response, so its rank is
+off by only 0.00078; its p99 misplaces the rank by 0.00167 — about 20 of the 12 250
+requests where the rule allows 6 — which is tdunning/t-digest#230 on a real run.
+
+**Alternatives considered**: parsec's hand-written corpus probe (not taken: the maintainer
+asked for galaxio's own template, which exercises `template init` on the way); replaying the
+corpus at a larger scale (not taken: synthetic, and it shows no real JVM's timing); a random
+stub (rejected: the versions would not see the same data); running Gatling in every CI
+build (not taken: minutes a version and the network, so it is gated).

@@ -362,7 +362,7 @@ func TestSummaryRate(t *testing.T) {
 
 // gatlingFigures are the whole-run figures Gatling itself recorded for a run,
 // for all, successful and failed requests in that order. No percentile is
-// among them: Gatling's are not a reference for anything.
+// among them: Gatling's are never a target for this tool's.
 type gatlingFigures struct {
 	count, minimum, maximum, mean, stdDev [3]int64
 	rate                                  [3]float64

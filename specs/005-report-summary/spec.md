@@ -431,8 +431,9 @@ standard error received.
   asserted equal to a percentile Gatling recorded in any test, and MUST NOT be offered as a
   difference from one. A test MAY hold a percentile Gatling 3.11.x or 3.12.x recorded to the
   rank rule of FR-021 over the same log, as the reference; percentiles Gatling 3.13.0 and
-  later recorded MUST NOT be used, because they come from the digest defect of
-  [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230).
+  later recorded MUST NOT be held to anything, because they come from the digest defect of
+  [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230) — a test MAY
+  describe in its log how far they misplace their rank.
 - **FR-020**: The README MUST state the known limitation in the same change: the default
   quantile interpolates, so where response times have a gap a printed percentile can be a
   value no request had. It MUST give the recorded 3.13.1 run as the example — 1427 ms printed
@@ -642,8 +643,9 @@ standard error received.
   3.12.0 and 3.13.1. They are recorded in the shared library's corpus; this repository's
   copy holds the logs only, so the plan brings the recorded figures in as test data with
   their provenance.
-- Gatling's percentiles are not a reference for anything. For the 3.13.1 run Gatling printed
-  1072 ms, which comes from the defect reported as
+- Gatling's percentiles are never a target for this tool's. Those of 3.11.x and 3.12.x are a
+  reference for the rank rule only (FR-019). From 3.13.0 they are not even that: for the
+  3.13.1 run Gatling printed 1072 ms, which comes from the defect reported as
   [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230) and changes between
   two readings of the same log.
 - Every response time in every recorded log is a whole, non-negative number of milliseconds,
