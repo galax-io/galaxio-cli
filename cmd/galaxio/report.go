@@ -94,8 +94,13 @@ type reportOptions struct {
 
 	Quiet   bool
 	Verbose bool
-	Stdout  io.Writer
-	Stderr  io.Writer
+
+	// Color says whether the summary is drawn in colour: standard output is a
+	// terminal that understands escape sequences and colour is not switched off.
+	Color bool
+
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // reportOutput is what runReport read: where the run was, what the source said
@@ -121,6 +126,15 @@ it holds: the tool and version, the log format, the run's identity and start, th
 span it covers, and how many requests, groups, virtual-user events and errors it
 recorded, requests split into successes and failures.
 
+Below that it summarises the run as a whole: the requests and their rate, ok and
+failed with their share and rate; the minimum, mean, standard deviation, the
+50th, 75th, 95th and 99th percentiles and the maximum response time for all, ok
+and failed requests; and how many successful responses took under 800 ms, from
+800 up to 1200 ms, and 1200 ms or more, and how many requests failed. Times are
+in milliseconds. Percentiles are t-digest estimates, the numbers Gatling 3.11
+gives for the same log. Nothing is shown for a single request or group, and the
+command writes no file.
+
 PATH is a run directory, its simulation.log, or a results root holding run
 directories. Without it the Maven and sbt results root target/gatling is
 searched, taking the run lastRun.txt names or else the most recently modified.
@@ -145,6 +159,7 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 				Tool:    args[0],
 				Quiet:   isQuiet(cmd),
 				Verbose: globalOptsFromCmd(cmd).verbose,
+				Color:   !isNoColor(cmd) && ansiTerminal(cmd.OutOrStdout()),
 				Stdout:  cmd.OutOrStdout(),
 				Stderr:  cmd.ErrOrStderr(),
 			}
@@ -260,7 +275,9 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	// did hold, which is what the run recorded before it was killed.
 	var cutShort *gatling.TruncationError
 	if !opts.Quiet && (scanErr == nil || errors.As(scanErr, &cutShort)) {
-		if _, err := io.WriteString(opts.Stdout, formatReport(out, opts.Verbose)); err != nil {
+		// The description, a blank line and the summary go out in one write, so
+		// that a reader that went away is reported once.
+		if _, err := io.WriteString(opts.Stdout, formatReport(out, opts.Verbose)+"\n"+formatSummary(out.Summary, opts.Color)); err != nil {
 			// Both failures matter: the write is why the user sees nothing,
 			// and scanErr is why the run is not a complete one.
 			return out, RuntimeError{Err: errors.Join(fmt.Errorf("writing report: %w", err), scanErr)}
