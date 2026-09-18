@@ -119,35 +119,47 @@ maintainer decision of 2026-09-17: use what the library gives by default and not
 request); a higher compression (not taken — the defaults are the decision, and compression
 does not change a read between two singleton centroids).
 
-## 3. All requests: merge the ok and failed digests when the figures are read
+## 3. All requests: a digest of their own, fed in log order
 
-**Decision**: the summary keeps two digests, one per outcome, created on the first request
-of that outcome. The percentiles of all requests are read from a fresh digest at the
-library's defaults into which the ok digest and then the failed one are merged, at the
-moment they are read; no third digest is fed, and neither digest is ever cloned.
+**Decision**: the summary keeps three digests, one for each
+outcome and one for all requests, each created on its first request. The walk feeds every
+recorded response time of a successful or failed request to its outcome's digest and to the
+digest of all requests, in log order, which is how Gatling 3.11 feeds its own three (§18).
+Nothing is merged and nothing is cloned when the figures are read, so a read in the middle
+of a walk changes nothing that follows; a test reads a long walk every hundred requests and
+holds every quantile of all three digests to the unread walk's.
 
-**Evidence**: on every corpus run, and on a synthetic run of one million requests (a
-log-normal body around 40 ms, 0.5 % at 60 s, 5 % failed), the merged digest gives the same
-p50, p75, p95 and p99 as a digest fed every request directly — 40 / 60 / 110 / 186 for the
-synthetic run, 1 / 1 / 1427 / 1502 for 3.13.1 — and a test holds the corpus runs to it at
-nine ranks. While both digests hold singletons, as they do below 200 requests, the merge is
-their sorted union, so equality is structural there rather than lucky.
+**Why not two digests merged when they are read**, the first design: it kept two digests and read all
+requests from a fresh digest into which the ok digest and then the failed one were merged.
+Its evidence was the corpus runs and a synthetic run of a million requests whose failures
+were as fast as its successes; on those the merged digest gave the numbers of a digest fed
+directly. But two compressed digests merged are not one digest fed the same requests in
+order, and the two agree only while failures sit inside the dense part of the successes. On
+the synthetic runs of `internal/report/synthetic_test.go` — 12 000 requests, whole numbers
+only so that every architecture draws the same run — merging gave:
 
-**Why never a clone**, found while implementing (T007): `TDigest.Clone` seeds the clone's
-generator by drawing `Int63` from the original's, which advances the original's generator,
-and the generator decides which centroid a later insertion merges into. Reading all
-requests through a clone in the middle of a walk — which the progress block does five times
-a second — would therefore change the ok digest for good, and the final percentiles would
-depend on how often the block happened to draw. Measured on the synthetic run with a read
-every thousand requests: after clone reads the ok digest no longer matches an unread one
-quantile for quantile; after fresh-digest reads it matches bit for bit.
-`Merge` only reads the digest it is given, so a fresh digest leaves both accumulators as
-they were. A test reads a long walk every hundred requests and holds every quantile to the
-unread walk's, and it fails against a clone.
+| Run | Rank | Merged | Fed in log order | t-digest 3.1 |
+|---|---|---|---|---|
+| every 20th request fails slowly | p95 of all | 1215 | 1214 | 1214 |
+| every 20th request fails slowly | p99 of all | 4241 | 4244 | 4244 or 4245 |
+| 5 % fail slowly | p95 of all | 358 | 366 | 366 |
+| 30 % fail slowly | p75 of all | 1691 | 1693 | 1693 |
+| 5 % fail as fast as the rest | every rank | equal | equal | equal |
 
-**Alternatives considered**: a third digest fed with every request (rejected: half as much
-memory again and one more insertion per request, for the same numbers); a clone of the ok
-digest merged with the failed one (the first design; rejected for the reason above).
+On a run of 12 000 requests with 5 % of failures at 1000–5000 ms it was 401 ms away. `TestSyntheticRunsEqualGatling311` holds
+all three rows of every such run to the `etalon.tsv` t-digest 3.1 wrote for it, with no
+exception, and fails on three of the four against the merged read.
+
+**Cost**, measured with a log-normal body around 40 ms, 0.5 % at 60 s and 5 % failed: the
+three digests hold 0.04 MiB of heap after a million requests and 0.08 MiB after ten million
+(1146, 1148 and 947 centroids), and a request costs one insertion more — 64 MiB of the
+replayed corpus log scan at 96 MB/s where two digests scanned at 138 MB/s.
+
+**Alternatives considered**: merging the two outcomes' digests when all requests are read
+(the first design; rejected above); a clone of the ok digest merged with the failed one
+(rejected earlier: `TDigest.Clone` seeds the clone's generator by drawing from the
+original's, which changes every later insertion into the original, so the final percentiles
+would depend on how often the progress block happened to draw).
 
 ## 4. Exact figures: integer accumulators, arithmetic done when the figures are read
 
@@ -167,8 +179,8 @@ treats one. Mean and standard deviation are computed with
 3.11.5, 3.12.0 and 3.13.1 recordings, with negative controls: half-up mean (banker's rounding
 mismatches 8 fields, truncation 49), population deviation about the unrounded mean (the
 sample deviation mismatches 12). The widths are what makes them exact for any input: a
-duration is at most 2⁶³−1 ns, under 2⁴³ ms, and a count is at most 2⁶³, so the sum stays
-under 2¹⁰⁶ and the sum of squares under 2¹⁴⁹, and neither can wrap for any run the command
+duration is at most 2⁶³−1 ns, under 2⁴⁴ ms, and a count is at most 2⁶³, so the sum stays
+under 2¹⁰⁷ and the sum of squares under 2¹⁵¹, and neither can wrap for any run the command
 can read — Principle II's refusal is never reached. The first design kept a 64-bit sum,
 which would wrap after about two million requests of the longest duration a log can
 hold; the log is untrusted input, so the re-check of 2026-09-17 (T003) widened both. The
@@ -246,9 +258,10 @@ option (rejected by the maintainer — §10).
 returns a `Summary` that carries the `Tally` it already counted; the restructuring is its own
 commit, before any statistic. **Goal: heap in use stays under 32 MiB for a log of any size
 and any number of distinct request names** — the goal of v0.13.0, unchanged, because the
-summary adds two digests and a handful of integers and keeps nothing per name.
+summary adds three digests and a handful of integers and keeps nothing per name.
 
-**Measurement** (the two digests at the library defaults, a log-normal body around 40 ms
+**Measurement** (the two digests of the first design at the library defaults — §3 has the
+figures for three — a log-normal body around 40 ms
 with 0.5 % at 60 s and 5 % failed, heap after `runtime.GC()`):
 
 | Requests | Heap held | Centroids, both digests / the larger | Per insertion |
@@ -258,9 +271,19 @@ with 0.5 % at 60 s and 5 % failed, heap after `runtime.GC()`):
 | 100 000 000 | 0.06 MiB | 2318 / 1246 | 311 ns |
 
 The goal stays a test in the ordinary suite, as `TestScanMemoryDoesNotGrowWithTheLog` is:
-replay a 16 MiB and a 256 MiB log through `reporttest.Replay`, fail if either passes the
-goal or if sixteen times the log costs meaningfully more. Throughput is kept by a benchmark
-and not gated.
+replay a 16 MiB and a 64 MiB log through `reporttest.Replay`, fail if either passes the goal
+or if four times the log costs meaningfully more. Throughput is kept by a benchmark and not
+gated.
+
+**What the gates cost**. Both collect first and measure the live heap rather than the heap in
+use on either side of the walk, which carries the allocator's own spans: 0.06 MiB for a
+64 MiB log, where the looser measure reads megabytes of noise and would need 256 MiB and a
+million names to see past it. The tighter number needs a megabyte of slack rather than eight,
+and 64 MiB and 100 000 names are then enough — which matters, because these two tests are the
+longest in the package and CI runs them under the race detector and coverage. Checked by
+retaining one word and one name per request: both gates fail, at 4.2 MiB and 5.9 MiB. Under
+`-race -coverprofile` the package takes 38 s against the 18 s of `main`; the difference is
+the third digest of §3, one insertion a request.
 
 **For #52, measured on the way**: two digests per request or group position cost about
 42 KiB — 10.46 MiB at 250 positions, 41.81 MiB at 1000 — flat from one to ten million
@@ -328,6 +351,18 @@ before #52. The live runs of §17 bring their own recordings, under
 
 **Rationale**: milestone v0.13.0 left them out because nothing read them (its research §9).
 They are MIT with the rest of the corpus; `PROVENANCE.md` gains the rows.
+
+**One reader of Gatling's figures**. `reporttest` is the only place that decodes a
+`global_stats.json` or a console and compares a summary with what Gatling recorded:
+`ReadGlobalStats`, `ParseConsole` and `Compare` serve the corpus runs and the live ones
+alike, so a second decoder cannot drift from the first over what equal means — two of them
+would have to agree on whether a share is compared as a two-decimal string or within 0.005,
+and a rate exactly or rounded. `reporttest.Versions` and `IsReference` are likewise written
+once, so the rule about which Gatling versions are a reference cannot be spelled two ways,
+one of which would stop treating a 3.11.6 recording as one. `reporttest.Items` is the one
+reader stub, and `reporttest.Samples` the one reading of what a run holds, which
+`EtalonSamples`, `Durations` and any test that feeds its own digest all go through, so that
+none of them can lose the check for a negative duration the others make.
 
 ## 13. The constitution amendment this feature waited for
 
@@ -441,6 +476,19 @@ logs (out of scope: new published surface nobody has asked for); drawing on stan
 (rejected: it is the report's, and scripts read it); a ticker goroutine (rejected: a second
 goroutine touching the accumulators needs locking the walk does not otherwise need).
 
+**Taking a terminal for a terminal**. The device is asked whether it is one, in the standard
+library and with no new module: on Linux and macOS the terminal attributes `isatty(3)` reads,
+through `syscall.Syscall6` with `TCGETS` and `TIOCGETA`; on Windows the console's own mode,
+read and never changed, where the `ENABLE_VIRTUAL_TERMINAL_PROCESSING` flag says the console
+interprets escape sequences rather than printing them — Windows sets no TERM, and goreleaser
+ships windows/amd64 and windows/arm64, which TERM alone says nothing about. TERM still has to
+name a terminal that is not dumb where a terminal sets it. Asking `os.ModeCharDevice` and
+TERM instead would take `/dev/null` for a terminal, and `2>/dev/null` would then cost the
+walk a redraw five times a second and write control sequences where FR-037 allows none.
+Verified on a real pty: colour and the block at `TERM=xterm-256color`, nothing at
+`TERM=dumb`, at an empty TERM, under `NO_COLOR`, or when the stream is a file, a pipe or
+`/dev/null`.
+
 ## 16. The look of the summary
 
 **Decision** (maintainer, 2026-09-17, chosen from three mock-ups drawn with the figures of
@@ -479,6 +527,20 @@ columns of the same three rows (90 columns wide; offered as the default and not 
 k6-style metric lines, `min=0 mean=89 …` (numbers do not line up, so ok and failed are hard
 to compare); the Gatling-like table of the first draft (rejected by the maintainer); a
 thousands separator (not taken: §5).
+
+**Deciding once what may be drawn**. Quiet, no-colour and the two terminal checks decide
+three things between them — the summary's colour, whether the block is drawn, and the
+block's colour — and `modesFor` reads them once from the command into `outputModes`, which
+the command carries. Reading them in two places is how the summary on standard output and
+the block on standard error come to disagree about a terminal or about `--no-color`, and how
+a field named for one rule comes to fold a second into itself. `streams.modes` is the rule
+alone, a pure function a test holds to every combination, since a test has no terminal to
+reach it through. Each of the smaller rules is written once beside it: `failedStyle`, the
+label painter that pads outside the paint, one renderer for a share or a rate, and one list
+of the block's ranks from which its heading and its rows are both built, so that a column
+cannot end up under the wrong name. Nothing derivable is stored: the block counts its draws
+rather than keeping a flag, takes `*report.Source` rather than an interface with one
+implementer, and reads an unknown size as 0.
 
 ## 17. Live Gatling runs
 
@@ -557,20 +619,45 @@ can print two values for a percentile.
 
 **Why this tool's numbers are the same**: caio/go-tdigest v5 at compression 100 bounds a
 centroid by 4·n·q·(1−q)/δ, adds a value to its nearest centroid and interpolates between
-centroids, which are the three choices t-digest 3.1's `AVLTreeDigest` makes. The one
-difference measured is floating point at an exact half. On a live run of 1 222 successful
-requests the 95th percentile is 398.5, which caio computes as 398.49999999999994 and
-t-digest 3.1 as 398.5000000000001, and `Math.round` gives 399. `roundHalfUp` in
-`percentiles.go` therefore takes a value within 1e-14 of its size below a half as the half.
+centroids, which are the three choices t-digest 3.1's `AVLTreeDigest` makes.
+
+**The read, and the half**. The library's `Quantile` is `AVLTreeDigest.quantile`
+operation for operation, and on amd64 it returns t-digest 3.1's doubles bit for bit. On
+arm64 the Go compiler fuses each product of the interpolation into the addition after it,
+which moves the last bit, and a percentile at a half then rounds the other way: on a live
+run of 1 222 successful requests the 95th percentile is 398.5, which the fused read gave as
+398.49999999999994 where t-digest 3.1 gives 398.5000000000001 and `Math.round` 399. The
+obvious answer, rounding up a value within a slack below the half, is wrong: values one bit
+below a half are real in Java too — 48.49999999999999 for the 95th percentile of [1, 51],
+which Gatling prints as 48 — and a slack of 1e-14 makes 49 of them, 84 times in 31 400 small
+sets on amd64, where no slack disagrees never. So `percentiles.go` reads the
+digest itself, from `ForEachCentroid`, in t-digest 3.1's order of operations with every
+product converted to `float64` before it is used, which the language guarantees is never
+fused; and `roundHalfUp` compares the exact fraction with a half, as `Math.round` does. Over
+the same 31 400 sets that read never disagreed with the jar on either architecture.
+`TestPercentileEqualsTDigest31` pins eight such sets to what the jar gave, and fails on
+arm64 against the library's own read.
 
 **The etalon**: `internal/report/testdata/etalon/Etalon.java`, run by the JDK's source
 launcher with both jars, each in a class loader of its own, and a run's requests on standard
 input in log order (`reporttest.EtalonSamples`). It builds the AVL digest of t-digest 3.1 once
 for each seed from 1 to 200 and prints every value it gave, and builds `MergingDigest(100)` of
 t-digest 3.3 once beside it. Its output is kept as `etalon.tsv` beside each of the ten
-recordings. `TestEtalonRecordings` (integration tag) reruns it and requires those files byte
-for byte; the jars come from `GALAXIO_TDIGEST_JARS`, the local Maven repository or the
-Coursier cache a Gatling build fills, and are pinned by SHA-256.
+recordings and each of the four synthetic runs of §3. `TestEtalonRecordings` (integration tag)
+reruns it and requires those files byte for byte; the jars come from `GALAXIO_TDIGEST_JARS`,
+the local Maven repository or the Coursier cache a Gatling build fills, and are pinned by
+SHA-256.
+
+**What ties an etalon to its run**. A test that skips proves nothing, and CI provides neither a
+JDK nor the jars, so `TestEtalonRecordings` skipped there and the ordinary suite trusted
+fourteen files nothing checked. Two things answer it. The etalon now prints, in its header,
+how many sample lines it read and their SHA-256, `ReadEtalon` requires both and refuses a
+column and rank given twice, and `TestEtalonsAreOfTheirRuns` — in the ordinary suite, with no
+JDK — recomputes them from each run: an etalon.tsv copied from another recording fails.
+And the integration job of `ci.yml` and `release.yml` sets up a Temurin JDK and fetches the
+two jars from Maven Central through `.github/actions/tdigest-jars`, which checks each against
+the SHA-256 the test pins and sets `GALAXIO_ETALON_REQUIRED=1`, under which a missing JDK or
+jar fails the test instead of skipping it.
 
 **What the tests hold**, through `reporttest.ComparePercentiles`: every percentile at ranks
 50, 75, 95 and 99, for all, ok and failed requests, is a value the AVL digest gives for the
@@ -595,6 +682,43 @@ and the 75th on the live 3.15.1 run, 37 or 38.
 |---|---|---|---|---|---|
 | corpus 3.13.1 | 1427 | 1427 | 1072, by 3.13.1 | 1502 | 1502 |
 | live 3.11.5 | 813 | 813 | 813, by 3.11.5 | 682 | 815 |
+
+**Where they differ**: caio's `AddWeighted` merges into a centroid in place, and a centroid
+whose mean does not change stays where it is; t-digest 3.1's `AVLTreeDigest` removes the
+centroid from its tree and adds it back, after every centroid of an equal mean. Both hold the
+same centroids, in another order inside a run of equal means, and `Quantile` interpolates
+between the centres of neighbouring centroids — so at the edge of such a run the two can
+round to the two sides of a boundary. A fresh live run of 3.11.5, made for quickstart §8,
+showed it: 240 failed requests, 43 of 5 ms merged partly into pairs, and the 75th
+percentile read as 5.25 by caio (5) and 5.5 by t-digest 3.1 (6, every seed; Gatling printed
+6). Nothing was recorded between 5 and 6. Across 105 recorded and synthetic sets and six
+ranks it is 1 value in 630, and none of the 120 on the committed recordings. A copy of the
+library that moves a merged centroid as t-digest 3.1 does matched all 630 at 11 % more per
+insertion; the maintainer chose to keep the library unmodified (constitution v3.1.0), so
+`ComparePercentiles` describes such a value and reports any other. What it describes is held
+to the amendment's words (`acrossEqualRuns`): the two recorded response times around
+the two values have nothing recorded between them and were each recorded at least twice, the
+position rank/100·(n−1) lies inside those two runs, and the rank rule holds. Its first form
+Asking only that nothing be recorded between the two values is far too wide: it lets through
+900 and 1502 for the 1427 of the 3.13.1 run, whose response times leave a gap there, and any
+difference of one wherever values are distinct. The tests of the ten committed recordings
+refuse the description altogether, since none of them needs it.
+
+**Where two builds differ** (maintainer, 2026-09-17: keep the library, describe it).
+The fusion of "The read, and the half" also happens inside the library, where a value joins
+a centroid: `(x1*w1 + x2*w2) / (w1 + w2)` is one multiply-add and a division on arm64, and
+two products, a sum and a division on amd64 and in Java. The means then differ in their last
+bit; a later search for the nearest centroid can fall the other way; and the two builds end
+with different centroids. Measured by running one test natively and as `GOARCH=amd64`: 22 of
+1 500 synthetic digests hold a different number of centroids, and at the default ranks 2 of
+7 500 percentiles differ, each by 1 ms. For 12 000 requests uniform over 0–2599 ms the 99th
+percentile is 2572 on arm64 and 2571 on amd64, and t-digest 3.1 gives 2572 for every seed;
+for 6 000 over 0–3799 ms the 95th is 3610 and 3609. Neither build is the one that is always
+right. All ten recordings and the four synthetic runs give the same numbers on both. It
+cannot be removed without changing the library's source, which the maintainer ruled out for
+the order of equal centroids as well, so it is described: in the README, in the contract's
+guarantees and here. FR-018's "the same log always yields the same percentiles" holds for
+one build.
 
 **Why `MergingDigest` is not the reference**: it has no defect, and t-digest 3.3 recommends
 it, but it is another algorithm. It merges neighbours in sorted order under another scale

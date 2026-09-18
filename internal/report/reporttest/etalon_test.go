@@ -208,6 +208,52 @@ func TestComparePercentiles(t *testing.T) {
 		}
 	})
 
+	t.Run("equal response times ordered apart are described", func(t *testing.T) {
+		t.Parallel()
+
+		// The failed column of a live 3.11.5 run: caio gives 5 at p75 and
+		// Gatling 3.11 gives 6, and nothing was recorded between 5 and 6.
+		sorted := []int64{1, 2, 3, 4, 4, 5, 5, 5, 6, 6, 6, 7}
+		e := Etalon{}
+		e.AVL[2][1] = []int64{6}
+
+		fives := Observed{Outcomes: [3]Figures{fakeFigures{}, fakeFigures{}, fakeFigures{count: 12, percentile: func(rank float64) int64 {
+			if rank == 75 {
+				return 5
+			}
+
+			return AtRank(sorted, rank)
+		}}}}
+
+		for j, rank := range GatlingRanks {
+			if rank != 75 {
+				e.AVL[2][j] = []int64{AtRank(sorted, rank)}
+			}
+		}
+
+		var r Recorded
+		r.Percentiles[1][2] = Value{N: 6, Present: true}
+
+		differences, notes := ComparePercentiles(fives, e, r, true, [3][]int64{nil, nil, sorted})
+		if len(differences) != 0 || !strings.Contains(strings.Join(notes, "\n"), "failed p75 = 5, where Gatling 3.11's digest gives [6] for this log: the rank lies on a boundary between two runs of equal response times") {
+			t.Errorf("differences %q, notes %q; want the order of equal centroids described", differences, notes)
+		}
+
+		// With a response time recorded between the two, it is a difference.
+		fours := fives
+		fours.Outcomes[2] = fakeFigures{count: 12, percentile: func(rank float64) int64 {
+			if rank == 75 {
+				return 4
+			}
+
+			return AtRank(sorted, rank)
+		}}
+
+		if differences, _ := ComparePercentiles(fours, e, r, true, [3][]int64{nil, nil, sorted}); len(differences) != 2 {
+			t.Errorf("differences %q; want this tool's 4 and Gatling's printed 6 both named", differences)
+		}
+	})
+
 	t.Run("a later gatling is described", func(t *testing.T) {
 		t.Parallel()
 
@@ -219,4 +265,62 @@ func TestComparePercentiles(t *testing.T) {
 			t.Errorf("differences %q, notes %q; want the defect described and nothing failed", differences, notes)
 		}
 	})
+}
+
+// TestAcrossEqualRuns holds the one difference from Gatling 3.11's digest that
+// is described to what constitution Principle II says of it: a boundary between
+// two runs of equal response times, nothing recorded between the two values,
+// the rank inside the two runs, and the rank rule kept. Before it was held to
+// that, any difference inside a gap of the data passed — 900 or 1502 for the
+// 1427 of the recorded 3.13.1 run — and so did any difference of one.
+func TestAcrossEqualRuns(t *testing.T) {
+	t.Parallel()
+
+	// The shape of the recorded 3.13.1 run: 96 requests of at most 7 ms, the
+	// slowest of them alone, then five of 1502 ms and one of 1503.
+	gap := make([]int64, 0, 102)
+	for i := range int64(95) {
+		gap = append(gap, i%7)
+	}
+
+	gap = append(gap, 7, 1502, 1502, 1502, 1502, 1502, 1503)
+	slices.Sort(gap)
+
+	distinct := make([]int64, 0, 1000)
+	for i := int64(1); i <= 1000; i++ {
+		distinct = append(distinct, i)
+	}
+
+	runs := []int64{1, 2, 3, 4, 4, 5, 5, 5, 6, 6, 6, 7}
+
+	tests := []struct {
+		name         string
+		sorted       []int64
+		ours, theirs int64
+		rank         float64
+		expected     bool
+	}{
+		{name: "two runs of equal response times", sorted: runs, ours: 5, theirs: 6, rank: 75, expected: true},
+		{name: "the other way round", sorted: runs, ours: 6, theirs: 5, rank: 75, expected: true},
+		{name: "a response time recorded between", sorted: runs, ours: 4, theirs: 6, rank: 75, expected: false},
+		{name: "the rank outside the two runs", sorted: runs, ours: 5, theirs: 6, rank: 25, expected: false},
+		{name: "a neighbour recorded once", sorted: runs, ours: 6, theirs: 7, rank: 95, expected: false},
+		{name: "inside a gap whose lower edge was recorded once", sorted: gap, ours: 900, theirs: 1427, rank: 95, expected: false},
+		{name: "the other digest's value for that gap", sorted: gap, ours: 1502, theirs: 1427, rank: 95, expected: false},
+		{name: "one off inside that gap", sorted: gap, ours: 1428, theirs: 1427, rank: 95, expected: false},
+		{name: "the lower edge of that gap", sorted: gap, ours: 7, theirs: 1427, rank: 95, expected: false},
+		{name: "one off among distinct response times", sorted: distinct, ours: 501, theirs: 500, rank: 50, expected: false},
+		{name: "below every response time", sorted: runs, ours: 0, theirs: 1, rank: 1, expected: false},
+		{name: "above every response time", sorted: runs, ours: 8, theirs: 7, rank: 99, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := acrossEqualRuns(tt.sorted, tt.ours, tt.theirs, tt.rank); got != tt.expected {
+				t.Errorf("acrossEqualRuns(%d, %d at p%v) = %v, want %v", tt.ours, tt.theirs, tt.rank, got, tt.expected)
+			}
+		})
+	}
 }

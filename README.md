@@ -318,14 +318,24 @@ Every figure but the percentiles is exact:
 - `-` marks a figure that does not exist — the times of an outcome no request reached, or
   every share of a run with no request — never `0`.
 
-**Percentiles.** Estimates from a t-digest, `github.com/caio/go-tdigest` at compression 100
-read with its default quantile: the numbers Gatling 3.11 and 3.12 print for the same log,
-which compute them as `Math.round(quantile(rank / 100))` over `AVLTreeDigest(100)` of
-t-digest 3.1. The tests assert that equality on every recorded run against t-digest 3.1
-itself. Gatling 3.13.0 and later print other numbers because t-digest 3.3's `AVLTreeDigest`
+**Percentiles.** Estimates from a t-digest, `github.com/caio/go-tdigest` at compression 100,
+read as its default quantile reads it: the numbers Gatling 3.11 and 3.12 print for the same
+log, which compute them as `Math.round(quantile(rank / 100))` over `AVLTreeDigest(100)` of
+t-digest 3.1. The read is this command's own, written in t-digest 3.1's order of operations
+and rounded as `Math.round` rounds, so that a percentile that lies at a half rounds the same
+way on every platform. The tests assert the equality on every recorded run against t-digest
+3.1 itself. Gatling 3.13.0 and later print other numbers because t-digest 3.3's `AVLTreeDigest`
 miscounts ([tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230)): for the
 recorded 3.13.1 run Gatling printed 1072 ms as the 95th percentile of all requests, where
-Gatling 3.11's digest and this command give 1427.
+Gatling 3.11's digest and this command give 1427. One difference from Gatling 3.11 is known
+and rare: when a percentile falls on the edge of a run of equal response times, the two
+digests can round it to the two sides — on one live run, 5 ms where Gatling 3.11 printed 6,
+with no request recorded between 5 and 6 — because they order centroids of an equal mean
+differently. For the same reason of last bits, an arm64 and an amd64 build of this command
+can differ from each other: inside the digest library arm64 computes a centroid's mean in
+one fused operation and amd64 in two, so on rare runs the two hold slightly different
+centroids. At the default ranks 2 percentiles in 7 500 differed, each by 1 ms; one build's
+output is always the same for the same log.
 
 **Known limitation.** The default quantile interpolates between neighbouring response
 times, as Gatling 3.11's does, so where a run's response times have a gap a percentile can
@@ -333,6 +343,10 @@ be a value no request had. For the recorded 3.13.1 run the 95th percentile of al
 is printed as 1427 ms, while the request at that rank took 1502 ms and no request took
 between 8 and 1501 ms. [caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42)
 proposes a read by rank that would print 1502, and so part from Gatling 3.11's numbers.
+How far a percentile may differ from the response times a run recorded is a rule the tests
+hold every percentile to: while an outcome holds at most 200 requests, a percentile lies
+between the two recorded response times around its position, and at any size it misplaces
+its rank by at most 4·q·(1−q)/100 of the requests plus one, q being the rank over 100.
 
 **`--percentiles` and `--bounds`.** `--percentiles 90,99.9` reports those ranks instead of
 the default `50,75,95,99`, each once and in increasing order; a rank is a number above 0
@@ -341,18 +355,21 @@ default `800,1200`, in whole, non-negative milliseconds with the second greater 
 first. A value that is neither exits 2 quoting it, while the flag is parsed and so before
 any help.
 
-**Colour.** On a terminal whose `TERM` is set and is not `dumb`, `ok` is green, `failed` is
-red when anything failed, and the headings, the empty part of a bar and the closing line are
-faint. Written to a pipe or a file, and with `--no-color` or `NO_COLOR`, the same text
-carries no escape sequence.
+**Colour.** On a terminal that understands escape sequences, `ok` is green, `failed` is red
+when anything failed, and the headings, the empty part of a bar and the closing line are
+faint. Written to a pipe, a file or a device that is no terminal, and with `--no-color` or
+`NO_COLOR`, the same text carries no escape sequence. Whether the stream is a terminal is
+asked of the device itself; on Linux and macOS `TERM` must also name a terminal that is not
+`dumb`, and on Windows, which sets no `TERM`, the console must have virtual-terminal
+processing on, which this command reads and never changes.
 
 **Progress.** A long read shows a block of six lines on standard error: how much of the log
 has been read, the time left, and the count, share and times so far of all, ok and failed
 requests. It appears 500 ms into the read, is redrawn in place a few times a second, and is
 erased before anything else is written. It is shown only when standard error is a terminal
-whose `TERM` is set and is not `dumb`, and never with `--quiet`; standard output and the exit
-code are the same with and without it. No terminal mode is changed, so a terminal narrower
-than 80 columns wraps the block and may keep remains of it.
+by the same test as colour, and never with `--quiet`; standard output and the exit code are
+the same with and without it. No terminal mode is changed, so a terminal narrower than 80
+columns wraps the block and may keep remains of it.
 
 **`-o`.** Reserved for report formats later releases produce: `stats` and `global_stats`
 (Gatling's own `stats.json` and `global_stats.json`) and `yml` (the OpenNFR YAML report).
@@ -361,15 +378,17 @@ that delivers it, or saying it is postponed where no release is set yet, and an 
 listing the names that exist. The value is refused as the flag is parsed, so `--help` does
 not get past it either. There is no `-o json` and no `-o text`: the first machine-readable
 output this command publishes will be Gatling's own `stats.json`, in Gatling's schema and
-with Gatling's numbers.
+with Gatling's numbers — with its percentiles equal to Gatling 3.11's, so a run recorded by
+3.13.0 or later will carry percentiles its own report did not print, for the reason above.
 
 **Exit codes.** `0` when the run was read to the end and summarised; `1` for a runtime
 failure — no run under the directory, a path that cannot be read, a log that is not a
 Gatling `simulation.log`, an unsupported version, a log cut short (the description and the
 summary of what it did hold are still printed, so a script cannot mistake a partial run for a
 complete one), a damaged log (nothing is printed, because the records before the damage are
-not a result), a run that spans no time (the summary is printed with every rate `-`, because
-no rate can be computed), or a run holding requests whose outcome the source lost (the
+not a result), a run that holds requests and spans no time (the summary is printed with every
+rate `-`, because no rate can be computed; a run that holds no request at all reports
+`0 requests` and exits 0), or a run holding requests whose outcome the source lost (the
 summary is printed, and its outcomes do not add up to its requests); `2` for a usage error —
 an unsupported tool, an empty or third argument, an unknown flag, a bad `--percentiles` or
 `--bounds`, or any `-o`, each rejected while the flag is parsed and so before any help. An
