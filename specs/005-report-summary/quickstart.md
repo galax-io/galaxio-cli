@@ -136,7 +136,27 @@ for i in $(seq 100); do dist/galaxio report gatling $C/3.15.1 | cmp -s - $out/re
 
 Expected: `done` and no `differs` line.
 
-## 8. Gates
+## 8. Live Gatling runs (SC-012)
+
+```bash
+rec=$(mktemp -d)
+GALAXIO_LIVE_GATLING=1 GALAXIO_LIVE_RECORD=$rec go test -tags=integration -run TestReportLiveGatling -timeout 60m -v ./internal/report/
+GALAXIO_LIVE_RECORDINGS=$rec go test -run 'TestSummaryMatchesLiveGatlingRuns|TestLiveGatlingRunsWereServedTheSameResponses' -v ./internal/report/
+go test -run 'TestSummaryMatchesLiveGatlingRuns|TestLiveGatlingRunsWereServedTheSameResponses' -v ./internal/report/
+```
+
+Expected: the first command takes about five minutes a version and passes for 3.11.5, 3.12.0,
+3.13.1, 3.14.9 and 3.15.1 — the template rendered from the published registry, every
+non-percentile figure equal to what Gatling printed, every percentile within the rank rule,
+and Gatling's own 3.11.5 and 3.12.0 percentiles within it too; the log describes how far the
+later versions' percentiles misplace their ranks. `GALAXIO_LIVE_VERSIONS=3.11.5` runs one
+version, `GALAXIO_LIVE_STEADY=20s` shortens the steady stage, and
+`GALAXIO_LIVE_TEMPLATES=local:<checkout>` renders a local templates-gatling checkout instead.
+The second command holds the fresh recordings to the same, and logs the same requests, ok and
+failed for every version. The third does it on the committed recordings, without a JDK: 12 250
+requests (12 010 ok, 240 failed) a version, and the figures of research.md §17.
+
+## 9. Gates
 
 ```bash
 test -z "$(gofmt -l .)" && go vet ./... && go test -race -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1

@@ -1,0 +1,20 @@
+================================================================================
+---- Global Information --------------------------------------------------------
+> request count                                      12250 (OK=12010  KO=240   )
+> min response time                                      1 (OK=5      KO=1     )
+> max response time                                   2001 (OK=2001   KO=9     )
+> mean response time                                   104 (OK=106    KO=4     )
+> std deviation                                        282 (OK=285    KO=2     )
+> response time 50th percentile                         26 (OK=27     KO=4     )
+> response time 75th percentile                         38 (OK=38     KO=6     )
+> response time 95th percentile                        723 (OK=740    KO=7     )
+> response time 99th percentile                       1670 (OK=1677   KO=8     )
+> mean requests/sec                                  48.61 (OK=47.66  KO=0.95  )
+---- Response Time Distribution ------------------------------------------------
+> t < 800 ms                                         11388 ( 92.96%)
+> 800 ms <= t < 1200 ms                                370 (  3.02%)
+> t >= 1200 ms                                         252 (  2.06%)
+> failed                                               240 (  1.96%)
+---- Errors --------------------------------------------------------------------
+> status.find.is(200), but actually found 500                       240 (100,0%)
+================================================================================
