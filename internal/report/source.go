@@ -110,10 +110,11 @@ type Source struct {
 	spent bool
 }
 
-// Scan walks the run once, and refuses to walk it again.
+// Scan walks the run once and summarises it at opts, and refuses to walk it
+// again.
 //
 // A reader yields its items once: both codecs latch their end and answer every
-// later call with it, so a second pass returns a tally of nothing and no error
+// later call with it, so a second pass returns a summary of nothing and no error
 // — which is exactly what a run that recorded nothing returns, and no caller
 // could tell the two apart. A closed source is the same: the latched end means
 // the file is never touched, so reading one succeeds too.
@@ -122,14 +123,14 @@ type Source struct {
 // stats.json writer of galaxio-cli#52 fold over this same pass, and the first
 // caller to fold twice would have shipped a report of zero requests for a full
 // run and exited 0.
-func (s *Source) Scan(ctx context.Context) (Tally, error) {
+func (s *Source) Scan(ctx context.Context, opts Options) (Summary, error) {
 	if s.spent {
-		return Tally{}, ErrSpent
+		return Summary{}, ErrSpent
 	}
 
 	s.spent = true
 
-	return Scan(ctx, s.Reader)
+	return Scan(ctx, s.Reader, opts)
 }
 
 // Open opens the run at loc. The format is identified from the log's leading

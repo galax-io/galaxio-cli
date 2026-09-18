@@ -62,10 +62,12 @@ func TestScanCorpus(t *testing.T) {
 		t.Run(tt.version, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := Scan(context.Background(), openBytes(t, corpusLog(t, tt.version)))
+			summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, tt.version)), DefaultOptions())
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
+
+			got := summary.Tally
 
 			if got.Requests != tt.expected.Requests || got.Successes != tt.expected.Successes || got.Failures != tt.expected.Failures {
 				t.Errorf("requests = %d (%d ok, %d ko), want %d (%d ok, %d ko)",
@@ -137,10 +139,12 @@ func TestScanCountsEveryKind(t *testing.T) {
 		{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserEnd, At: at(1400)}},
 	}}
 
-	got, err := Scan(context.Background(), rd)
+	summary, err := Scan(context.Background(), rd, DefaultOptions())
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
+
+	got := summary.Tally
 
 	expected := Tally{Requests: 3, Successes: 1, Failures: 1, Unknown: 1, Groups: 1, Users: 2, Errors: 1}
 	if got.Requests != expected.Requests || got.Successes != expected.Successes || got.Failures != expected.Failures || got.Unknown != expected.Unknown {
@@ -160,10 +164,12 @@ func TestScanCountsEveryKind(t *testing.T) {
 func TestScanRunWithoutRequests(t *testing.T) {
 	t.Parallel()
 
-	got, err := Scan(context.Background(), &stubReader{})
+	summary, err := Scan(context.Background(), &stubReader{}, DefaultOptions())
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
+
+	got := summary.Tally
 
 	if (got != Tally{}) {
 		t.Errorf("Tally = %+v, want the zero tally", got)
@@ -177,7 +183,8 @@ func TestScanRunWithoutRequests(t *testing.T) {
 func TestScanTruncated(t *testing.T) {
 	t.Parallel()
 
-	got, err := Scan(context.Background(), openBytes(t, corpusLog(t, "3.15.1")[:2000]))
+	summary, err := Scan(context.Background(), openBytes(t, corpusLog(t, "3.15.1")[:2000]), DefaultOptions())
+	got := summary.Tally
 
 	var cutShort *gatling.TruncationError
 	if !errors.As(err, &cutShort) {
@@ -218,7 +225,8 @@ func TestScanDamaged(t *testing.T) {
 	lines[20] = "BOGUS\tnot a record"
 	damaged := append(append([]byte(nil), header...), []byte(strings.Join(lines, "\n"))...)
 
-	got, scanErr := Scan(context.Background(), openBytes(t, damaged))
+	summary, scanErr := Scan(context.Background(), openBytes(t, damaged), DefaultOptions())
+	got := summary.Tally
 
 	var syntaxErr *gatling.SyntaxError
 	if !errors.As(scanErr, &syntaxErr) {
@@ -240,14 +248,14 @@ func TestScanCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	got, err := Scan(ctx, openBytes(t, corpusLog(t, "3.12.0")))
+	summary, err := Scan(ctx, openBytes(t, corpusLog(t, "3.12.0")), DefaultOptions())
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Scan(cancelled) = %v, want context.Canceled", err)
 	}
 
-	if (got != Tally{}) {
-		t.Errorf("Tally = %+v, want nothing walked", got)
+	if (summary.Tally != Tally{}) {
+		t.Errorf("Tally = %+v, want nothing walked", summary.Tally)
 	}
 }
 

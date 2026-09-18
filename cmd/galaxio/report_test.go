@@ -427,8 +427,8 @@ func TestRunReportOutput(t *testing.T) {
 		t.Errorf("Run.ToolVersion = %q, want 3.15.1", out.Run.ToolVersion)
 	}
 
-	if out.Tally.Requests != 102 || out.Tally.Successes != 84 || out.Tally.Failures != 18 {
-		t.Errorf("Tally = %+v, want 102 requests, 84 ok, 18 ko", out.Tally)
+	if tally := out.Summary.Tally; tally.Requests != 102 || tally.Successes != 84 || tally.Failures != 18 {
+		t.Errorf("Tally = %+v, want 102 requests, 84 ok, 18 ko", tally)
 	}
 }
 
@@ -822,7 +822,7 @@ func TestFormatReportOmitsWhatTheSourceDidNotRecord(t *testing.T) {
 		Location: run.Location{Log: "/x/simulation.log", Found: run.FoundByPath},
 		Run:      model.Run{ID: "sim", Name: "io.x.Sim", Tool: "gatling", ToolVersion: "3.12.0"},
 		Format:   gatling.FormatText,
-		Tally:    report.Tally{Requests: 3, Successes: 1, Failures: 1, Unknown: 1},
+		Summary:  report.Summary{Tally: report.Tally{Requests: 3, Successes: 1, Failures: 1, Unknown: 1}},
 	}
 
 	got := formatReport(out, false)
@@ -862,8 +862,8 @@ func TestFormatReportOmitsWhatTheSourceDidNotRecord(t *testing.T) {
 
 	// And with the instants present, both lines appear.
 	out.Run.Start = time.UnixMilli(1700000000000).UTC()
-	out.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserStart, At: time.UnixMilli(1700000000000).UTC()}})
-	out.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserEnd, At: time.UnixMilli(1700000004000).UTC()}})
+	out.Summary.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserStart, At: time.UnixMilli(1700000000000).UTC()}})
+	out.Summary.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserEnd, At: time.UnixMilli(1700000004000).UTC()}})
 
 	got = formatReport(out, false)
 	for _, want := range []string{"started     2023-11-14T22:13:20.000Z", "span        2023-11-14T22:13:20.000Z", "(4s)"} {
@@ -895,13 +895,13 @@ func TestReportLineWidth(t *testing.T) {
 			Assertions:  []string{"payload"},
 		},
 		Format: gatling.FormatText,
-		Tally: report.Tally{
+		Summary: report.Summary{Tally: report.Tally{
 			Requests: 4, Successes: 1, Failures: 1, Unknown: 1,
 			Groups: 1, Users: 2, Errors: 1, Assertions: 1, Other: 1,
-		},
+		}},
 	}
-	out.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserStart, At: time.UnixMilli(1700000000000).UTC()}})
-	out.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserEnd, At: time.UnixMilli(1700000004000).UTC()}})
+	out.Summary.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserStart, At: time.UnixMilli(1700000000000).UTC()}})
+	out.Summary.Tally.Bounds.Extend(&model.Item{Kind: model.ItemUser, User: model.UserEvent{Kind: model.UserEnd, At: time.UnixMilli(1700000004000).UTC()}})
 
 	got := formatReport(out, true)
 
