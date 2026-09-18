@@ -56,6 +56,7 @@ One version after another on one machine: macOS 26.6.2, Apple M2 Pro, OpenJDK 17
 | `simulation.log.gz` | the `simulation.log` Gatling wrote, byte for byte, compressed |
 | `console.txt` | the Global Information block Gatling printed at the end of the run, byte for byte from the rule that opens it to the rule that closes it (`reporttest.GlobalInformation`); the progress blocks before it and sbt's lines around it, which name paths on the recording machine, are not kept |
 | `js/global_stats.json` | the whole-run figures Gatling wrote beside its HTML report, byte for byte; 3.11.5, 3.12.0 and 3.13.1 only, because from 3.13.5 Gatling writes none |
+| `etalon.tsv` | not Gatling's output: what `../../etalon/Etalon.java` gives for the log — every percentile t-digest 3.1's `AVLTreeDigest(100)`, Gatling 3.11's digest, gives over the seeds 1 to 200, and t-digest 3.3's `MergingDigest(100)` — written by `TestEtalonRecordings` on 2026-09-17 and required byte for byte when it reruns |
 
 The HTML report, `stats.json` and the rest of the console are not kept: nothing reads them.
 
@@ -63,10 +64,12 @@ The HTML report, `stats.json` and the rest of the console are not kept: nothing 
 
 Every non-percentile whole-run figure the summary computes equals what Gatling printed and
 wrote. Every percentile it estimates keeps the rank rule of research.md §2 over the run's own
-log. The percentiles Gatling 3.11.5 and 3.12.0 printed and wrote keep the same rule, as the
-reference; those of 3.13.1, 3.14.9 and 3.15.1 come from the digest defect of
+log and equals Gatling 3.11's: a value `etalon.tsv` says Gatling 3.11's digest gives for the
+log, and on 3.11.5 and 3.12.0 the value Gatling printed and wrote. Those of 3.13.1, 3.14.9 and
+3.15.1 come from the digest defect of
 [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230), so the test log
-describes how far they misplace their rank and nothing is asserted on them.
+describes them and nothing is asserted on them; it describes `MergingDigest`'s values the
+same way (research.md §18).
 
 Every version was served the same responses in the same order of arrival, so every run holds
 12 250 requests and fails 240 of them; the response times differ by the milliseconds each

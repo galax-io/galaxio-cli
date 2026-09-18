@@ -1,0 +1,35 @@
+name: t-digest jars
+description: >
+  Fetches the two com.tdunning:t-digest jars the etalon runs — 3.1, whose
+  AVLTreeDigest Gatling 3.11 and 3.12 use, and 3.3, whose MergingDigest is
+  described beside it — checks each against the SHA-256 the tests pin, and names
+  the directory in GALAXIO_TDIGEST_JARS. With a JDK beside it, the percentiles
+  of every recording are then held to the real library instead of skipped.
+runs:
+  using: composite
+  steps:
+    - name: Fetch the pinned jars
+      shell: bash
+      env:
+        JARS: ${{ runner.temp }}/tdigest
+      run: |
+        set -euo pipefail
+
+        mkdir -p "$JARS"
+
+        fetch() {
+          version="$1"
+          sha256="$2"
+          jar="$JARS/t-digest-$version.jar"
+
+          curl --fail --silent --show-error --location --retry 3 --output "$jar" \
+            "https://repo1.maven.org/maven2/com/tdunning/t-digest/$version/t-digest-$version.jar"
+
+          echo "$sha256  $jar" | sha256sum --check --strict --quiet
+        }
+
+        fetch 3.1 271f3a5a4bc79d7554c9e9e557669af83bcbda0db871e0b8c969d56e51c123a9
+        fetch 3.3 dc8be5228e0733e12fbe35eeffb6f720dff576bb2eb5dee69c1c211adcd7aeb9
+
+        echo "GALAXIO_TDIGEST_JARS=$JARS" >> "$GITHUB_ENV"
+        echo "GALAXIO_ETALON_REQUIRED=1" >> "$GITHUB_ENV"

@@ -74,13 +74,13 @@ func envOr(name, fallback string) string {
 // run to what Gatling printed: the live half of the proof research.md §17
 // describes. For every version it renders galaxio's own gatling/scala-sbt
 // template with the galaxio binary, runs the template's Stability simulation at
-// 3000 rpm against a stub that serves every version the same responses, and
-// compares the summary with the console and global_stats.json as
-// TestSummaryMatchesLiveGatlingRuns compares the committed recordings, which
-// GALAXIO_LIVE_RECORD writes.
+// 3000 rpm against a stub that serves every version the same responses, runs
+// the etalon over the fresh log, and compares the summary with the console,
+// global_stats.json and the etalon as TestSummaryMatchesLiveGatlingRuns compares
+// the committed recordings, which GALAXIO_LIVE_RECORD writes.
 //
-// It runs only with GALAXIO_LIVE_GATLING=1, because it needs a JDK, sbt and the
-// network, and takes about five minutes a version. GALAXIO_LIVE_VERSIONS lists
+// It runs only with GALAXIO_LIVE_GATLING=1, because it needs a JDK, sbt, the two
+// t-digest jars and the network, and takes about five minutes a version. GALAXIO_LIVE_VERSIONS lists
 // the versions and GALAXIO_LIVE_STEADY shortens the steady stage. The template
 // comes from the published registry, with every input RECORDING.md lists set as
 // the committed recordings set it; GALAXIO_LIVE_TEMPLATES names another pack
@@ -94,6 +94,12 @@ func TestReportLiveGatling(t *testing.T) {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("%s is not on the path: %v", tool, err)
 		}
+	}
+
+	// The etalon needs both t-digest jars; finding them now skips before a
+	// Gatling run rather than after it.
+	for _, jar := range tdigestJars {
+		tdigestJar(t, jar.version, jar.sha256)
 	}
 
 	steady, err := time.ParseDuration(envOr("GALAXIO_LIVE_STEADY", "4m"))
@@ -185,7 +191,7 @@ func TestReportLiveGatling(t *testing.T) {
 				t.Errorf("galaxio report printed\n%s\nwithout %q", reported, requests)
 			}
 
-			durations := liveDurations(t, log)
+			durations := outcomeDurations(t, log)
 			reference := strings.HasPrefix(version, "3.11.") || strings.HasPrefix(version, "3.12.")
 
 			printed, err := reporttest.ParseConsole(string(console))
@@ -193,7 +199,16 @@ func TestReportLiveGatling(t *testing.T) {
 				t.Fatalf("parse the console: %v", err)
 			}
 
-			differences, notes := reporttest.Compare(observed(summary), printed, durations, reference)
+			given := runEtalon(t, log)
+
+			etalon, err := reporttest.ReadEtalon(given)
+			if err != nil {
+				t.Fatalf("ReadEtalon: %v", err)
+			}
+
+			report(t, reporttest.Compare(observed(summary), printed, durations), nil)
+
+			differences, notes := reporttest.ComparePercentiles(observed(summary), etalon, printed, reference, durations)
 			report(t, differences, notes)
 
 			stats, err := os.ReadFile(filepath.Join(runDir, "js", "global_stats.json"))
@@ -208,23 +223,25 @@ func TestReportLiveGatling(t *testing.T) {
 					t.Fatalf("decode global_stats.json: %v", err)
 				}
 
-				differences, notes := reporttest.Compare(observed(summary), written, durations, reference)
+				report(t, reporttest.Compare(observed(summary), written, durations), nil)
+
+				differences, notes := reporttest.ComparePercentiles(observed(summary), etalon, written, reference, durations)
 				report(t, differences, notes)
 			}
 
 			if dir := os.Getenv("GALAXIO_LIVE_RECORD"); dir != "" {
-				recordLiveRun(t, filepath.Join(dir, version), log, console, stats)
+				recordLiveRun(t, filepath.Join(dir, version), log, console, stats, given)
 			}
 		})
 	}
 }
 
 // recordLiveRun keeps what a live run left for the ordinary suite: the log,
-// compressed, the Global Information block of the console, and
-// global_stats.json where Gatling wrote one. The rest of the console — the
-// progress blocks, and the build tool's lines naming paths on this machine — is
-// not kept.
-func recordLiveRun(t *testing.T, dir string, log, console, stats []byte) {
+// compressed, the Global Information block of the console, global_stats.json
+// where Gatling wrote one, and what the etalon gave for the log. The rest of
+// the console — the progress blocks, and the build tool's lines naming paths on
+// this machine — is not kept.
+func recordLiveRun(t *testing.T, dir string, log, console, stats, etalon []byte) {
 	t.Helper()
 
 	block, err := reporttest.GlobalInformation(string(console))
@@ -251,7 +268,7 @@ func recordLiveRun(t *testing.T, dir string, log, console, stats []byte) {
 		t.Fatalf("compress the log: %v", err)
 	}
 
-	files := map[string][]byte{"simulation.log.gz": compressed.Bytes(), "console.txt": []byte(block)}
+	files := map[string][]byte{"simulation.log.gz": compressed.Bytes(), "console.txt": []byte(block), "etalon.tsv": etalon}
 	if stats != nil {
 		if err := os.MkdirAll(filepath.Join(dir, "js"), 0o755); err != nil {
 			t.Fatalf("create %s: %v", dir, err)

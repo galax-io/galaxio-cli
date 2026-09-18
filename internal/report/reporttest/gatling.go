@@ -14,6 +14,17 @@ import (
 // recorded run changed.
 var GatlingRanks = [4]float64{50, 75, 95, 99}
 
+// Versions are the Gatling releases the corpus holds a run of, oldest first.
+var Versions = []string{"3.11.5", "3.12.0", "3.13.1", "3.14.9", "3.15.1"}
+
+// IsReference reports whether a recording of this Gatling version is one whose
+// printed percentiles this tool's must equal: 3.11.x and 3.12.x compute them
+// over t-digest 3.1, and later versions over the miscount of
+// tdunning/t-digest#230 (research §18).
+func IsReference(version string) bool {
+	return strings.HasPrefix(version, "3.11.") || strings.HasPrefix(version, "3.12.")
+}
+
 // Recorded is what Gatling itself printed or wrote about a run as a whole: each
 // figure for all, successful and failed requests, in that order, and the four
 // response-time bands. A figure Gatling left empty is marked absent.
@@ -333,10 +344,9 @@ type Observed struct {
 // Compare returns, one sentence each, every whole-run figure of observed that
 // differs from what Gatling recorded and every percentile that breaks the rank
 // rule over the run's own response times, durations holding them for all,
-// successful and failed requests. Gatling's own percentiles are held to the
-// same rule when reference is true — for the versions whose digest has no known
-// defect — and otherwise only described, in notes.
-func Compare(observed Observed, recorded Recorded, durations [3][]int64, reference bool) (differences, notes []string) {
+// successful and failed requests. Gatling's own percentiles are not read here:
+// ComparePercentiles holds this tool's to them.
+func Compare(observed Observed, recorded Recorded, durations [3][]int64) (differences []string) {
 	differ := func(format string, args ...any) { differences = append(differences, fmt.Sprintf(format, args...)) }
 	columns := [3]string{"all", "ok", "failed"}
 
@@ -377,22 +387,6 @@ func Compare(observed Observed, recorded Recorded, durations [3][]int64, referen
 				differ("%s p%v = %d misplaces the rank by %.5f, over the rule's %.5f", columns[i], rank, got, misplaced, tolerance)
 			}
 		}
-
-		for j, rank := range GatlingRanks {
-			value := recorded.Percentiles[j][i]
-			if !value.Present {
-				continue
-			}
-
-			misplaced, tolerance := RankMisplacement(sorted, value.N, rank), RankTolerance(rank, len(sorted))
-
-			switch {
-			case reference && misplaced > tolerance:
-				differ("Gatling's %s p%v = %d misplaces the rank by %.5f, over the rule's %.5f", columns[i], rank, value.N, misplaced, tolerance)
-			case !reference:
-				notes = append(notes, fmt.Sprintf("Gatling's %s p%v = %d misplaces the rank by %.5f where the rule allows %.5f; not a reference", columns[i], rank, value.N, misplaced, tolerance))
-			}
-		}
 	}
 
 	for i, count := range observed.Bands {
@@ -406,7 +400,7 @@ func Compare(observed Observed, recorded Recorded, durations [3][]int64, referen
 		}
 	}
 
-	return differences, notes
+	return differences
 }
 
 // matches compares a figure with what Gatling recorded: exactly when Gatling

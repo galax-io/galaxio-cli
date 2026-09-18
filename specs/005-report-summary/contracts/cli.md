@@ -63,15 +63,16 @@ all                       0     89    353      1      1   1427   1502   1503
 █░░░░░░░░░░░░░░░░░░░   5.88 %     6  ok 1200 ms and over
 ████░░░░░░░░░░░░░░░░  17.65 %    18  failed
 
-times in ms · percentiles are galaxio's t-digest estimates, interpolated; not Gatling's
+times in ms · percentiles are galaxio's t-digest estimates, interpolated
 ```
 
-Every non-percentile figure above is what Gatling recorded for this run; the percentiles are
-this tool's. **`p95` of all requests is 1427 although no request took between 8 and
-1501 ms** — the known divergence of the library's default quantile, documented in the README
-with this run as its example and
-[caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42) as the change that removes
-it.
+Every non-percentile figure above is what Gatling recorded for this run, and every
+percentile is what Gatling 3.11's digest gives for its log. **`p95` of all requests is 1427
+although no request took between 8 and 1501 ms**: the default quantile interpolates, as
+Gatling 3.11's does, which the README documents with this run as its example; Gatling 3.13.1
+printed 1072 for it because of
+[tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230), and the read by
+rank of [caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42) would print 1502.
 
 **The one change to the run description**: its requests line said `102 (84 ok, 18 ko)` in
 v0.13.0. `ko` is Gatling's word; the two outcomes are `ok` and `failed` on every line this
@@ -101,7 +102,7 @@ comes to read.
    request whatever its time. With `--bounds 5,1000` they read `ok under 5 ms`,
    `ok 5 to 1000 ms`, `ok 1000 ms and over`.
 4. **Closing line** — the unit of every time, and the percentile statement: whose estimate a
-   percentile is, how it is defined, and that it is not Gatling's.
+   percentile is and how it is defined.
 
 **Numbers**: times are whole milliseconds. Rates and shares have at most two decimals,
 trailing zeros removed, a point as the decimal separator and no thousands separator. The
@@ -196,7 +197,8 @@ is printed and the exit code is 1. A damaged log prints no summary, as in v0.13.
 - Counts, minimum, maximum, mean and standard deviation are exact; they equal what Gatling
   recorded for every run of the corpus.
 - Percentiles are estimates from a t-digest at the library's defaults, labelled as this
-  tool's, never presented as Gatling's. The same log always gives the same percentiles. Up
+  tool's; for a Gatling run each equals the one Gatling 3.11's digest gives for the same log
+  (research.md §18). The same log always gives the same percentiles. Up
   to 200 requests an outcome's percentile lies between the two recorded response times
   around its position; at any size it misplaces its rank by at most 4·q·(1−q)/100 of the
   requests plus one (research.md §2).

@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
+	"github.com/galax-io/parsec/gatling/simlog"
 	"github.com/galax-io/parsec/model"
 )
 
@@ -74,29 +76,35 @@ func liveLog(t *testing.T, version string) []byte {
 	return log.Bytes()
 }
 
-// liveDurations returns a recording's response times for all, successful and
-// failed requests, sorted.
-func liveDurations(t *testing.T, log []byte) [3][]int64 {
+// outcomeDurations returns a recorded log's response times for all, successful
+// and failed requests, sorted.
+func outcomeDurations(t *testing.T, log []byte) [3][]int64 {
 	t.Helper()
 
-	keeps := [3]func(model.Outcome) bool{
-		func(o model.Outcome) bool { return o == model.OutcomeSuccess || o == model.OutcomeFailure },
-		func(o model.Outcome) bool { return o == model.OutcomeSuccess },
-		func(o model.Outcome) bool { return o == model.OutcomeFailure },
-	}
-
-	var durations [3][]int64
-
-	for i, keep := range keeps {
-		sorted, err := reporttest.Durations(openBytes(t, log), keep)
-		if err != nil {
-			t.Fatalf("Durations: %v", err)
-		}
-
-		durations[i] = sorted
+	durations, err := reporttest.Durations(openBytes(t, log))
+	if err != nil {
+		t.Fatalf("Durations: %v", err)
 	}
 
 	return durations
+}
+
+// readEtalon reads what the real t-digest libraries give for the run recorded
+// in dir, the etalon.tsv TestEtalonRecordings keeps beside it.
+func readEtalon(t *testing.T, dir string) reporttest.Etalon {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(dir, "etalon.tsv"))
+	if err != nil {
+		t.Fatalf("read etalon.tsv: %v", err)
+	}
+
+	etalon, err := reporttest.ReadEtalon(data)
+	if err != nil {
+		t.Fatalf("ReadEtalon: %v", err)
+	}
+
+	return etalon
 }
 
 // observed puts a summary in the shape a comparison with Gatling reads.
@@ -127,9 +135,10 @@ func report(t *testing.T, differences, notes []string) {
 // gatling/scala-sbt template and served the same responses whatever the
 // version (RECORDING.md) — to what Gatling printed on its console and, up to
 // 3.13.x, wrote in global_stats.json: every non-percentile whole-run figure
-// equal, and every percentile within the rank rule over the run's own log. The
-// percentiles Gatling 3.11.x and 3.12.x printed are the reference and are held
-// to the same rule; later versions' are reported, not held, because of
+// equal, and every percentile within the rank rule over the run's own log and
+// equal to Gatling 3.11's — a value its digest gives for the log, per the
+// etalon.tsv beside it, and for 3.11.5 and 3.12.0 the value they printed. What
+// later versions printed is described, not held, because of
 // tdunning/t-digest#230.
 func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 	t.Parallel()
@@ -145,8 +154,8 @@ func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 				t.Fatalf("Scan: %v", err)
 			}
 
-			durations := liveDurations(t, log)
-			reference := strings.HasPrefix(version, "3.11.") || strings.HasPrefix(version, "3.12.")
+			durations := outcomeDurations(t, log)
+			reference := reporttest.IsReference(version)
 
 			console, err := os.ReadFile(filepath.Join(liveDir(), version, "console.txt"))
 			if err != nil {
@@ -158,8 +167,12 @@ func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 				t.Fatalf("parse console.txt: %v", err)
 			}
 
+			etalon := readEtalon(t, filepath.Join(liveDir(), version))
+
 			t.Run("console", func(t *testing.T) {
-				differences, notes := reporttest.Compare(observed(summary), printed, durations, reference)
+				report(t, reporttest.Compare(observed(summary), printed, durations), nil)
+
+				differences, notes := reporttest.ComparePercentiles(observed(summary), etalon, printed, reference, durations)
 				report(t, differences, notes)
 			})
 
@@ -178,7 +191,9 @@ func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 			}
 
 			t.Run("global_stats.json", func(t *testing.T) {
-				differences, notes := reporttest.Compare(observed(summary), written, durations, reference)
+				report(t, reporttest.Compare(observed(summary), written, durations), nil)
+
+				differences, notes := reporttest.ComparePercentiles(observed(summary), etalon, written, reference, durations)
 				report(t, differences, notes)
 			})
 		})
@@ -221,5 +236,55 @@ func TestLiveGatlingRunsWereServedTheSameResponses(t *testing.T) {
 		if got != first {
 			t.Errorf("%s holds %+v, %s holds %+v: the runs were not served the same responses", version, got, versions[0], first)
 		}
+	}
+}
+
+// TestEtalonsAreOfTheirRuns holds every committed etalon.tsv to the run beside
+// it: the etalon names how many requests it was fed and the SHA-256 of what it
+// read, and both are recomputed here from the log, or from the synthetic run's
+// own requests, as reporttest.EtalonSamples writes them. The etalon itself runs
+// only where a JDK and the jars are (TestEtalonRecordings); this is what keeps a
+// file from standing for another run's numbers everywhere else.
+func TestEtalonsAreOfTheirRuns(t *testing.T) {
+	t.Parallel()
+
+	runs := map[string]func(t *testing.T) simlog.RunReader{}
+
+	for _, version := range reporttest.Versions {
+		runs[filepath.Join(corpusDir, version)] = func(t *testing.T) simlog.RunReader { return openBytes(t, corpusLog(t, version)) }
+	}
+
+	for _, version := range liveVersions(t) {
+		runs[filepath.Join(liveDir(), version)] = func(t *testing.T) simlog.RunReader { return openBytes(t, liveLog(t, version)) }
+	}
+
+	for _, synthetic := range syntheticRuns {
+		runs[syntheticDir(synthetic.name)] = func(*testing.T) simlog.RunReader { return reporttest.Items(model.Run{}, nil, synthetic.items()...) }
+	}
+
+	if len(runs) < 14 {
+		t.Fatalf("%d runs with an etalon, want the five of the corpus, the five live ones and the four synthetic", len(runs))
+	}
+
+	for dir, run := range runs {
+		t.Run(dir, func(t *testing.T) {
+			t.Parallel()
+
+			var samples bytes.Buffer
+			if err := reporttest.EtalonSamples(&samples, run(t)); err != nil {
+				t.Fatalf("EtalonSamples: %v", err)
+			}
+
+			etalon := readEtalon(t, dir)
+			sum := sha256.Sum256(samples.Bytes())
+
+			if got := bytes.Count(samples.Bytes(), []byte("\n")); got != etalon.Samples {
+				t.Errorf("the run holds %d requests with a recorded end, the etalon was fed %d", got, etalon.Samples)
+			}
+
+			if got := hex.EncodeToString(sum[:]); got != etalon.SHA256 {
+				t.Errorf("the run's samples have SHA-256 %s, the etalon was fed %s", got, etalon.SHA256)
+			}
+		})
 	}
 }

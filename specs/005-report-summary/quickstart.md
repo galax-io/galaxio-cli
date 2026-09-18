@@ -53,16 +53,17 @@ dist/galaxio report gatling $C/3.13.1 --percentiles 99.9,90 | grep -E '^response
 dist/galaxio report gatling $C/3.13.1 --percentiles 0; echo "exit=$?"
 dist/galaxio report gatling $C/3.13.1 --percentiles 50,abc; echo "exit=$?"
 grep -n -E 'go-tdigest/pull/42|1427' README.md
-grep -rln -E 'percentiles[1-4]' --include='*_test.go' .
+go test -run 'TestPercentilesEqualGatling311|TestSummaryMatchesLiveGatlingRuns' -v ./internal/report/
 ```
 
 Expected: the `all` row carries `1427` under `p95` and `1502` under `p99`, and the closing
-line says the percentiles are galaxio's t-digest estimates and not Gatling's; the heading
+line says the percentiles are galaxio's t-digest estimates, interpolated; the heading
 line of the second command carries `p90` then `p99.9` and no other rank; exit 2 with nothing
 on standard output for both bad values, the error quoting the value; the README names the
-1427/1502 example, the upstream pull request and the rule; the last `grep` lists only the
-tests that hold Gatling 3.11.x and 3.12.x percentiles to the rank rule as a reference —
-no test compares a Gatling percentile with one this tool prints.
+1427/1502 example, the upstream pull request and the rule; the last command passes: every
+percentile of the ten recordings is a value Gatling 3.11's digest gives for the log and
+equals what 3.11.5 and 3.12.0 printed, and its log only describes what 3.13.1, 3.14.9 and
+3.15.1 printed and what `MergingDigest` gives (research.md §18).
 
 ## 3. Bands at other boundaries (US3)
 
@@ -143,18 +144,24 @@ rec=$(mktemp -d)
 GALAXIO_LIVE_GATLING=1 GALAXIO_LIVE_RECORD=$rec go test -tags=integration -run TestReportLiveGatling -timeout 60m -v ./internal/report/
 GALAXIO_LIVE_RECORDINGS=$rec go test -run 'TestSummaryMatchesLiveGatlingRuns|TestLiveGatlingRunsWereServedTheSameResponses' -v ./internal/report/
 go test -run 'TestSummaryMatchesLiveGatlingRuns|TestLiveGatlingRunsWereServedTheSameResponses' -v ./internal/report/
+go test -tags=integration -run TestEtalonRecordings -v ./internal/report/
 ```
 
 Expected: the first command takes about five minutes a version and passes for 3.11.5, 3.12.0,
 3.13.1, 3.14.9 and 3.15.1 — the template rendered from the published registry, every
-non-percentile figure equal to what Gatling printed, every percentile within the rank rule,
-and Gatling's own 3.11.5 and 3.12.0 percentiles within it too; the log describes how far the
-later versions' percentiles misplace their ranks. `GALAXIO_LIVE_VERSIONS=3.11.5` runs one
+non-percentile figure equal to what Gatling printed, every percentile within the rank rule and
+a value Gatling 3.11's digest gives for the fresh log, run by the etalon, and on 3.11.5 and
+3.12.0 equal to what Gatling printed or another value its generator draws; the log describes
+what the later versions printed and what `MergingDigest` gives. It needs the t-digest 3.1 and
+3.3 jars in `GALAXIO_TDIGEST_JARS`, the local Maven repository or the Coursier cache, and
+skips before running Gatling without them. `GALAXIO_LIVE_VERSIONS=3.11.5` runs one
 version, `GALAXIO_LIVE_STEADY=20s` shortens the steady stage, and
 `GALAXIO_LIVE_TEMPLATES=local:<checkout>` renders a local templates-gatling checkout instead.
 The second command holds the fresh recordings to the same, and logs the same requests, ok and
 failed for every version. The third does it on the committed recordings, without a JDK: 12 250
-requests (12 010 ok, 240 failed) a version, and the figures of research.md §17.
+requests (12 010 ok, 240 failed) a version, and the figures of research.md §17 and §18. The
+fourth reruns the etalon over the ten recordings and passes when every `etalon.tsv` is
+reproduced byte for byte; `GALAXIO_ETALON_RECORD=1` rewrites them.
 
 ## 9. Gates
 

@@ -117,7 +117,8 @@ percentile of the recorded 3.13.1 run, whose request at that rank took 1502 ms. 
 percentile may differ is a rule the tests hold every percentile to (research.md §2): up to
 200 requests it lies between the two recorded values around its position, and at any size
 it misplaces its rank by at most 4·q·(1−q)/100 of the requests plus one. The tests pin the
-corpus values and hold them to that rule, the README explains both, and
-[caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42) removes it upstream. No
-field or flag of this model exists for it: taking the upstream read is a later change to
-one call.
+corpus values and hold them to that rule, the README explains both, and Gatling 3.11's
+digest gives the same 1427 for that log, which the tests assert with every other percentile
+(research.md §18). [caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42) proposes
+a read by rank that would print 1502 and so part from Gatling 3.11. No field or flag of this
+model exists for it.

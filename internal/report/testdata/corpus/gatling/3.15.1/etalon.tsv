@@ -1,0 +1,15 @@
+# t-digest 3.1 AVLTreeDigest(100) over seeds 1-200 and t-digest 3.3 MergingDigest(100), each read as Math.round(quantile(rank / 100))
+# samples 102 sha256 2a6a7e04d6f07a423b9682ae53e313062b1dcec2c19d3d2069705c1bf804d9bb
+column	rank	avl-3.1	merging-3.3
+all	50	0	0
+all	75	1	1
+all	95	1427	1502
+all	99	1502	1502
+ok	50	0	0
+ok	75	1	1
+ok	95	1502	1502
+ok	99	1502	1502
+failed	50	2	2
+failed	75	2	2
+failed	95	3	3
+failed	99	3	3
