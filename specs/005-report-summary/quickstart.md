@@ -116,8 +116,9 @@ go test -run '^$' -bench 'BenchmarkRunReport' ./cmd/galaxio/
 ```
 
 Expected: in the terminal, the six-line block of [contracts/cli.md](contracts/cli.md) — a
-spinner, the log's name, a bar, a percentage that never passes 100, the time left, and the
-figures so far for all, ok and failed requests — first seen within a second, redrawn at
+spinner, the log's name, a bar, a percentage that never passes 100, the time left, the line
+saying the percentiles are estimates, and the figures so far for all, ok and failed
+requests — first seen within a second, redrawn at
 least once a second, never scrolling, and gone when the report appears. `0` bytes on the
 redirected standard error and `stdout identical`. Nothing drawn under `TERM=dumb` or
 `--quiet`. After Ctrl-C the block is gone, the error stands on a clean line, and the

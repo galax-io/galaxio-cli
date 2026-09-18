@@ -486,9 +486,11 @@ standard error received.
   control sequence.
 - **FR-038**: The block MUST carry a progress bar with the share of the log read so far, as
   a percentage of its bytes that never exceeds 100, and, once it can be estimated, the time
-  left; and beneath it the figures so far for all, ok and failed requests: the count, the
-  share, the minimum, the mean, the median, the 95th and 99th percentile and the maximum.
-  It MUST NOT carry a request rate, which needs the span of the whole run.
+  left; a line saying that the figures are so far, that times are in milliseconds and that
+  the percentiles are estimates and how they are computed (FR-019); and beneath it the
+  figures so far for all, ok and failed requests: the count, the share, the minimum, the
+  mean, the median, the 95th and 99th percentile and the maximum. It MUST NOT carry a
+  request rate, which needs the span of the whole run.
 - **FR-039**: The block MUST have a fixed height and every line of it MUST fit 80 columns. It
   MUST be redrawn in place without scrolling, no more often than five times a second and at
   least once a second while records keep arriving, and MUST be erased before anything else
@@ -561,22 +563,26 @@ standard error received.
   [caio/go-tdigest#42](https://github.com/caio/go-tdigest/pull/42) corrects the known
   divergence but is unreleased; this milestone only records that it exists (FR-020, FR-022)
   and does not carry its own copy of that read.
-- **This decision does not meet one clause of the constitution, so that clause is amended
-  first (clarified 2026-09-17).** Principle II (v2.1.0) requires percentiles to be exact over
-  the samples recorded and requires the command to refuse where a bounded-memory accumulator
-  cannot keep them exact. A digest's quantile is an estimate — on the 3.13.1 run it is not
+- **This decision did not meet one clause of the constitution, so that clause was amended
+  first (clarified 2026-09-17).** Principle II (v2.1.0) required percentiles to be exact over
+  the samples recorded and required the command to refuse where a bounded-memory accumulator
+  could not keep them exact. A digest's quantile is an estimate — on the 3.13.1 run it is not
   the recorded value, and on a large continuous run it stays an estimate even with the
-  upstream read by rank — so the conflict is permanent, not a gap to be waited out. The
-  clause is therefore amended before any implementation, by the procedure
-  [#112](https://github.com/galax-io/galaxio-cli/issues/112) followed: its own issue and its
-  own pull request inside milestone `v0.14.0`, which the maintainer requested explicitly in
-  this clarification, as the one-milestone-one-PR rule requires for a split. The amendment
-  states that percentiles are labelled, deterministic estimates of a bounded-memory digest,
-  while counts, minimum, maximum, mean and standard deviation stay exact. The plan's
-  Constitution Check is written against the amended text. The other clauses of Principle II
-  are already met: percentiles are never presented as Gatling's, every output says whose
-  definition it is, accumulation is one pass in bounded memory, and absence is reported as
-  absent.
+  upstream read by rank — so the conflict was permanent, not a gap to be waited out. The
+  clause was therefore amended before any implementation, by the procedure
+  [#112](https://github.com/galax-io/galaxio-cli/issues/112) followed: its own issue,
+  [#114](https://github.com/galax-io/galaxio-cli/issues/114), and its own pull request,
+  [#115](https://github.com/galax-io/galaxio-cli/pull/115), merged on 2026-09-17 inside
+  milestone `v0.14.0`, as the maintainer requested explicitly in this clarification and as
+  the one-milestone-one-PR rule requires for a split. Constitution v2.2.0 admits a percentile
+  estimated by a bounded-memory sketch if it is deterministic, says wherever it is printed
+  that it is an estimate and how it is computed, has its estimator recorded in the feature's
+  research and its values for the corpus pinned in tests, and has a known divergence
+  documented with an example; counts, minimum, maximum, mean and standard deviation stay
+  exact. The plan's Constitution Check is written against that text. The other clauses of
+  Principle II are met as they were: percentiles are never presented as Gatling's, every
+  output says whose definition it is, accumulation is one pass in bounded memory, and
+  absence is reported as absent.
 - **Principle IV.** The digest library is a new direct dependency, named by the maintainer in
   the decision above. It is MIT, which is compatible with this repository's GPL-2.0-only
   licence, and its non-test code imports the standard library only. The plan records the
@@ -651,8 +657,8 @@ standard error received.
   requirements (milestone `v0.16.0`); tools other than Gatling; taking the upstream read by
   rank; the per-message error table; periodic progress lines for CI logs; asking the
   terminal for its width.
-- Dependencies: the amendment of Principle II's percentile clause (an issue still to be
-  filed in milestone `v0.14.0`) is merged before implementation starts; milestone
-  `v0.13.0 Read a run` (#50) delivers the single pass this feature folds over; `parsec`
-  v0.1.0 supplies the bounds and outcome definitions (parsec#8); constitution v2.1.0 (#112)
-  governs the `-o` surface and the percentile wording.
+- Dependencies: the amendment of Principle II's percentile clause (#114, merged as #115 on
+  2026-09-17) precedes implementation; milestone `v0.13.0 Read a run` (#50) delivers the
+  single pass this feature folds over; `parsec` v0.1.0 supplies the bounds and outcome
+  definitions (parsec#8); constitution v2.1.0 (#112) governs the `-o` surface and v2.2.0
+  (#115) the percentile wording.

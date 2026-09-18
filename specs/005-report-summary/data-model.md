@@ -27,9 +27,14 @@ nothing else about a sample is kept.
 | count | every request of this outcome, with or without a recorded end |
 | timed | those of them that carry a duration; the divisor of the mean and the deviation |
 | minimum, maximum | extremes in whole milliseconds; meaningless while `timed` is zero |
-| sum | sum of durations in milliseconds, 64 bits |
-| sum of squares | 128 bits, kept as two 64-bit halves |
+| sum | sum of durations in milliseconds, 128 bits kept as two 64-bit words |
+| sum of squares | 192 bits, kept as three 64-bit words |
 | digest | the library's t-digest at its defaults, created on the first timed request |
+
+A duration is at most 2⁶³−1 ns, under 2⁴³ ms, and a count is at most 2⁶³, so the sum stays
+under 2¹⁰⁶ and the sum of squares under 2¹⁴⁹: neither can wrap, for any run the command can
+read. A negative duration, which the library promises never to yield, counts as no recorded
+end.
 
 Derived when the summary is produced, in integers: the mean `floor((2·sum + timed) /
 (2·timed))`; the population deviation about the unrounded mean, rounded half up by comparing

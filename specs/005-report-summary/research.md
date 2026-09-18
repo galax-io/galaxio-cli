@@ -106,8 +106,10 @@ memory again and one more insertion per request, for the same numbers).
 ## 4. Exact figures: integer accumulators, arithmetic done when the figures are read
 
 **Decision**: per outcome keep the count, the count of requests that carry a duration, the
-minimum and maximum in whole milliseconds, the sum as `uint64` and the sum of squares as a
-128-bit pair maintained with `math/bits`. Mean and standard deviation are computed with
+minimum and maximum in whole milliseconds, the sum as a 128-bit pair and the sum of squares
+as three 64-bit words, both maintained with `math/bits`. A negative duration, which the
+library promises never to yield, counts as no recorded end, as the library's own `Bounds`
+treats one. Mean and standard deviation are computed with
 `math/big` when the summary is produced, never in floating point:
 
 - mean = `floor((2·sum + n) / (2·n))` — half up;
@@ -118,9 +120,14 @@ minimum and maximum in whole milliseconds, the sum as `uint64` and the sum of sq
 **Rationale**: issue #51 settled each formula against the `stats.json` Gatling wrote for the
 3.11.5, 3.12.0 and 3.13.1 recordings, with negative controls: half-up mean (banker's rounding
 mismatches 8 fields, truncation 49), population deviation about the unrounded mean (the
-sample deviation mismatches 12). The sum of squares of ten million samples of an hour each
-is about 1.3·10²⁰ and does not fit 64 bits; the 128-bit numerator of the variance does not
-wrap below 3·10³⁸.
+sample deviation mismatches 12). The widths are what makes them exact for any input: a
+duration is at most 2⁶³−1 ns, under 2⁴³ ms, and a count is at most 2⁶³, so the sum stays
+under 2¹⁰⁶ and the sum of squares under 2¹⁴⁹, and neither can wrap for any run the command
+can read — Principle II's refusal is never reached. The first design kept a 64-bit sum,
+which would wrap after about two million requests of the longest duration a log can
+hold; the log is untrusted input, so the re-check of 2026-09-17 (T003) widened both. The
+sum of squares of ten million requests of an hour each is already about 1.3·10²⁰, past
+64 bits.
 
 **Alternatives considered**: Gatling's own float form `sqrt(Σx²/n − mean²)` (rejected: it
 cancels catastrophically on large, tight data; both forms agree on every corpus field, and
@@ -274,26 +281,36 @@ before #52.
 **Rationale**: milestone v0.13.0 left them out because nothing read them (its research §9).
 They are MIT with the rest of the corpus; `PROVENANCE.md` gains the rows.
 
-## 13. The constitution amendment this feature waits for
+## 13. The constitution amendment this feature waited for
 
-**Decision** (clarified 2026-09-17): Principle II's percentile clause is amended first — its
+**Decision** (clarified 2026-09-17): Principle II's percentile clause was amended first — its
 own issue and pull request inside milestone `v0.14.0`, as #112/#113 were — and no
-implementation task starts before it is merged. The plan's gate II is written against the
-amended text. Proposed wording, replacing the second sentence of the third bullet and the
-whole of its refusal clause:
+implementation task started before it was merged: issue
+[#114](https://github.com/galax-io/galaxio-cli/issues/114), pull request
+[#115](https://github.com/galax-io/galaxio-cli/pull/115), merged 2026-09-17, constitution
+v2.2.0 (MINOR). The ratified bullet:
 
-> Counts, minimum, maximum, mean and standard deviation MUST be exact over the samples the
-> source recorded. Percentiles are estimates read from a bounded-memory digest: they MUST be
-> deterministic — the same log yields the same percentiles — and every output carrying one
-> MUST say that it is this tool's estimate and how it is defined. Where an estimate is known
-> to differ from the value recorded at the percentile's rank, the documentation MUST say so
-> with an example.
+> A percentile MAY be an estimate read from a bounded-memory sketch rather than an exact
+> order statistic: an exact one needs every sample or a histogram as wide as the range of
+> values, and a log of any size bounds neither. An estimate MUST be deterministic — the same
+> log yields the same percentiles — and every output carrying one MUST say that it is an
+> estimate and how it is computed. Its estimator, the estimator's parameters and how it is
+> read MUST be recorded in the feature's `research.md`, and its values for the recorded
+> corpus MUST be pinned in tests, so that changing any of the three fails a test instead of
+> moving printed numbers in silence. Where an estimate is known to differ from the value
+> recorded at the percentile's rank, the documentation MUST say so with an example.
 
-The fourth bullet — no parity with another tool's percentiles claimed, tested for or offered
-as a diff — stands unchanged. The amendment also updates gate II of
-`.specify/templates/plan-template.md`, which still says "every figure exact, percentiles
-included, with a refusal rather than an estimate", bumps the version and rewrites the Sync
-Impact Report, as the Governance section requires.
+Counts, minimum, maximum, mean and standard deviation stay exact, with a refusal where one
+cannot be kept exact, and the bullet forbidding parity with another tool's percentiles is
+unchanged. The ratified text differs from the wording first proposed here: it admits an
+estimate rather than requiring one, so an exact percentile stays compliant, and it adds the
+recorded estimator and the pinned corpus values. Gate II of
+`.specify/templates/plan-template.md` changed with it.
+
+**How this feature meets it**: the estimator, its parameters and its read are §1 and §2; the
+values for the five corpus runs are pinned by T007; the summary's closing line and the
+progress block's second line say that the percentiles are t-digest estimates, interpolated
+(§15); the README documents the 1427-for-1502 case (FR-020).
 
 **Also outside this pull request**: issue #51's text needs amending to match the
 specification — `-o json`, per-request figures in the text output, the exact histogram with
@@ -329,6 +346,10 @@ Its layout is in [contracts/cli.md](contracts/cli.md).
   the figure leads the records by one block, which is tens of kilobytes. A size of zero or a
   file that is not regular leaves all three out. The time left is the elapsed time scaled by
   the bytes still to read, from the second draw.
+- **The second line** says, faintly, `figures so far · times in ms · percentiles are t-digest
+  estimates, interpolated`. Principle II (v2.2.0) asks every output carrying a percentile to
+  say that it is an estimate and how it is computed, and the block is such an output; the
+  first design left the line blank, and the re-check of 2026-09-17 (T003) filled it.
 - **Figures**: for all, ok and failed requests — the count, the share, the minimum, the
   half-up mean, the 50th, 95th and 99th percentile and the maximum. All requests are read
   from a clone of the ok digest merged with the failed one, the same read the final figures
