@@ -374,7 +374,7 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		options.Bands = opts.Bounds
 	}
 
-	summary, scanErr := src.Scan(ctx, options)
+	summary, scanErr := src.Scan(ctx, options, nil)
 	out.Summary = summary
 
 	// The log is named here, once, so that the failure reads the same whether

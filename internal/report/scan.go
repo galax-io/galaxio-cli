@@ -72,11 +72,17 @@ type Tally struct {
 // read failure returns the summary walked so far and an error saying the run
 // was not read completely. A cancelled ctx returns its error.
 //
+// tick, when not nil, is called with the summary so far every
+// cancelCheckInterval items, in the goroutine that walks, before the context is
+// looked at: a progress display reads the walk there and costs it nothing
+// between calls. The summary it is given shares the walk's digests, so it must
+// be read inside the call and never kept.
+//
 // rd must not have been walked already. A reader yields its items once, so a
 // second walk returns an empty summary and no error, which no caller can tell
 // from a run that recorded nothing. [Source.Scan] holds that precondition for
 // the open runs this package hands out; a caller holding a bare reader owns it.
-func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, error) {
+func Scan(ctx context.Context, rd simlog.RunReader, opts Options, tick func(Summary)) (Summary, error) {
 	opts, err := opts.Normalize()
 	if err != nil {
 		return Summary{}, err
@@ -86,6 +92,10 @@ func Scan(ctx context.Context, rd simlog.RunReader, opts Options) (Summary, erro
 
 	for n := 0; ; n++ {
 		if n%cancelCheckInterval == 0 {
+			if tick != nil {
+				tick(s)
+			}
+
 			if err := ctx.Err(); err != nil {
 				return s, err
 			}

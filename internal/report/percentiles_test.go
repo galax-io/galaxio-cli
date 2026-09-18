@@ -61,7 +61,7 @@ func TestPercentilesCorpus(t *testing.T) {
 
 			log := corpusLog(t, tt.version)
 
-			first, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			first, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -75,7 +75,7 @@ func TestPercentilesCorpus(t *testing.T) {
 				}
 			}
 
-			second, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			second, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -105,7 +105,7 @@ func TestPercentilesAllRequestsAsOneDigest(t *testing.T) {
 
 			log := corpusLog(t, version)
 
-			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -355,7 +355,7 @@ func TestPercentilesRule(t *testing.T) {
 		for _, version := range reporttest.Versions {
 			log := corpusLog(t, version)
 
-			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("%s: Scan: %v", version, err)
 			}
@@ -496,7 +496,7 @@ func TestPercentilesEqualGatling311(t *testing.T) {
 
 			log := corpusLog(t, version)
 
-			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}

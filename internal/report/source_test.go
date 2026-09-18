@@ -592,7 +592,7 @@ func TestSourceScanRefusesASecondWalk(t *testing.T) {
 
 	defer func() { _ = src.Close() }()
 
-	first, err := src.Scan(context.Background(), DefaultOptions())
+	first, err := src.Scan(context.Background(), DefaultOptions(), nil)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
@@ -601,7 +601,7 @@ func TestSourceScanRefusesASecondWalk(t *testing.T) {
 		t.Fatalf("the corpus run recorded no requests: %+v", first.Tally)
 	}
 
-	second, err := src.Scan(context.Background(), DefaultOptions())
+	second, err := src.Scan(context.Background(), DefaultOptions(), nil)
 	if !errors.Is(err, ErrSpent) {
 		t.Errorf("a second walk returned %+v, %v; want ErrSpent", second.Tally, err)
 	}
@@ -615,8 +615,57 @@ func TestSourceScanRefusesASecondWalk(t *testing.T) {
 	// nothing.
 	_ = src.Close()
 
-	if _, err := src.Scan(context.Background(), DefaultOptions()); !errors.Is(err, ErrSpent) {
+	if _, err := src.Scan(context.Background(), DefaultOptions(), nil); !errors.Is(err, ErrSpent) {
 		t.Errorf("a walk after Close returned %v, want ErrSpent", err)
+	}
+}
+
+// TestSourceRefusesOptionsBeforeItIsSpent holds what a caller needs to correct
+// a refusal: options no summary can be computed at are refused before the walk
+// is spent, so the same source reads the run once the caller has fixed them.
+func TestSourceRefusesOptionsBeforeItIsSpent(t *testing.T) {
+	t.Parallel()
+
+	loc, err := Locate(filepath.Join(corpusDir, "3.13.1"))
+	if err != nil {
+		t.Fatalf("locate: %v", err)
+	}
+
+	src, err := Open(loc)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	defer func() { _ = src.Close() }()
+
+	if _, err := src.Scan(context.Background(), Options{}, nil); err == nil || errors.Is(err, ErrSpent) {
+		t.Fatalf("a walk at no options returned %v, want the options refused", err)
+	}
+
+	summary, err := src.Scan(context.Background(), DefaultOptions(), nil)
+	if err != nil {
+		t.Fatalf("the walk after a refusal: %v", err)
+	}
+
+	if summary.Tally.Requests == 0 {
+		t.Errorf("the walk after a refusal read nothing: %+v", summary.Tally)
+	}
+}
+
+// TestZeroSourceMeasuresNothing holds a Source nothing was opened for to the
+// answers the progress block reads from one: it has read nothing and knows no
+// size, rather than panicking on the first draw.
+func TestZeroSourceMeasuresNothing(t *testing.T) {
+	t.Parallel()
+
+	var s Source
+
+	if n := s.BytesRead(); n != 0 {
+		t.Errorf("BytesRead = %d, want 0", n)
+	}
+
+	if size, known := s.Size(); known || size != 0 {
+		t.Errorf("Size = %d, %v; want 0, false", size, known)
 	}
 }
 
@@ -634,5 +683,90 @@ func TestErrNoPathWrapsTheLibrary(t *testing.T) {
 	// omit, which a library has no argument to name.
 	if !strings.Contains(ErrNoPath.Error(), run.DefaultResultsRoot) {
 		t.Errorf("ErrNoPath = %q, want it to name %s", ErrNoPath, run.DefaultResultsRoot)
+	}
+}
+
+// TestSourceCountsTheBytesRead holds the measure a progress display reads: the
+// bytes taken never pass the size the log had when it was opened, and reach it
+// when the walk ends, for every corpus run.
+func TestSourceCountsTheBytesRead(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"3.11.5", "3.12.0", "3.13.1", "3.14.9", "3.15.1"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+
+			dir := filepath.Join(corpusDir, version)
+
+			src, err := Open(run.Location{Dir: dir, Log: filepath.Join(dir, "simulation.log")})
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+
+			defer func() { _ = src.Close() }()
+
+			size, known := src.Size()
+
+			info, err := os.Stat(filepath.Join(dir, "simulation.log"))
+			if err != nil {
+				t.Fatalf("stat: %v", err)
+			}
+
+			if !known || size != info.Size() {
+				t.Fatalf("Size() = %d, %v; want %d, true", size, known, info.Size())
+			}
+
+			tick := func(Summary) {
+				if read := src.BytesRead(); read > size {
+					t.Errorf("read %d bytes of a %d-byte log", read, size)
+				}
+			}
+
+			if _, err := src.Scan(context.Background(), DefaultOptions(), tick); err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+
+			if read := src.BytesRead(); read != size {
+				t.Errorf("the walk ended having read %d bytes of %d", read, size)
+			}
+		})
+	}
+}
+
+// fileInfo is a FileInfo of a chosen mode and size.
+type fileInfo struct {
+	fs.FileInfo
+	mode fs.FileMode
+	size int64
+}
+
+func (f fileInfo) Mode() fs.FileMode { return f.mode }
+func (f fileInfo) Size() int64       { return f.size }
+
+// TestKnownSize holds a size a display cannot go by to unknown: a device, a
+// pipe, and a file that was empty.
+func TestKnownSize(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		info     fileInfo
+		expected int64
+	}{
+		{name: "a regular file", info: fileInfo{mode: 0o644, size: 4096}, expected: 4096},
+		{name: "an empty file", info: fileInfo{mode: 0o644}, expected: 0},
+		{name: "a pipe", info: fileInfo{mode: fs.ModeNamedPipe | 0o600, size: 65536}, expected: 0},
+		{name: "a device", info: fileInfo{mode: fs.ModeDevice | fs.ModeCharDevice | 0o666, size: 1}, expected: 0},
+	}
+
+	for _, tt := range tests {
+		if got := knownSize(tt.info); got != tt.expected {
+			t.Errorf("%s: knownSize = %d, want %d", tt.name, got, tt.expected)
+		}
+	}
+
+	var s Source
+	if _, known := s.Size(); known {
+		t.Errorf("a source with no size says it knows one")
 	}
 }

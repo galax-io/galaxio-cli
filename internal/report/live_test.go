@@ -149,7 +149,7 @@ func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 
 			log := liveLog(t, version)
 
-			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions(), nil)
 			if err != nil {
 				t.Fatalf("Scan: %v", err)
 			}
@@ -215,7 +215,7 @@ func TestLiveGatlingRunsWereServedTheSameResponses(t *testing.T) {
 	versions := liveVersions(t)
 
 	for i, version := range versions {
-		summary, err := Scan(context.Background(), openBytes(t, liveLog(t, version)), DefaultOptions())
+		summary, err := Scan(context.Background(), openBytes(t, liveLog(t, version)), DefaultOptions(), nil)
 		if err != nil {
 			t.Fatalf("%s: Scan: %v", version, err)
 		}
