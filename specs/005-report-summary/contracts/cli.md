@@ -131,7 +131,7 @@ not `dumb`, and `--quiet` is not given** — a block of six lines is redrawn in 
 
 ```text
 ⠹ reading simulation.log  ━━━━━━━━━━━───────────────────   37 %  0:12 left
-
+figures so far · times in ms · percentiles are t-digest estimates, interpolated
                        count   share    min   mean    p50    p95    p99    max
 all requests           41.2M              0     47     38    212    840  60000
   ✓ ok                 40.9M  99.3 %      0     44     38    205    610   9800
@@ -143,6 +143,8 @@ all requests           41.2M              0     47     38    212    840  60000
   had when opened and `─` for the rest; that share as a percentage, never above 100; and,
   from the second draw, the time left as `m:ss` or `h:mm:ss`, estimated from the bytes still
   to read. When the size is unknown the line is the spinner and the name alone.
+- **Second line**: `figures so far · times in ms · percentiles are t-digest estimates, interpolated`, faint, whatever the read has reached — the statement
+  Principle II asks of every output that carries a percentile.
 - **Figures**: the requests read so far — exact below 10 000, then abbreviated (`12.3k`,
   `40.9M`, `1.2G`); the share of ok and failed with one decimal; and the minimum, the mean,
   the median, the 95th and 99th percentile and the maximum so far, in whole milliseconds.
