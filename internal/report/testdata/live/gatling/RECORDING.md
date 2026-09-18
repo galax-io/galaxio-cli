@@ -5,7 +5,9 @@ What five live Gatling runs left, one directory a version, for
 (galaxio-cli#51; `specs/005-report-summary/research.md` §17). Each run is galaxio's own
 `gatling/scala-sbt` template sending `GET /` at 50 requests a second for four minutes to a
 stub that serves every version the same responses. A recording is made once and is never
-edited or re-made; `TestReportLiveGatling` makes a new set in the same form.
+edited or re-made. `TestReportLiveGatling` makes a new set in the same form, but since
+galaxio-cli#117 it serves its runs from `reporttest.Mock`, a service that does real work, and
+not from the stub below.
 
 | Version | Log format | sbt ran (UTC, 2026-09-17) | Requests (console summary) |
 |---|---|---|---|
@@ -43,7 +45,8 @@ One version after another on one machine: macOS 26.6.2, Apple M2 Pro, OpenJDK 17
    intensity over the ramp, then holds it for the stage; each user sends one `GET /` and
    checks `status is 200`, so a run holds 250 + 12 000 = 12 250 requests.
 2. **The stub.** An HTTP server on 127.0.0.1 answering request i, counted from zero in the
-   order requests arrive, by `livePlan` in `internal/report/live_integration_test.go`: a
+   order requests arrive, by `livePlan` in `internal/report/live_integration_test.go` as tagged
+   `v0.14.0` (`git show v0.14.0:internal/report/live_integration_test.go`): a
    generator seeded with 20260917 and i picks 85 % waiting 5–40 ms, 8 % 80–400 ms, 3 %
    800–1199 ms, 2 % 1200–2000 ms, and 2 % answering 500 within 5 ms, which the check fails.
 3. **The run.** `sbt -batch "Gatling/testOnly org.galaxio.performance.live.Stability"` in the

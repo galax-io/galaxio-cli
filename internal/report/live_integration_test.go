@@ -9,57 +9,92 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"math/rand/v2"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
 )
 
-// liveSeed seeds the stub's plan, so that the responses are the same for every
-// recording ever made with this harness.
-const liveSeed = 20260917
+// liveScenario holds the Scala TestReportLiveGatling writes over the rendered
+// project, at the same paths under src/test/scala/org/galaxio/performance/live:
+// the requests of reporttest.Mock in cases/, and the scenario that sends them in
+// scenarios/. Every user GETs / as the template's own scenario does. Chosen by
+// their number, which Gatling gives in the order users start, 7 % of users also
+// GET /report and 3 % GET /export: every version sends the same requests, and a
+// second of work for each of 50 users a second would take 50 cores
+// (specs/006-live-mock/research.md §2). The same files compile on every version
+// the test runs.
+var liveScenario = filepath.Join("testdata", "live", "scenario")
 
-// livePlan returns how long request i waits and which status it answers with.
-// It depends on i alone, so every Gatling version is served the same responses
-// in the same order: 85 % within 5–40 ms, 8 % 80–400 ms, 3 % 800–1199 ms, 2 %
-// 1200–2000 ms, and 2 % a 500 within 5 ms, which the template's check fails.
-func livePlan(i uint64) (time.Duration, int) {
-	r := rand.New(rand.NewPCG(liveSeed, i))
-	ms := func(lo, hi int) time.Duration { return time.Duration(lo+r.IntN(hi-lo+1)) * time.Millisecond }
+// liveEndpoints are the requests liveScenario sends, by the names Gatling gives
+// them.
+var liveEndpoints = []string{"GET /", "GET /report", "GET /export"}
 
-	switch x := r.IntN(100); {
-	case x < 2:
-		return ms(1, 5), http.StatusInternalServerError
-	case x < 87:
-		return ms(5, 40), http.StatusOK
-	case x < 95:
-		return ms(80, 400), http.StatusOK
-	case x < 98:
-		return ms(800, 1199), http.StatusOK
-	default:
-		return ms(1200, 2000), http.StatusOK
+// servedEverything holds the mock to what Gatling printed of the run: no request
+// failed, and every endpoint of liveScenario succeeded. The mock is tested by
+// the Gatling run it serves and by nothing else; a summary equal to Gatling's
+// proves nothing about it, since Gatling records a broken endpoint as failed
+// requests the summary counts just as faithfully.
+func servedEverything(t *testing.T, console string, printed reporttest.Recorded) {
+	t.Helper()
+
+	if failed := printed.Count[2]; failed != 0 {
+		t.Errorf("Gatling printed %d failed requests where the mock fails none", failed)
+	}
+
+	for _, name := range liveEndpoints {
+		// Every progress block prints each request with its counts so far, and
+		// the last block holds the whole run: "> GET /  (OK=3250  KO=0 )" up to
+		// Gatling 3.13, and "> GET /  |  3,250 |  3,250 |  0" in columns of the
+		// total, ok and failed from 3.14.
+		line := regexp.MustCompile(`(?m)^> ` + regexp.QuoteMeta(name) + `\s+(?:\(OK=([\d,]+)\s+KO=[\d,]+\s*\)|\|\s*[\d,]+\s*\|\s*([\d,]+)\s*\|\s*[\d,]+)\s*$`)
+
+		lines := line.FindAllStringSubmatch(console, -1)
+		if len(lines) == 0 || strings.Trim(lines[len(lines)-1][1]+lines[len(lines)-1][2], "0,") == "" {
+			t.Errorf("Gatling printed no successful %s: the mock or the live scenario is broken", name)
+		}
 	}
 }
 
-// liveStub answers every request by livePlan, counting from zero.
-func liveStub() http.Handler {
-	var next atomic.Uint64
+// writeLiveScenario copies liveScenario into the project rendered at project,
+// and refuses a project whose template no longer renders a file it replaces:
+// the run would otherwise send requests nobody wrote here.
+func writeLiveScenario(t *testing.T, project string) {
+	t.Helper()
 
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		wait, status := livePlan(next.Add(1) - 1)
-		time.Sleep(wait)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_, _ = w.Write([]byte("{}"))
+	dir := filepath.Join(project, "src", "test", "scala", "org", "galaxio", "performance", "live")
+
+	err := filepath.WalkDir(liveScenario, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+
+		name, err := filepath.Rel(liveScenario, path)
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(dir, name)
+		if _, err := os.Stat(target); err != nil {
+			return fmt.Errorf("the template no longer renders %s, which the live scenario replaces: %w", target, err)
+		}
+
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		return os.WriteFile(target, source, 0o644)
 	})
+	if err != nil {
+		t.Fatalf("write the live scenario: %v", err)
+	}
 }
 
 func envOr(name, fallback string) string {
@@ -73,11 +108,14 @@ func envOr(name, fallback string) string {
 // TestReportLiveGatling runs Gatling itself and holds this tool's summary of each
 // run to what Gatling printed: the live half of the proof research.md §17
 // describes. For every version it renders galaxio's own gatling/scala-sbt
-// template with the galaxio binary, runs the template's Stability simulation at
-// 3000 rpm against a stub that serves every version the same responses, runs
-// the etalon over the fresh log, and compares the summary with the console,
-// global_stats.json and the etalon as TestSummaryMatchesLiveGatlingRuns compares
-// the committed recordings, which GALAXIO_LIVE_RECORD writes.
+// template with the galaxio binary, writes liveScenario into it, runs the
+// template's Stability simulation at 3000 rpm against reporttest.Mock, whose
+// every response time comes from work it does, and holds the mock to what
+// Gatling printed (servedEverything). It then runs the etalon over the fresh
+// log and compares the summary with the console, global_stats.json and the
+// etalon as TestSummaryMatchesLiveGatlingRuns compares the committed recordings.
+// GALAXIO_LIVE_RECORD writes a new set; the committed one was served by the stub
+// RECORDING.md names.
 //
 // It runs only with GALAXIO_LIVE_GATLING=1, because it needs a JDK, sbt, the two
 // t-digest jars and the network, and takes about five minutes a version. GALAXIO_LIVE_VERSIONS lists
@@ -128,8 +166,8 @@ func TestReportLiveGatling(t *testing.T) {
 
 	for _, version := range versions {
 		t.Run(version, func(t *testing.T) {
-			stub := httptest.NewServer(liveStub())
-			defer stub.Close()
+			mock := httptest.NewServer(reporttest.Mock())
+			defer mock.Close()
 
 			work := t.TempDir()
 			project := filepath.Join(work, "project")
@@ -139,7 +177,7 @@ func TestReportLiveGatling(t *testing.T) {
 				"--set", "Name=live", "--set", "NameWord=live", "--set", "GatlingVersion=" + version,
 				"--set", "GatlingPicatinnyVersion=1.27.0", "--set", "SbtGatlingVersion=4.19.1",
 				"--set", "SbtVersion=1.12.13", "--set", "SbtScalafmtVersion=2.6.1",
-				"--set", "BaseUrl=" + stub.URL, "--set", "Intensity=3000 rpm", "--set", "RampDuration=10 seconds",
+				"--set", "BaseUrl=" + mock.URL, "--set", "Intensity=3000 rpm", "--set", "RampDuration=10 seconds",
 				"--set", fmt.Sprintf("StageDuration=%d seconds", int(steady.Seconds())),
 				"--set", fmt.Sprintf("TestDuration=%d seconds", int((steady + time.Minute).Seconds())),
 				"--set", "StartupBannerEnabled=false",
@@ -152,6 +190,8 @@ func TestReportLiveGatling(t *testing.T) {
 			if out, err := scaffold.CombinedOutput(); err != nil {
 				t.Fatalf("galaxio template init: %v\n%s", err, out)
 			}
+
+			writeLiveScenario(t, project)
 
 			ctx, cancel := context.WithTimeout(context.Background(), steady+20*time.Minute)
 			defer cancel()
@@ -198,6 +238,8 @@ func TestReportLiveGatling(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse the console: %v", err)
 			}
+
+			servedEverything(t, string(console), printed)
 
 			given := runEtalon(t, openBytes(t, log))
 
