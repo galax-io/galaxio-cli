@@ -201,12 +201,18 @@ type fakeFigures struct {
 	percentile             func(rank float64) int64
 }
 
-func (f fakeFigures) Count() int                            { return f.count }
-func (f fakeFigures) Min() (int64, bool)                    { return f.min, f.count > 0 }
-func (f fakeFigures) Max() (int64, bool)                    { return f.max, f.count > 0 }
-func (f fakeFigures) Mean() (int64, bool)                   { return f.mean, f.count > 0 }
-func (f fakeFigures) StdDev() (int64, bool)                 { return f.stdDev, f.count > 0 }
-func (f fakeFigures) Percentile(rank float64) (int64, bool) { return f.percentile(rank), f.count > 0 }
+func (f fakeFigures) Count() int            { return f.count }
+func (f fakeFigures) Min() (int64, bool)    { return f.min, f.count > 0 }
+func (f fakeFigures) Max() (int64, bool)    { return f.max, f.count > 0 }
+func (f fakeFigures) Mean() (int64, bool)   { return f.mean, f.count > 0 }
+func (f fakeFigures) StdDev() (int64, bool) { return f.stdDev, f.count > 0 }
+func (f fakeFigures) Percentile(rank float64) (int64, bool) {
+	if f.count == 0 {
+		return 0, false
+	}
+
+	return f.percentile(rank), true
+}
 
 // TestCompare holds the comparison to what it is for: silent on a summary that
 // matches, and naming each figure that does not.
@@ -239,8 +245,8 @@ func TestCompare(t *testing.T) {
 		}
 	}
 
-	if differences, notes := Compare(observed(), recorded(), durations, true); len(differences) != 0 || len(notes) != 0 {
-		t.Fatalf("a matching summary was reported: %v, %v", differences, notes)
+	if differences := Compare(observed(), recorded(), durations); len(differences) != 0 {
+		t.Fatalf("a matching summary was reported: %v", differences)
 	}
 
 	tests := []struct {
@@ -255,7 +261,6 @@ func TestCompare(t *testing.T) {
 		{name: "a percentile off its rank", change: func(o *Observed, _ *Recorded) {
 			o.Outcomes[0] = fakeFigures{count: 10, min: 1, max: 10, mean: 6, stdDev: 3, percentile: func(float64) int64 { return 1 }}
 		}, expected: "all p95 = 1 misplaces the rank"},
-		{name: "a reference percentile off its rank", change: func(_ *Observed, r *Recorded) { r.Percentiles[2][0].N = 2 }, expected: "Gatling's all p95 = 2 misplaces the rank"},
 	}
 
 	for _, tt := range tests {
@@ -265,22 +270,21 @@ func TestCompare(t *testing.T) {
 			o, r := observed(), recorded()
 			tt.change(&o, &r)
 
-			differences, _ := Compare(o, r, durations, true)
+			differences := Compare(o, r, durations)
 			if !strings.Contains(strings.Join(differences, "\n"), tt.expected) {
 				t.Errorf("differences %q do not name %q", differences, tt.expected)
 			}
 		})
 	}
 
-	t.Run("a percentile of a version that is not a reference is only described", func(t *testing.T) {
+	t.Run("gatling's own percentiles are not read", func(t *testing.T) {
 		t.Parallel()
 
 		r := recorded()
 		r.Percentiles[2][0].N = 2
 
-		differences, notes := Compare(observed(), r, durations, false)
-		if len(differences) != 0 || !strings.Contains(strings.Join(notes, "\n"), "Gatling's all p95 = 2") {
-			t.Errorf("differences %q, notes %q; want no difference and a note on p95", differences, notes)
+		if differences := Compare(observed(), r, durations); len(differences) != 0 {
+			t.Errorf("differences %q; ComparePercentiles reads Gatling's percentiles, not Compare", differences)
 		}
 	})
 }

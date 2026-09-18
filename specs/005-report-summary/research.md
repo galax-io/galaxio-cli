@@ -75,7 +75,8 @@ opened 2026-09-17, adds `ValueAtRank` and `QuantileDiscrete`, which return the m
 centroid holding the rank and never a value between two centroids. That read, measured over
 `ForEachCentroid` on the same digests before the pull request was opened, returns the
 recorded value in all 60 percentiles of the five runs above. It is open and unreleased; this
-milestone does not depend on it and does not copy it (FR-022).
+milestone does not depend on it and does not copy it, and taking it would part from Gatling
+3.11's numbers, which the maintainer made the target (FR-022, §18).
 
 **The rule of how a percentile may differ from what the run recorded** (maintainer
 request, 2026-09-17: the difference must be proved by tests, not only described):
@@ -103,15 +104,14 @@ at 12 000 requests and more to 0.40. `TestPercentilesRule` holds every corpus ru
 halves of the rule and the synthetic runs to the second; the live Gatling runs of T010 hold
 real runs of about 12 000 requests to the second.
 
-**Which of Gatling's percentiles are a reference**: those of 3.11.x and 3.12.x, which use
-`com.tdunning:t-digest` 3.1. They are held to the same rank rule over the same log —
-never to this tool's numbers, and never asserted equal to them — and they satisfy it
-(`TestGatlingPercentilesAsReference`). From 3.13.0 Gatling uses t-digest 3.3, whose
+**Which of Gatling's percentiles are the reference**: those of 3.11.x and 3.12.x, which use
+`com.tdunning:t-digest` 3.1. Every percentile this tool prints equals the one their digest
+gives for the same log, and the tests assert it (§18). From 3.13.0 Gatling uses t-digest 3.3, whose
 `AVLTreeDigest` loses counts: for the 3.13.1 run it printed 1072 where the request at the
 rank took 1502, a defect reported as
 [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230), and two thousand
 rebuilds of that digest from the same samples gave 1072, 916 or 1061. Those numbers
-describe the defect, not the run, and no test uses them.
+describe the defect, not the run, and the tests only describe them.
 
 **Alternatives considered**: carrying this repository's own read by rank over
 `ForEachCentroid` until the upstream change ships (measured, exact on the corpus; not taken —
@@ -321,8 +321,8 @@ produce either (spec, Assumptions), and the change is listed under gate V.
 `console.txt` for 3.13.1, 3.14.9 and 3.15.1. Whole-run figures are compared with the JSON
 files by reading them; for 3.14.9 and 3.15.1, which have a console only, they are a table in
 the test citing the console line. The only percentiles read from those files are those of
-3.11.5 and 3.12.0, held to the rank rule of §2 as the reference, never to this tool's
-(FR-019). `stats.json`, which holds the rows per request, is not copied: nothing reads it
+3.11.5 and 3.12.0, which this tool's must equal (FR-019, §18); the later versions' are only
+described. `stats.json`, which holds the rows per request, is not copied: nothing reads it
 before #52. The live runs of §17 bring their own recordings, under
 `internal/report/testdata/live/gatling/`.
 
@@ -359,6 +359,10 @@ recorded estimator and the pinned corpus values. Gate II of
 values for the five corpus runs are pinned by T007; the summary's closing line and the
 progress block's second line say that the percentiles are t-digest estimates, interpolated
 (§15); the README documents the 1427-for-1502 case (FR-020).
+
+**Superseded in part, 2026-09-17**: constitution v3.0.0 (T011) replaced the parity bullet
+quoted as unchanged above. A Gatling run's percentiles must equal Gatling 3.11's, and the
+tests must assert it (§18).
 
 **Also outside this pull request**: issue #51's text needs amending to match the
 specification — `-o json`, per-request figures in the text output, the exact histogram with
@@ -495,9 +499,8 @@ summary and the percentile rule are proved on real Gatling runs as well as on th
   client adds, which the logs record as they are.
 - **What is held**: every non-percentile whole-run figure equal to the console's Global
   Information block and, up to 3.13.x, to `global_stats.json`; every percentile within the
-  rank rule of §2 over the run's own log; the percentiles Gatling 3.11.x and 3.12.x printed
-  within the same rule, as the reference; later versions' described in the test log and not
-  held, because of tdunning/t-digest#230.
+  rank rule of §2 over the run's own log and equal to Gatling 3.11's (§18); later versions'
+  described in the test log and not held, because of tdunning/t-digest#230.
 - **Two layers**: `TestReportLiveGatling` (integration tag, `GALAXIO_LIVE_GATLING=1`) runs
   Gatling itself; `TestSummaryMatchesLiveGatlingRuns` holds the committed recordings under
   `internal/report/testdata/live/gatling/` to the same assertions in the ordinary suite,
@@ -527,13 +530,82 @@ Every other whole-run figure equals Gatling's on every version, the rates and sh
 two decimals of the console and exactly to `global_stats.json`. This tool's percentiles
 misplace their rank by at most 0.00012 on every run, and every version's p50 and p75, Gatling's
 included, by nothing. Gatling 3.11.5 and 3.12.0 printed the same four percentiles as this
-tool on their own runs: that is measured here and asserted nowhere (FR-019). From 3.13.1
-Gatling's p95 lands between 400 and 800 ms, where the stub sends no response, so its rank is
-off by only 0.00078; its p99 misplaces the rank by 0.00167 — about 20 of the 12 250
-requests where the rule allows 6 — which is tdunning/t-digest#230 on a real run.
+tool on their own runs, which T012 asserts (§18). From 3.13.1 Gatling's p95 lands between
+400 and 800 ms, where the stub sends no response, so its rank is off by only 0.00078; its p99
+misplaces the rank by 0.00167 — about 20 of the 12 250 requests where the rule allows 6 —
+which is tdunning/t-digest#230 on a real run.
 
 **Alternatives considered**: parsec's hand-written corpus probe (not taken: the maintainer
 asked for galaxio's own template, which exercises `template init` on the way); replaying the
 corpus at a larger scale (not taken: synthetic, and it shows no real JVM's timing); a random
 stub (rejected: the versions would not see the same data); running Gatling in every CI
 build (not taken: minutes a version and the network, so it is gated).
+
+## 18. Equal to Gatling 3.11
+
+**Decision** (maintainer, 2026-09-17: `galaxio report` replaces the report Gatling builds, so
+its numbers must match Gatling's as in 3.11, "as in t-digest 3.1"; constitution v3.0.0,
+T011): every percentile of a Gatling run equals the one Gatling 3.11.x and 3.12.x compute
+for the same log, and the tests assert it.
+
+**What Gatling 3.11 and 3.12 compute**, read from `io.gatling.charts.stats.buffers.GeneralStatsBuffer`
+in gatling-charts 3.11.5 and 3.12.0, both of which depend on `com.tdunning:t-digest` 3.1: one
+`new AVLTreeDigest(100.0)` for all requests and one for each outcome, fed every response
+time in log order, and a percentile of `Math.round(digest.quantile(rank / 100.0))`.
+`AVLTreeDigest` draws on an unseeded `java.util.Random`, so two runs of Gatling over one log
+can print two values for a percentile.
+
+**Why this tool's numbers are the same**: caio/go-tdigest v5 at compression 100 bounds a
+centroid by 4·n·q·(1−q)/δ, adds a value to its nearest centroid and interpolates between
+centroids, which are the three choices t-digest 3.1's `AVLTreeDigest` makes. The one
+difference measured is floating point at an exact half. On a live run of 1 222 successful
+requests the 95th percentile is 398.5, which caio computes as 398.49999999999994 and
+t-digest 3.1 as 398.5000000000001, and `Math.round` gives 399. `roundHalfUp` in
+`percentiles.go` therefore takes a value within 1e-14 of its size below a half as the half.
+
+**The etalon**: `internal/report/testdata/etalon/Etalon.java`, run by the JDK's source
+launcher with both jars, each in a class loader of its own, and a run's requests on standard
+input in log order (`reporttest.EtalonSamples`). It builds the AVL digest of t-digest 3.1 once
+for each seed from 1 to 200 and prints every value it gave, and builds `MergingDigest(100)` of
+t-digest 3.3 once beside it. Its output is kept as `etalon.tsv` beside each of the ten
+recordings. `TestEtalonRecordings` (integration tag) reruns it and requires those files byte
+for byte; the jars come from `GALAXIO_TDIGEST_JARS`, the local Maven repository or the
+Coursier cache a Gatling build fills, and are pinned by SHA-256.
+
+**What the tests hold**, through `reporttest.ComparePercentiles`: every percentile at ranks
+50, 75, 95 and 99, for all, ok and failed requests, is a value the AVL digest gives for the
+log; on 3.11.5 and 3.12.0 every percentile Gatling printed equals this tool's, or is another
+value the digest gives, which its generator can draw; what later versions printed and what
+`MergingDigest` gives are described in the test log. `TestPercentilesEqualGatling311` does it
+on the five corpus runs, `TestSummaryMatchesLiveGatlingRuns` on the five live recordings, and
+`TestReportLiveGatling` on a fresh run, with the etalon run over its log.
+
+**Measured** on the ten recordings (2026-09-17):
+
+| Recordings | Percentiles | A value Gatling 3.11's digest gives | Equal to what Gatling 3.11.5 and 3.12.0 printed | Equal to `MergingDigest` 3.3 | Equal to the request at the rank |
+|---|---|---|---|---|---|
+| corpus, five runs | 60 | 60 | 24 of 24, in `global_stats.json` | 53 | 52 |
+| live, five runs | 60 | 60 | 24 of 24, on the console and in `global_stats.json` | 40 | 42 |
+
+Over 200 seeds the digest gives two values for 2 of the 120: the 99th percentile of successful
+requests on the live 3.12.0 run, 1585 or 1586 (Gatling printed 1586, this tool gives 1586),
+and the 75th on the live 3.15.1 run, 37 or 38.
+
+| All requests, p95 | This tool | Gatling 3.11's digest | Gatling printed | `MergingDigest` 3.3 | Request at the rank |
+|---|---|---|---|---|---|
+| corpus 3.13.1 | 1427 | 1427 | 1072, by 3.13.1 | 1502 | 1502 |
+| live 3.11.5 | 813 | 813 | 813, by 3.11.5 | 682 | 815 |
+
+**Why `MergingDigest` is not the reference**: it has no defect, and t-digest 3.3 recommends
+it, but it is another algorithm. It merges neighbours in sorted order under another scale
+function and reads a quantile another way. On the run of 102 requests it returns the recorded
+value, 1502. On the live runs one of its centroids spans the gap between 400 and 800 ms the
+stub leaves, and its 95th percentile falls into that gap, at 682–719 ms, where the requests at
+the rank took 815–829 ms. It matches neither Gatling 3.11 nor this tool, so the tests describe
+it and hold it to nothing.
+
+**Alternatives considered**: `MergingDigest` as the reference (rejected, above); the exact
+percentile over every response time (rejected: Gatling 3.11 does not print it, 813 against
+815, and it needs every sample); the read by rank of caio/go-tdigest#42 (rejected: 1502
+where Gatling 3.11 prints 1427); a Go copy of t-digest 3.1's `AVLTreeDigest` (not taken: the
+library already gives its numbers, and a copy is one more thing to prove).

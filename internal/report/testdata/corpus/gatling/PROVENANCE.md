@@ -24,9 +24,9 @@ The 3.11.5 and 3.12.0 runs were made by an earlier version of parsec's probe sim
 simulation otherwise: one request outside any group, the rest under `outer` and
 `outer / inner, with comma`; six virtual users; one run-level error per user.
 
-`.gitattributes` marks every `simulation.log`, `global_stats.json` and `console.txt` as
-`-text` so no checkout rewrites the binary logs' bytes, the text logs' line endings or the
-recorded figures.
+`.gitattributes` marks every `simulation.log`, `global_stats.json`, `console.txt` and
+`etalon.tsv` as `-text` so no checkout rewrites the binary logs' bytes, the text logs' line
+endings or the recorded figures.
 
 ## What Gatling recorded
 
@@ -44,10 +44,18 @@ parsec release, and is read by tests only: `galaxio report` writes no such file.
 | `3.15.1/console.txt` | 3.15.1 | the same |
 
 `stats.json`, which holds the figures of every request and group, is not copied: nothing
-reads it before galaxio-cli#52. The only percentiles read from these files are those of
-3.11.5 and 3.12.0, held to the rank rule over their own logs as the reference; no test
-compares a percentile Gatling recorded with this tool's (galaxio-cli#51). The live runs
-under `../../live/gatling/` have their own record, `RECORDING.md`.
+reads it before galaxio-cli#52. The percentiles in `3.11.5/global_stats.json` and
+`3.12.0/global_stats.json` are the ones this tool's must equal; those 3.13.1, 3.14.9 and
+3.15.1 printed come from tdunning/t-digest#230 and are only described (galaxio-cli#51). The
+live runs under `../../live/gatling/` have their own record, `RECORDING.md`.
+
+## What the real t-digest gives
+
+`<version>/etalon.tsv` is not Gatling's output: it is what `../../etalon/Etalon.java` printed
+for the run's `simulation.log` — every percentile t-digest 3.1's `AVLTreeDigest(100)`, the
+digest Gatling 3.11 and 3.12 use, gives over the seeds 1 to 200 of its generator, and what
+t-digest 3.3's `MergingDigest(100)` gives, at ranks 50, 75, 95 and 99 for all, ok and failed
+requests. `TestEtalonRecordings` reruns it and requires these files byte for byte.
 
 ## Licence notice
 

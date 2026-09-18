@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -31,9 +31,9 @@ func percentilesOf(f Figures) [4]int64 {
 
 // TestPercentilesCorpus pins the percentiles this tool prints for every corpus
 // run, for all, successful and failed requests, at ranks 50, 75, 95 and 99.
-// They are this tool's estimates and are compared with nothing Gatling
-// recorded. A change of the digest, its parameters or how it is read must
-// change this table, on purpose.
+// They are held to Gatling 3.11's by TestPercentilesEqualGatling311; this table
+// is what they are, so that a change of the digest, its parameters or how it is
+// read moves a number here on purpose rather than in silence.
 func TestPercentilesCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -47,8 +47,9 @@ func TestPercentilesCorpus(t *testing.T) {
 		// six took 1502–1503 ms, so the 97th of the 102, the request at the
 		// 95th percentile's rank, took 1502 ms. The library's default quantile
 		// interpolates between the 96th request and the 97th and gives 1427.25.
-		// caio/go-tdigest#42 proposes a read by rank that returns 1502: taking
-		// it changes this line, and must.
+		// caio/go-tdigest#42 proposes a read by rank that returns 1502, which
+		// would part from Gatling 3.11 and so from Principle II: taking it is
+		// its own change, and moves this line with the rule.
 		{version: "3.13.1", all: [4]int64{1, 1, 1427, 1502}, ok: [4]int64{1, 1, 1502, 1502}, failed: [4]int64{1, 2, 4, 4}},
 		{version: "3.14.9", all: [4]int64{1, 1, 1427, 1502}, ok: [4]int64{1, 1, 1502, 1502}, failed: [4]int64{1, 2, 12, 12}},
 		{version: "3.15.1", all: [4]int64{0, 1, 1427, 1502}, ok: [4]int64{0, 1, 1502, 1502}, failed: [4]int64{2, 2, 3, 3}},
@@ -88,15 +89,17 @@ func TestPercentilesCorpus(t *testing.T) {
 	}
 }
 
-// TestPercentilesAllRequestsAsOneDigest holds the figures of all requests,
-// merged from the two outcomes when they are read, to a digest fed every
-// request of the run directly.
+// TestPercentilesAllRequestsAsOneDigest holds the percentiles of all requests
+// of every corpus run to a digest fed every request of the run directly, in log
+// order. TestSyntheticRunsEqualGatling311 holds them to t-digest 3.1 itself on
+// runs long enough for a digest to compress, where merging the two outcomes'
+// digests instead gave other numbers.
 func TestPercentilesAllRequestsAsOneDigest(t *testing.T) {
 	t.Parallel()
 
 	ranks := []float64{1, 25, 50, 75, 90, 95, 99, 99.9, 100}
 
-	for _, version := range []string{"3.11.5", "3.12.0", "3.13.1", "3.14.9", "3.15.1"} {
+	for _, version := range reporttest.Versions {
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
 
@@ -107,38 +110,128 @@ func TestPercentilesAllRequestsAsOneDigest(t *testing.T) {
 				t.Fatalf("Scan: %v", err)
 			}
 
+			// Fed through the one reading of what a run holds, so that this
+			// digest and the walk's own cannot be given different requests.
 			direct := newDigest()
-			rd := openBytes(t, log)
 
-			for {
-				item, err := rd.Next()
-				if errors.Is(err, io.EOF) {
-					break
-				}
-
-				if err != nil {
-					t.Fatalf("Next: %v", err)
-				}
-
-				outcome := item.Sample.Outcome
-				if item.Kind != model.ItemSample || (outcome != model.OutcomeSuccess && outcome != model.OutcomeFailure) {
-					continue
-				}
-
-				if d, ok := item.Sample.Duration.Get(); ok {
-					_ = direct.Add(float64(d.Milliseconds()))
-				}
+			if err := reporttest.Samples(openBytes(t, log), func(_ model.Outcome, ms int64) {
+				_ = direct.Add(float64(ms))
+			}); err != nil {
+				t.Fatalf("Samples: %v", err)
 			}
 
 			all := summary.All()
 
 			for _, rank := range ranks {
 				got, _ := all.Percentile(rank)
-				if expected := int64(math.Floor(direct.Quantile(rank/100) + 0.5)); got != expected {
+				if expected := roundHalfUp(quantile(direct, rank/100)); got != expected {
 					t.Errorf("p%v of all requests = %d, a digest fed every request gives %d", rank, got, expected)
 				}
 			}
 		})
+	}
+}
+
+// TestRoundHalfUp holds the rounding to Math.round's, which Gatling applies to
+// its digest's estimate: to the nearest, up from exactly a half, and down from
+// one bit below it.
+func TestRoundHalfUp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value    float64
+		expected int64
+	}{
+		{value: 0, expected: 0},
+		{value: 0.49999999999999994, expected: 0},
+		{value: 0.5, expected: 1},
+		{value: 1427.25, expected: 1427},
+		{value: 2.8299999999999983, expected: 3},
+		{value: 398.5, expected: 399},
+		{value: 398.5000000000001, expected: 399},
+		// One bit below a half is below it. What t-digest 3.1 gives for the 95th
+		// percentile of [1, 51] is this shape, 48.49999999999999, and Gatling
+		// prints 48.
+		{value: 398.49999999999994, expected: 398},
+		{value: 48.49999999999999, expected: 48},
+		{value: 398.4999, expected: 398},
+		{value: 1585.5613333333329, expected: 1586},
+		{value: math.Nextafter(1e7+0.5, 0), expected: 1e7},
+		{value: 1e7 + 0.5, expected: 1e7 + 1},
+		{value: 1e7 + 0.4999, expected: 1e7},
+	}
+
+	for _, tt := range tests {
+		if got := roundHalfUp(tt.value); got != tt.expected {
+			t.Errorf("roundHalfUp(%v) = %d, want %d", tt.value, got, tt.expected)
+		}
+	}
+}
+
+// TestPercentileEqualsTDigest31 holds the percentiles of small sets to what
+// AVLTreeDigest(100) of t-digest 3.1 gives for them, read as Math.round(quantile),
+// which the etalon was run over (testdata/etalon/Etalon.java, every seed alike).
+// A small set is where a percentile lies at a half, or one bit from it, and so
+// where the order of the floating-point operations decides the millisecond: a
+// read that fuses a product into the addition after it, as arm64 compiles the
+// library's own, gives 52 for [43, 53], and a rounding with slack below the half
+// gave 49 for [1, 51].
+func TestPercentileEqualsTDigest31(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		values   []int64
+		expected [4]int64
+	}{
+		{values: []int64{1, 51}, expected: [4]int64{26, 39, 48, 51}},
+		{values: []int64{2, 12}, expected: [4]int64{7, 10, 11, 12}},
+		{values: []int64{43, 53}, expected: [4]int64{48, 51, 53, 53}},
+		{values: []int64{14, 24}, expected: [4]int64{19, 22, 23, 24}},
+		{values: []int64{1, 2}, expected: [4]int64{2, 2, 2, 2}},
+		{values: []int64{1, 2, 7}, expected: [4]int64{2, 5, 6, 7}},
+		{values: []int64{3, 8, 20, 21}, expected: [4]int64{14, 20, 21, 21}},
+		{values: []int64{5, 5, 5, 6, 6, 6}, expected: [4]int64{6, 6, 6, 6}},
+	}
+
+	for _, tt := range tests {
+		if got := percentilesOf(figuresOf(tt.values...)); got != tt.expected {
+			t.Errorf("p50/p75/p95/p99 of %v = %v, t-digest 3.1 gives %v", tt.values, got, tt.expected)
+		}
+	}
+}
+
+// TestQuantileReadsAsTheLibrary holds this package's read of a digest to the
+// library's own at every thousandth, the two ends included, on digests that
+// have compressed. They are one arithmetic, so they differ by the last bits an
+// architecture that fuses operations moves, and by nothing a millisecond sees.
+func TestQuantileReadsAsTheLibrary(t *testing.T) {
+	t.Parallel()
+
+	for seed := range uint64(8) {
+		rng := rand.New(rand.NewPCG(seed, 99))
+		d := newDigest()
+
+		for range 5000 + int(seed)*3000 {
+			ms := 1 + rng.IntN(3000)
+			if rng.IntN(100) == 0 {
+				ms = 60000
+			}
+
+			_ = d.Add(float64(ms))
+		}
+
+		for i := range 1001 {
+			q := float64(i) / 1000
+
+			got, expected := quantile(d, q), d.Quantile(q)
+			if math.Abs(got-expected) > 1e-9*math.Max(1, math.Abs(expected)) {
+				t.Fatalf("seed %d: quantile(%v) = %v, the library reads %v", seed, q, got, expected)
+			}
+		}
+	}
+
+	if got := quantile(newDigest(), 0.5); !math.IsNaN(got) {
+		t.Errorf("quantile of an empty digest = %v, want NaN", got)
 	}
 }
 
@@ -180,12 +273,12 @@ func TestPercentile(t *testing.T) {
 	}
 }
 
-// TestPercentilesReadingMidWalkChangesNothing guards the reason the figures of
-// all requests are merged into a fresh digest rather than into a clone of the
-// successful one: the library's Clone draws from the original's generator, so
-// a read in the middle of a walk would change every later insertion. The walk
-// is long enough for the digests to merge centroids, which is when the
-// generator is consulted at all.
+// TestPercentilesReadingMidWalkChangesNothing guards what the progress block
+// relies on: reading the figures in the middle of a walk changes nothing that
+// follows. A read that cloned a digest would — the library's Clone draws from
+// the original's generator, and the generator decides which centroid a later
+// insertion merges into. The walk is long enough for the digests to merge
+// centroids, which is when the generator is consulted at all.
 func TestPercentilesReadingMidWalkChangesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -249,18 +342,17 @@ func TestPercentilesRule(t *testing.T) {
 
 	outcomes := []struct {
 		name    string
-		keep    func(model.Outcome) bool
 		figures func(Summary) Figures
 	}{
-		{name: "all", keep: func(o model.Outcome) bool { return o == model.OutcomeSuccess || o == model.OutcomeFailure }, figures: Summary.All},
-		{name: "ok", keep: func(o model.Outcome) bool { return o == model.OutcomeSuccess }, figures: func(s Summary) Figures { return s.OK }},
-		{name: "failed", keep: func(o model.Outcome) bool { return o == model.OutcomeFailure }, figures: func(s Summary) Figures { return s.Failed }},
+		{name: "all", figures: Summary.All},
+		{name: "ok", figures: func(s Summary) Figures { return s.OK }},
+		{name: "failed", figures: func(s Summary) Figures { return s.Failed }},
 	}
 
 	t.Run("the corpus runs, below 200 requests", func(t *testing.T) {
 		t.Parallel()
 
-		for _, version := range []string{"3.11.5", "3.12.0", "3.13.1", "3.14.9", "3.15.1"} {
+		for _, version := range reporttest.Versions {
 			log := corpusLog(t, version)
 
 			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
@@ -268,11 +360,10 @@ func TestPercentilesRule(t *testing.T) {
 				t.Fatalf("%s: Scan: %v", version, err)
 			}
 
-			for _, outcome := range outcomes {
-				sorted, err := reporttest.Durations(openBytes(t, log), outcome.keep)
-				if err != nil {
-					t.Fatalf("%s: Durations: %v", version, err)
-				}
+			durations := outcomeDurations(t, log)
+
+			for i, outcome := range outcomes {
+				sorted := durations[i]
 
 				if len(sorted) > 200 {
 					t.Fatalf("%s %s holds %d requests, past the interpolation rule", version, outcome.name, len(sorted))
@@ -286,7 +377,7 @@ func TestPercentilesRule(t *testing.T) {
 					atRank := reporttest.AtRank(sorted, rank)
 					where := fmt.Sprintf("%s %s p%v = %d (neighbours %d and %d, request at the rank %d)", version, outcome.name, rank, got, lower, upper, atRank)
 
-					if want := int64(math.Floor(interpolated + 0.5)); got != want {
+					if want := roundHalfUp(interpolated); got != want {
 						t.Errorf("%s: want the interpolation %v rounded half up, %d", where, interpolated, want)
 					}
 
@@ -342,7 +433,7 @@ func TestPercentilesRule(t *testing.T) {
 
 				s.Options = DefaultOptions()
 
-				sorted := map[string][]int64{}
+				var sorted [3][]int64
 
 				for range size {
 					ms := distribution.ms(rng)
@@ -357,15 +448,17 @@ func TestPercentilesRule(t *testing.T) {
 					}}
 					s.add(&item)
 
-					for _, outcomeRow := range outcomes {
-						if outcomeRow.keep(outcome) {
-							sorted[outcomeRow.name] = append(sorted[outcomeRow.name], ms)
-						}
+					sorted[0] = append(sorted[0], ms)
+
+					if outcome == model.OutcomeSuccess {
+						sorted[1] = append(sorted[1], ms)
+					} else {
+						sorted[2] = append(sorted[2], ms)
 					}
 				}
 
-				for _, outcome := range outcomes {
-					values := sorted[outcome.name]
+				for i, outcome := range outcomes {
+					values := sorted[i]
 					if len(values) == 0 {
 						continue
 					}
@@ -386,60 +479,72 @@ func TestPercentilesRule(t *testing.T) {
 	})
 }
 
-// TestGatlingPercentilesAsReference holds the percentiles Gatling itself
-// recorded to the same rank rule, for the versions whose digest has no known
-// defect: 3.11.5 and 3.12.0, which use com.tdunning:t-digest 3.1. They are a
-// reference, not a target: each is held to the response times the run recorded
-// and never to this tool's percentile, and nothing asserts the two equal.
-//
-// From 3.13.0 Gatling uses t-digest 3.3, whose AVLTreeDigest miscounts
-// (tdunning/t-digest#230). For the recorded 3.13.1 run it printed 1072 ms as
-// the 95th percentile of all requests, where the request at that rank took
-// 1502 ms, and rebuilding its digest from the same requests gives 916 or 1061
-// as well; 3.14.9 and 3.15.1 printed 1060 and 1090. Those numbers describe the
-// defect, not the run, so those versions are left out on purpose.
-func TestGatlingPercentilesAsReference(t *testing.T) {
+// TestPercentilesEqualGatling311 holds every percentile of every corpus run equal
+// to Gatling 3.11's (constitution Principle II): a value the AVLTreeDigest(100)
+// of t-digest 3.1 gives for the log, per the etalon.tsv beside it, and for
+// 3.11.5 and 3.12.0 the value they wrote in global_stats.json. What 3.13.1,
+// 3.14.9 and 3.15.1 printed is described, not held: for the 3.13.1 run Gatling
+// printed 1072 ms as the 95th percentile of all requests, where Gatling 3.11's
+// digest and this tool give 1427, because t-digest 3.3's AVLTreeDigest
+// miscounts (tdunning/t-digest#230).
+func TestPercentilesEqualGatling311(t *testing.T) {
 	t.Parallel()
 
-	keep := [3]func(model.Outcome) bool{
-		func(o model.Outcome) bool { return o == model.OutcomeSuccess || o == model.OutcomeFailure },
-		func(o model.Outcome) bool { return o == model.OutcomeSuccess },
-		func(o model.Outcome) bool { return o == model.OutcomeFailure },
-	}
-	columns := [3]string{"total", "ok", "ko"}
-
-	for _, version := range []string{"3.11.5", "3.12.0"} {
+	for _, version := range reporttest.Versions {
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
 
-			data, err := os.ReadFile(filepath.Join(corpusDir, version, "global_stats.json"))
-			if err != nil {
-				t.Fatalf("read global_stats.json: %v", err)
-			}
-
-			recorded, err := reporttest.ReadGlobalStats(data)
-			if err != nil {
-				t.Fatalf("decode global_stats.json: %v", err)
-			}
-
 			log := corpusLog(t, version)
 
-			for i := range columns {
-				sorted, err := reporttest.Durations(openBytes(t, log), keep[i])
-				if err != nil {
-					t.Fatalf("Durations: %v", err)
-				}
-
-				for j, rank := range reporttest.GatlingRanks {
-					value := recorded.Percentiles[j][i].N
-
-					if misplaced, tolerance := reporttest.RankMisplacement(sorted, value, rank), reporttest.RankTolerance(rank, len(sorted)); misplaced > tolerance {
-						t.Errorf("Gatling %s %s p%v = %d misplaces the rank by %.5f, over %.5f", version, columns[i], rank, value, misplaced, tolerance)
-					}
-				}
+			summary, err := Scan(context.Background(), openBytes(t, log), DefaultOptions())
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
 			}
+
+			dir := filepath.Join(corpusDir, version)
+			reference := reporttest.IsReference(version)
+
+			differences, notes := reporttest.ComparePercentiles(observed(summary), readEtalon(t, dir), corpusRecorded(t, dir), reference, outcomeDurations(t, log))
+			report(t, differences, notes)
 		})
 	}
+}
+
+// corpusRecorded reads what Gatling recorded for a corpus run: the
+// global_stats.json it wrote, in the run directory or its js directory, or else
+// the Global Information block of its console.
+func corpusRecorded(t *testing.T, dir string) reporttest.Recorded {
+	t.Helper()
+
+	for _, name := range []string{"global_stats.json", filepath.Join("js", "global_stats.json")} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+
+		recorded, err := reporttest.ReadGlobalStats(data)
+		if err != nil {
+			t.Fatalf("decode %s: %v", name, err)
+		}
+
+		return recorded
+	}
+
+	console, err := os.ReadFile(filepath.Join(dir, "console.txt"))
+	if err != nil {
+		t.Fatalf("read console.txt: %v", err)
+	}
+
+	recorded, err := reporttest.ParseConsole(string(console))
+	if err != nil {
+		t.Fatalf("parse console.txt: %v", err)
+	}
+
+	return recorded
 }
 
 func abs(v int64) int64 {

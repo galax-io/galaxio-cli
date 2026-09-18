@@ -11,33 +11,58 @@ import (
 	"github.com/galax-io/parsec/model"
 )
 
-// Durations walks the run rd yields and returns the response time, in whole
-// milliseconds, of every request whose outcome keep accepts and whose end the
-// source recorded, sorted. These are the exact values a percentile estimate is
-// held to.
-func Durations(rd simlog.RunReader, keep func(model.Outcome) bool) ([]int64, error) {
-	var durations []int64
-
+// Samples walks the run rd yields and calls yield with the outcome and the
+// response time, in whole milliseconds, of every request that counts towards a
+// figure: one the source recorded an outcome and an end for. It is the one
+// reading of what a run holds, so that the etalon, the rank rule and a test's
+// own digest are never fed different sets of requests.
+func Samples(rd simlog.RunReader, yield func(outcome model.Outcome, ms int64)) error {
 	for {
 		item, err := rd.Next()
 		if errors.Is(err, io.EOF) {
-			break
+			return nil
 		}
 
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		if item.Kind != model.ItemSample || !keep(item.Sample.Outcome) {
+		if item.Kind != model.ItemSample {
+			continue
+		}
+
+		if item.Sample.Outcome != model.OutcomeSuccess && item.Sample.Outcome != model.OutcomeFailure {
 			continue
 		}
 
 		if d, ok := item.Sample.Duration.Get(); ok && d >= 0 {
-			durations = append(durations, d.Milliseconds())
+			yield(item.Sample.Outcome, d.Milliseconds())
 		}
 	}
+}
 
-	slices.Sort(durations)
+// Durations walks the run rd yields and returns the response times, in whole
+// milliseconds, of all, successful and failed requests, each sorted. These are
+// the exact values a percentile estimate is held to.
+func Durations(rd simlog.RunReader) ([3][]int64, error) {
+	var durations [3][]int64
+
+	err := Samples(rd, func(outcome model.Outcome, ms int64) {
+		durations[0] = append(durations[0], ms)
+
+		if outcome == model.OutcomeSuccess {
+			durations[1] = append(durations[1], ms)
+		} else {
+			durations[2] = append(durations[2], ms)
+		}
+	})
+	if err != nil {
+		return [3][]int64{}, err
+	}
+
+	for i := range durations {
+		slices.Sort(durations[i])
+	}
 
 	return durations, nil
 }
@@ -94,4 +119,34 @@ func RankMisplacement(sorted []int64, value int64, rank float64) float64 {
 	default:
 		return 0
 	}
+}
+
+// Items returns a reader over items, as a run reader yields them, for the run
+// shapes no Gatling log produces. Handed will hold how many it has yielded when
+// it is not nil, which a test that reads the walk midway asks for.
+func Items(run model.Run, handed *int, items ...model.Item) simlog.RunReader {
+	return &itemsReader{run: run, items: items, handed: handed}
+}
+
+type itemsReader struct {
+	run    model.Run
+	items  []model.Item
+	handed *int
+}
+
+func (r *itemsReader) Run() model.Run { return r.run }
+
+func (r *itemsReader) Next() (model.Item, error) {
+	if len(r.items) == 0 {
+		return model.Item{}, io.EOF
+	}
+
+	item := r.items[0]
+	r.items = r.items[1:]
+
+	if r.handed != nil {
+		*r.handed++
+	}
+
+	return item, nil
 }
