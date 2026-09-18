@@ -247,7 +247,7 @@ tool        gatling 3.15.1
 log         binary, target/gatling/mysim-20260906044741110/simulation.log
 found by    path
 span        2026-09-06T04:48:14.885Z .. 2026-09-06T04:48:18.117Z (3.232s)
-requests    102 (84 ok, 18 ko)
+requests    102 (84 ok, 18 failed)
 groups      12 traversals
 users       12 events
 errors      6
