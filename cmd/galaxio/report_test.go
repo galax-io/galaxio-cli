@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -302,8 +303,8 @@ func TestReportReadsRun(t *testing.T) {
 		format   string
 		requests string
 	}{
-		{version: "3.12.0", format: "text", requests: "36 (18 ok, 18 ko)"},
-		{version: "3.15.1", format: "binary", requests: "102 (84 ok, 18 ko)"},
+		{version: "3.12.0", format: "text", requests: "36 (18 ok, 18 failed)"},
+		{version: "3.15.1", format: "binary", requests: "102 (84 ok, 18 failed)"},
 	}
 
 	for _, tt := range tests {
@@ -428,7 +429,29 @@ func TestRunReportOutput(t *testing.T) {
 	}
 
 	if tally := out.Summary.Tally; tally.Requests != 102 || tally.Successes != 84 || tally.Failures != 18 {
-		t.Errorf("Tally = %+v, want 102 requests, 84 ok, 18 ko", tally)
+		t.Errorf("Tally = %+v, want 102 requests, 84 ok, 18 failed", tally)
+	}
+}
+
+// TestReportNeverSaysKO holds every line the command writes about a run to this
+// tool's words for an outcome, ok and failed: ko is Gatling's.
+func TestReportNeverSaysKO(t *testing.T) {
+	ko := regexp.MustCompile(`(?i)\bko\b`)
+
+	for _, version := range []string{"3.11.5", "3.12.0", "3.13.1", "3.14.9", "3.15.1"} {
+		t.Run(version, func(t *testing.T) {
+			code, stdout, stderr := runCLI("report", "gatling", filepath.Join(reportCorpus, version), "--verbose")
+
+			if code != exitOK {
+				t.Fatalf("expected exit code %d, got %d; stderr: %s", exitOK, code, stderr)
+			}
+
+			for _, line := range strings.Split(stdout+stderr, "\n") {
+				if ko.MatchString(line) {
+					t.Errorf("line %q calls an outcome ko", line)
+				}
+			}
+		})
 	}
 }
 
@@ -518,7 +541,7 @@ func TestReportDefaultRoot(t *testing.T) {
 		t.Errorf("found by = %q, want newest", fields["found by"])
 	}
 
-	if fields["requests"] != "36 (18 ok, 18 ko)" {
+	if fields["requests"] != "36 (18 ok, 18 failed)" {
 		t.Errorf("requests = %q, want the 3.12.0 run's counts", fields["requests"])
 	}
 }

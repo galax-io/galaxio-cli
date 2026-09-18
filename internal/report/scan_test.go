@@ -70,7 +70,7 @@ func TestScanCorpus(t *testing.T) {
 			got := summary.Tally
 
 			if got.Requests != tt.expected.Requests || got.Successes != tt.expected.Successes || got.Failures != tt.expected.Failures {
-				t.Errorf("requests = %d (%d ok, %d ko), want %d (%d ok, %d ko)",
+				t.Errorf("requests = %d (%d ok, %d failed), want %d (%d ok, %d failed)",
 					got.Requests, got.Successes, got.Failures,
 					tt.expected.Requests, tt.expected.Successes, tt.expected.Failures)
 			}
@@ -131,7 +131,7 @@ func TestScanCountsEveryKind(t *testing.T) {
 	rd := &stubReader{items: []model.Item{
 		{Kind: model.ItemUser, User: model.UserEvent{Scenario: "s", Kind: model.UserStart, At: at(1000)}},
 		{Kind: model.ItemSample, Sample: model.Sample{Name: "ok", Start: at(1100), Duration: model.Some(10 * time.Millisecond), Outcome: model.OutcomeSuccess}},
-		{Kind: model.ItemSample, Sample: model.Sample{Name: "ko", Start: at(1200), Duration: model.Some(20 * time.Millisecond), Outcome: model.OutcomeFailure}},
+		{Kind: model.ItemSample, Sample: model.Sample{Name: "failed", Start: at(1200), Duration: model.Some(20 * time.Millisecond), Outcome: model.OutcomeFailure}},
 		{Kind: model.ItemSample, Sample: model.Sample{Name: "lost", Start: at(1300), Duration: model.Some(30 * time.Millisecond)}},
 		{Kind: model.ItemGroup, Group: model.GroupSample{Groups: []string{"g"}, Start: at(1000), Duration: model.Some(400 * time.Millisecond), Outcome: model.OutcomeSuccess}},
 		{Kind: model.ItemError, Error: model.RunError{Message: "boom", At: at(1350)}},

@@ -342,7 +342,7 @@ func formatReport(out reportOutput, verbose bool) string {
 		}
 	}
 
-	line("requests", "%d (%d ok, %d ko)", tally.Requests, tally.Successes, tally.Failures)
+	line("requests", "%d (%d ok, %d failed)", tally.Requests, tally.Successes, tally.Failures)
 
 	if tally.Unknown > 0 {
 		line("unknown", "%s whose outcome the source lost", plural(tally.Unknown, "request"))

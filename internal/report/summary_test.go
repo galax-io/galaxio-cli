@@ -502,7 +502,7 @@ func TestSummaryMatchesGatling(t *testing.T) {
 				t.Fatalf("Scan: %v", err)
 			}
 
-			columns := [3]string{"total", "ok", "ko"}
+			columns := [3]string{"all", "ok", "failed"}
 
 			for i, figures := range [3]Figures{summary.All(), summary.OK, summary.Failed} {
 				r := readingOf(t, figures)

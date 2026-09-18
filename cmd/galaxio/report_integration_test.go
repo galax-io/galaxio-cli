@@ -83,7 +83,7 @@ func TestReportIntegrationReadsALargeRun(t *testing.T) {
 
 	// The 3.12.0 recording holds 36 requests, 18 of each outcome, per replay.
 	for _, want := range []string{
-		"requests    720000 (360000 ok, 360000 ko)",
+		"requests    720000 (360000 ok, 360000 failed)",
 		"groups      240000 traversals",
 		"users       240000 events",
 		"tool        gatling 3.12.0",
