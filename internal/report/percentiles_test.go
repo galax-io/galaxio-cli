@@ -505,7 +505,7 @@ func TestPercentilesEqualGatling311(t *testing.T) {
 			reference := reporttest.IsReference(version)
 
 			differences, notes := reporttest.ComparePercentiles(observed(summary), readEtalon(t, dir), corpusRecorded(t, dir), reference, outcomeDurations(t, log))
-			report(t, differences, notes)
+			reportRecording(t, differences, notes)
 		})
 	}
 }

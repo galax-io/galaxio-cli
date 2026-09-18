@@ -437,8 +437,11 @@ standard error received.
   percentiles of all requests MUST be computed over the successful and failed samples
   together.
 - **FR-018**: Percentiles MUST be computed by a bounded-memory digest and read with the
-  default quantile of the digest library named in Assumptions. The same log MUST always
-  yield the same percentiles.
+  default quantile of the digest library named in Assumptions — its arithmetic, which is
+  t-digest 3.1's, carried out so that no platform fuses two of its operations into one, and
+  rounded as `Math.round` rounds. The same log MUST always yield the same percentiles on
+  one build of the command; where an arm64 and an amd64 build can differ, by 1 ms on rare
+  runs, MUST be documented (research §18).
 - **FR-019**: Every output carrying a percentile MUST say that it is this tool's estimate and
   how it is defined. For a Gatling run every percentile MUST equal the one Gatling 3.11.x and
   3.12.x compute for the same log — `Math.round(quantile(rank / 100))` over
@@ -448,7 +451,12 @@ standard error received.
   random generator gives two values for one log, either is equal. Percentiles Gatling 3.13.0
   and later recorded MUST NOT be held to anything, because they come from the digest defect of
   [tdunning/t-digest#230](https://github.com/tdunning/t-digest/issues/230); a test MAY
-  describe them in its log, and the values of t-digest 3.3's `MergingDigest` likewise.
+  describe them in its log, and the values of t-digest 3.3's `MergingDigest` likewise. The
+  one known exception to the equality is described, not held: caio/go-tdigest keeps a merged
+  centroid where it is, where t-digest 3.1 moves it after the centroids of an equal mean, so
+  at the edge of a run of equal response times a percentile can round to the other side —
+  allowed when no recorded response time lies between the two values and the rank rule of
+  FR-021 holds.
 - **FR-020**: The README MUST state the known limitation in the same change: the default
   quantile interpolates, as Gatling 3.11's does, so where response times have a gap a printed
   percentile can be a value no request had. It MUST give the recorded 3.13.1 run as the
@@ -486,8 +494,10 @@ standard error received.
   figure, and the number of such samples MUST be reported on standard error.
 - **FR-027**: A sample whose outcome the source lost MUST be counted apart, as neither ok nor
   failed and in no figure; its count MUST be reported and the command MUST exit 1.
-- **FR-028**: When the run's span is zero the command MUST show every rate as absent, name
-  the span in the error and exit 1. It MUST NOT print an infinite rate and MUST NOT
+- **FR-028**: When the run's span is zero and the run holds at least one request the command
+  MUST show every rate as absent, name the span in the error and exit 1. A run that holds no
+  request at all MUST NOT fail for its span: there is no rate to compute, so it reports no
+  request and exits 0, as milestone `v0.13.0` did. It MUST NOT print an infinite rate and MUST NOT
   substitute a span. When the library cannot bound the run, every rate MUST be shown as
   absent and the span MUST NOT be shortened to what could be placed in time.
 - **FR-029**: A log cut short MUST be summarised as far as it was read, reported as cut short
@@ -682,8 +692,10 @@ standard error received.
   holding a request whose outcome the source lost; with the summary both exit 1 (FR-027,
   FR-028), as issue #51 decides, because a rate cannot be computed for the first and the
   outcomes of the second do not add up to its total. The shared library states that no
-  adapter produces a lost outcome, and a zero span needs a log with a single instant in it,
-  so no existing invocation on a real run changes its exit code.
+  adapter produces a lost outcome, and a zero span needs a log with a single instant in it
+  **and at least one request** — a log of virtual users alone, which a run stopped right
+  after its injection leaves, still exits 0 — so no existing invocation on a real run
+  changes its exit code.
 - The per-message error table of Gatling's console summary is out of scope (clarified
   2026-09-17): the run description already reports how many errors the log holds, issue
   #51 settles no figure for a breakdown by message, and it is

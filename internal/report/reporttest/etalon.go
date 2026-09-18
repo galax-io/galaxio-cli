@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -155,9 +156,15 @@ func ReadEtalon(data []byte) (Etalon, error) {
 	return e, nil
 }
 
+// OrderOfEqualCentroids ends the note that describes the one difference from
+// Gatling 3.11's digest constitution Principle II admits, so that a test of
+// recordings known to need no such description can refuse it.
+const OrderOfEqualCentroids = "the difference caio's order of equal centroids makes"
+
 // ComparePercentiles holds the percentiles of observed to Gatling 3.11's
 // (constitution Principle II). Each must be a value the etalon's AVL digest gives
-// for the run. Where
+// for the run, or differ from one across a boundary between two runs of equal
+// response times (see acrossEqualRuns), which is described and not held. Where
 // recorded is what Gatling 3.11.x or 3.12.x printed for the run — reference —
 // each printed percentile must equal this tool's, or be another value the
 // digest gives, which its unseeded generator can draw. It returns a sentence for
@@ -177,7 +184,17 @@ func ComparePercentiles(observed Observed, etalon Etalon, recorded Recorded, ref
 			gives := etalon.AVL[i][j]
 			equal := etalon.Gives(i, rank, ours)
 
-			if !equal {
+			// caio keeps a merged centroid where it is, where t-digest 3.1 moves it
+			// after the centroids of an equal mean; on a boundary between two runs
+			// of equal response times the two can then round to the two sides of
+			// it. That is the one known difference, and it is described, not held.
+			reordered := !equal && len(gives) > 0 && acrossEqualRuns(durations[i], ours, nearest(gives, ours), rank)
+
+			switch {
+			case equal:
+			case reordered:
+				notes = append(notes, fmt.Sprintf("%s p%v = %d, where Gatling 3.11's digest gives %v for this log: the rank lies on a boundary between two runs of equal response times with nothing recorded between them, %s", columns[i], rank, ours, gives, OrderOfEqualCentroids))
+			default:
 				differences = append(differences, fmt.Sprintf("%s p%v = %d, where Gatling 3.11's digest gives %v for this log", columns[i], rank, ours, gives))
 			}
 
@@ -187,7 +204,9 @@ func ComparePercentiles(observed Observed, etalon Etalon, recorded Recorded, ref
 
 			if printed := recorded.Percentiles[j][i]; printed.Present && printed.N != ours {
 				switch {
-				case reference && etalon.Gives(i, rank, printed.N):
+				case reference && etalon.Gives(i, rank, printed.N) && reordered:
+					notes = append(notes, fmt.Sprintf("Gatling printed %s p%v = %d and this tool %d: %s", columns[i], rank, printed.N, ours, OrderOfEqualCentroids))
+				case reference && etalon.Gives(i, rank, printed.N) && equal:
 					notes = append(notes, fmt.Sprintf("Gatling printed %s p%v = %d and this tool %d: Gatling 3.11's digest gives %v for this log, as its generator draws", columns[i], rank, printed.N, ours, gives))
 				case reference:
 					differences = append(differences, fmt.Sprintf("Gatling printed %s p%v = %d, this tool %d, and Gatling 3.11's digest gives %v for this log", columns[i], rank, printed.N, ours, gives))
@@ -203,6 +222,54 @@ func ComparePercentiles(observed Observed, etalon Etalon, recorded Recorded, ref
 	}
 
 	return differences, notes
+}
+
+// acrossEqualRuns reports whether ours and theirs, two estimates of the
+// percentile at rank, differ the one way Principle II admits: across a boundary
+// between two runs of equal response times. The recorded response times around
+// the two — the largest at or below the smaller and the smallest at or above the
+// greater — must have nothing recorded between them and must each have been
+// recorded at least twice; the position rank/100·(n−1) must lie inside those two
+// runs; and ours must keep the rank rule. Only there can the order of centroids
+// of one mean change what a digest interpolates between, and only that far.
+func acrossEqualRuns(sorted []int64, ours, theirs int64, rank float64) bool {
+	low, high := min(ours, theirs), max(ours, theirs)
+
+	// below is the last response time at or under low, above the first at or
+	// over high; they are neighbours when nothing was recorded between them.
+	below := sort.Search(len(sorted), func(k int) bool { return sorted[k] > low }) - 1
+	above := sort.Search(len(sorted), func(k int) bool { return sorted[k] >= high })
+
+	if below < 0 || above >= len(sorted) || above != below+1 {
+		return false
+	}
+
+	first := sort.Search(len(sorted), func(k int) bool { return sorted[k] >= sorted[below] })
+	last := sort.Search(len(sorted), func(k int) bool { return sorted[k] > sorted[above] }) - 1
+
+	if below-first < 1 || last-above < 1 {
+		return false
+	}
+
+	position := rank / 100 * float64(len(sorted)-1)
+	if position < float64(first) || position > float64(last) {
+		return false
+	}
+
+	return RankMisplacement(sorted, ours, rank) <= RankTolerance(rank, len(sorted))
+}
+
+// nearest returns the value of values closest to v.
+func nearest(values []int64, v int64) int64 {
+	best := values[0]
+
+	for _, x := range values[1:] {
+		if abs64(x-v) < abs64(best-v) {
+			best = x
+		}
+	}
+
+	return best
 }
 
 func abs64(v int64) int64 {

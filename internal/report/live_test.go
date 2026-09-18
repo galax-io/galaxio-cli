@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/galax-io/galaxio-cli/internal/report/reporttest"
@@ -130,6 +131,22 @@ func report(t *testing.T, differences, notes []string) {
 	}
 }
 
+// reportRecording is report for a committed recording. None of them needs the
+// one difference from Gatling 3.11's digest that Principle II admits, the order
+// of equal centroids, so a note describing it fails t as a difference does: a
+// change that makes a recording need it has to be looked at.
+func reportRecording(t *testing.T, differences, notes []string) {
+	t.Helper()
+
+	for _, note := range notes {
+		if strings.Contains(note, reporttest.OrderOfEqualCentroids) {
+			differences = append(differences, note)
+		}
+	}
+
+	report(t, differences, notes)
+}
+
 // TestSummaryMatchesLiveGatlingRuns holds the summary of every live Gatling run
 // — about 12 000 requests at 50 rps each, rendered from galaxio's own
 // gatling/scala-sbt template and served the same responses whatever the
@@ -173,7 +190,7 @@ func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 				report(t, reporttest.Compare(observed(summary), printed, durations), nil)
 
 				differences, notes := reporttest.ComparePercentiles(observed(summary), etalon, printed, reference, durations)
-				report(t, differences, notes)
+				reportRecording(t, differences, notes)
 			})
 
 			stats, err := os.ReadFile(filepath.Join(liveDir(), version, "js", "global_stats.json"))
@@ -194,7 +211,7 @@ func TestSummaryMatchesLiveGatlingRuns(t *testing.T) {
 				report(t, reporttest.Compare(observed(summary), written, durations), nil)
 
 				differences, notes := reporttest.ComparePercentiles(observed(summary), etalon, written, reference, durations)
-				report(t, differences, notes)
+				reportRecording(t, differences, notes)
 			})
 		})
 	}

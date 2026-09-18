@@ -181,7 +181,7 @@ all requests           41.2M              0     47     38    212    840  60000
 | Code | Meaning | New with this milestone |
 |---|---|---|
 | 0 | the run was read to the end and summarised | — |
-| 1 | runtime failure while executing a valid invocation | `<log>: the run spans no time (<start> .. <end>): no request rate can be computed`, after the summary with every rate `-`; `<log>: <N> requests have an outcome the source lost: they are neither ok nor failed and the summary does not add up`, after the summary. Both at once, or one of them and a log cut short, are joined into one error. **Both were exit 0 in v0.13.0**; no Gatling log is known to produce either |
+| 1 | runtime failure while executing a valid invocation | `<log>: the run spans no time (<start> .. <end>): no request rate can be computed`, after the summary with every rate `-`, for a run that holds at least one request — one that holds none reports `0 requests` and exits 0; `<log>: <N> requests have an outcome the source lost: they are neither ok nor failed and the summary does not add up`, after the summary. Both at once, or one of them and a log cut short, are joined into one error. **Both were exit 0 in v0.13.0**; no Gatling log is known to produce either |
 | 2 | usage failure, nothing on standard output | `invalid argument "0" for "--percentiles" flag: percentile rank "0" is not a number above 0 and at most 100`; `invalid argument "1200,800" for "--bounds" flag: boundaries are two whole, non-negative numbers of milliseconds, the second greater than the first` |
 
 A log cut short keeps the behaviour of v0.13.0 and extends it: the summary of what was read
@@ -191,14 +191,18 @@ is printed and the exit code is 1. A damaged log prints no summary, as in v0.13.
 
 - One forward pass; no sample is retained and no figure is kept per request name. Heap in
   use stays under the 32 MiB goal of v0.13.0 for a log of any size and any number of
-  distinct names — the summary adds two digests, about 60 KiB — and that is a test the
+  distinct names — the summary adds three digests, about 80 KiB — and that is a test the
   ordinary suite runs.
 - The command creates, changes and removes no file.
 - Counts, minimum, maximum, mean and standard deviation are exact; they equal what Gatling
   recorded for every run of the corpus.
 - Percentiles are estimates from a t-digest at the library's defaults, labelled as this
   tool's; for a Gatling run each equals the one Gatling 3.11's digest gives for the same log
-  (research.md §18). The same log always gives the same percentiles. Up
+  (research.md §18), except where the two order centroids of equal response times
+  differently, when both lie between the same two recorded response times. The same log
+  always gives the same percentiles on one build; an arm64 and an amd64 build can differ by
+  1 ms on rare runs, because the library's centroid means differ in their last bit between
+  them (research.md §18). Up
   to 200 requests an outcome's percentile lies between the two recorded response times
   around its position; at any size it misplaces its rank by at most 4·q·(1−q)/100 of the
   requests plus one (research.md §2).
