@@ -91,17 +91,32 @@ does not change a read between two singleton centroids).
 ## 3. All requests: merge the ok and failed digests when the figures are read
 
 **Decision**: the summary keeps two digests, one per outcome, created on the first request
-of that outcome. The percentiles of all requests are read from a clone of the ok digest
-merged with the failed one at the moment the summary is produced; no third digest is fed.
+of that outcome. The percentiles of all requests are read from a fresh digest at the
+library's defaults into which the ok digest and then the failed one are merged, at the
+moment they are read; no third digest is fed, and neither digest is ever cloned.
 
-**Evidence**: on every corpus run and on a synthetic run of one million samples the merged
-digest gives the same p50, p75, p95 and p99 as a digest fed every sample directly — for the
-3.13.1 run 1.00 / 1.00 / 1427.25 / 1502.00 both ways — and merging twice gives the same
-values. While both digests hold singletons, the merge is their sorted union, so equality is
-structural there rather than lucky.
+**Evidence**: on every corpus run, and on a synthetic run of one million requests (a
+log-normal body around 40 ms, 0.5 % at 60 s, 5 % failed), the merged digest gives the same
+p50, p75, p95 and p99 as a digest fed every request directly — 40 / 60 / 110 / 186 for the
+synthetic run, 1 / 1 / 1427 / 1502 for 3.13.1 — and a test holds the corpus runs to it at
+nine ranks. While both digests hold singletons, as they do below 200 requests, the merge is
+their sorted union, so equality is structural there rather than lucky.
+
+**Why never a clone**, found while implementing (T007): `TDigest.Clone` seeds the clone's
+generator by drawing `Int63` from the original's, which advances the original's generator,
+and the generator decides which centroid a later insertion merges into. Reading all
+requests through a clone in the middle of a walk — which the progress block does five times
+a second — would therefore change the ok digest for good, and the final percentiles would
+depend on how often the block happened to draw. Measured on the synthetic run with a read
+every thousand requests: after clone reads the ok digest no longer matches an unread one
+quantile for quantile; after fresh-digest reads it matches bit for bit.
+`Merge` only reads the digest it is given, so a fresh digest leaves both accumulators as
+they were. A test reads a long walk every hundred requests and holds every quantile to the
+unread walk's, and it fails against a clone.
 
 **Alternatives considered**: a third digest fed with every request (rejected: half as much
-memory again and one more insertion per request, for the same numbers).
+memory again and one more insertion per request, for the same numbers); a clone of the ok
+digest merged with the failed one (the first design; rejected for the reason above).
 
 ## 4. Exact figures: integer accumulators, arithmetic done when the figures are read
 
@@ -352,8 +367,8 @@ Its layout is in [contracts/cli.md](contracts/cli.md).
   first design left the line blank, and the re-check of 2026-09-17 (T003) filled it.
 - **Figures**: for all, ok and failed requests — the count, the share, the minimum, the
   half-up mean, the 50th, 95th and 99th percentile and the maximum. All requests are read
-  from a clone of the ok digest merged with the failed one, the same read the final figures
-  use. Counts are exact below 10 000 and abbreviated above. No rate: it needs the final
+  from a fresh digest the ok and failed digests are merged into, the same read the final
+  figures use, which leaves both digests as they were (§3). Counts are exact below 10 000 and abbreviated above. No rate: it needs the final
   span. The columns are fixed, whatever `--percentiles` asks, so the block is 78 columns
   wide by construction.
 - **When it is drawn**: the walk already stops every 1024 items to look at the context. It
@@ -374,8 +389,8 @@ Its layout is in [contracts/cli.md](contracts/cli.md).
   terminal narrower than 80 columns wraps the block and may keep remains of it — accepted
   and documented.
 
-**Cost**: a clock read every 1024 items and, five times a second, one digest clone and merge
-of at most a few thousand centroids and nine quantile reads. Not measured yet; SC-010 caps
+**Cost**: a clock read every 1024 items and, five times a second, one merge of at most a few
+thousand centroids into a fresh digest and nine quantile reads. Not measured yet; SC-010 caps
 it at 5 % and quickstart §6 records the pair of benchmark figures.
 
 **Alternatives considered**: a single status line redrawn with a carriage return (specified

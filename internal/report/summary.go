@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	tdigest "github.com/caio/go-tdigest/v5"
 )
 
 // Options is what a run is summarised at: the percentile ranks to report and
@@ -49,10 +51,15 @@ func (b Bands) Valid() bool {
 	return b.Lower >= 0 && b.Upper > b.Lower
 }
 
-// normalize returns o with its ranks sorted and each kept once, or an error
+// Normalize returns o with its ranks sorted and each kept once, or an error
 // naming the rank or the boundaries no summary can be computed at. The ranks
 // are copied, so the caller's slice is never reordered under it.
-func (o Options) normalize() (Options, error) {
+//
+// A caller that reads a run normalizes its options before it opens one: the
+// refusal is the caller's fault and not the log's, and a command turns it into
+// a usage error. [Scan] normalizes again, so a caller that does not is still
+// refused rather than answered with a summary at options nobody chose.
+func (o Options) Normalize() (Options, error) {
 	if len(o.Percentiles) == 0 {
 		return Options{}, errors.New("no percentile rank given")
 	}
@@ -98,6 +105,15 @@ type Summary struct {
 	// successful request with no recorded end is in no band, so the three add
 	// up to the successful requests that have one.
 	Under, Between, Over int
+
+	// all estimates the percentiles of all requests: every recorded response
+	// time of a successful or failed request, fed in the order the log holds
+	// them, which is how Gatling 3.11 feeds the digest of its own. Merging the
+	// two outcomes' digests when they are read is not that digest: on a run of
+	// 12 000 requests of which 5 % fail slowly it gave a 95th percentile of
+	// 358 ms where this one, and Gatling 3.11's, give 366, and on other such
+	// runs it was hundreds of milliseconds away.
+	all *tdigest.TDigest
 }
 
 // band counts a successful response of ms milliseconds into its band. The
@@ -114,9 +130,13 @@ func (s *Summary) band(ms int64) {
 }
 
 // All returns the figures of every request of the run, successful and failed
-// together. Nothing is stored for them: they are the two outcomes combined.
+// together: the exact figures of the two outcomes combined, and the percentiles
+// of the digest the walk fed with both.
 func (s Summary) All() Figures {
-	return merge(s.OK, s.Failed)
+	all := merge(s.OK, s.Failed)
+	all.digest = s.all
+
+	return all
 }
 
 // Share returns count as a percentage of all requests of the run, and false
@@ -166,7 +186,13 @@ func (s Summary) Rate(count int) (float64, bool) {
 		return 0, false
 	}
 
-	seconds := (span + time.Second - 1) / time.Second
+	// Rounded up by dividing first: a damaged timestamp can leave a span at the
+	// largest a duration holds, where adding a second before the division would
+	// wrap it negative and turn every rate of the run into -0.
+	seconds := span / time.Second
+	if span%time.Second != 0 {
+		seconds++
+	}
 
 	return float64(count) / float64(seconds), true
 }

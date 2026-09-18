@@ -5,6 +5,7 @@ import (
 	"math/bits"
 	"time"
 
+	tdigest "github.com/caio/go-tdigest/v5"
 	"github.com/galax-io/parsec/model"
 )
 
@@ -12,11 +13,12 @@ import (
 // successful requests or its failed ones — accumulated in one pass without
 // keeping a single request.
 //
-// Every figure here is exact. Durations are whole milliseconds; the sum is kept
+// Every figure here is exact but the percentiles, which a t-digest estimates
+// (see Percentile). Durations are whole milliseconds; the sum is kept
 // in 128 bits and the sum of squares in 192, and the mean and the deviation are
 // divided and rooted in integers only when they are read. A duration is at most
-// 2⁶³−1 ns, under 2⁴³ ms, and a count is at most 2⁶³, so the sum stays under
-// 2¹⁰⁶ and the sum of squares under 2¹⁴⁹: neither can wrap, whatever a log holds.
+// 2⁶³−1 ns, under 2⁴⁴ ms, and a count is at most 2⁶³, so the sum stays under
+// 2¹⁰⁷ and the sum of squares under 2¹⁵¹: neither can wrap, whatever a log holds.
 //
 // A figure that does not exist — any timing figure of an outcome no request
 // with a recorded end reached — is reported as absent, never as zero, because
@@ -31,6 +33,10 @@ type Figures struct {
 	// and the sum of their squares, as 64-bit words, low word first.
 	sum     [2]uint64
 	squares [3]uint64
+
+	// digest estimates the percentiles. It is created on the first recorded
+	// duration, so an outcome with none has no digest and no percentile.
+	digest *tdigest.TDigest
 }
 
 // add counts one request of this outcome and returns its response time in
@@ -68,12 +74,16 @@ func (f *Figures) add(duration model.Opt[time.Duration]) (int64, bool) {
 	f.squares[1], carry = bits.Add64(f.squares[1], high, carry)
 	f.squares[2] += carry
 
+	f.estimate(ms)
+
 	return ms, true
 }
 
-// merge returns the figures of a and b together, exactly as if every request
-// of both had been added to one. The bound above holds for the two together,
-// so no word carries out of its sum.
+// merge returns the exact figures of a and b together, as if every request of
+// both had been added to one. The bound above holds for the two together, so no
+// word carries out of its sum. It gives the result no digest: two digests
+// merged are not one digest fed the same requests in the order the log holds
+// them, which is what a percentile of both is read from (see Summary.All).
 func merge(a, b Figures) Figures {
 	m := Figures{count: a.count + b.count, timed: a.timed + b.timed}
 
