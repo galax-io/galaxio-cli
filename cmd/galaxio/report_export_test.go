@@ -95,6 +95,30 @@ func TestReportExportCorpus(t *testing.T) {
 	}
 }
 
+func TestReportExportMatchesGatling(t *testing.T) {
+	for _, version := range []string{"3.11.5", "3.12.0"} {
+		t.Run(version, func(t *testing.T) {
+			dir := writeRun(t, corpusLog(t, version))
+			code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "stats,global_stats")
+			if code != exitOK || stdout != "" || stderr != "" {
+				t.Fatalf("export = %d, stdout %q, stderr %q", code, stdout, stderr)
+			}
+			for _, filename := range []string{"stats.json", "global_stats.json"} {
+				t.Run(filename, func(t *testing.T) {
+					got := readJSONFile[any](t, filepath.Join(dir, "js", filename))
+					want := readJSONFile[any](t, filepath.Join(reportCorpus, version, filename))
+					// Compare every field and node, ignoring only JSON formatting and key order.
+					if !reflect.DeepEqual(got, want) {
+						gotJSON, _ := json.MarshalIndent(got, "", "  ")
+						wantJSON, _ := json.MarshalIndent(want, "", "  ")
+						t.Fatalf("export differs from Gatling %s:\ngot:\n%s\nwant:\n%s", version, gotJSON, wantJSON)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestReportExportSelectionAndOverwrite(t *testing.T) {
 	dir := writeRun(t, corpusLog(t, "3.15.1"))
 	path := filepath.Join(dir, "js", "global_stats.json")
