@@ -69,7 +69,7 @@ usable; distinct positions are not merged by display name.
 symlinks, invalid selections and unusable logs; verify exit class, named path and unchanged
 bytes.
 
-- [ ] T006 [US3] Complete overwrite, all-selected preflight and unsafe-destination regression coverage in `internal/report/legacy/publish.go`, `internal/report/legacy/publish_test.go` and `cmd/galaxio/report_export_test.go`
+- [x] T006 [US3] Complete overwrite, all-selected preflight and unsafe-destination regression coverage in `internal/report/legacy/publish.go`, `internal/report/legacy/publish_test.go` and `cmd/galaxio/report_export_test.go`
 
 **Checkpoint**: No selected or unrelated artifact changes without explicit authorization;
 newly-created failed outputs are removed.
