@@ -23,7 +23,7 @@ commit; update its checkbox in that commit.
 
 **Purpose**: Compute the whole-run and per-position views once for both legacy products.
 
-- [ ] T002 Add one-pass request/group aggregation and validated total/OK/KO export views with focused tests in `internal/report/scan.go`, `internal/report/source.go`, `internal/report/tree.go`, `internal/report/export.go` and adjacent `*_test.go` files
+- [x] T002 Add one-pass request/group aggregation and validated total/OK/KO export views with focused tests in `internal/report/scan.go`, `internal/report/source.go`, `internal/report/tree.go`, `internal/report/export.go` and adjacent `*_test.go` files
 
 **Checkpoint**: A completed scan exposes bounded-memory root and position statistics without
 changing the existing human report.

@@ -129,6 +129,23 @@ type Source struct {
 // fold twice would have shipped a report of zero requests for a full run and
 // exited 0.
 func (s *Source) Scan(ctx context.Context, opts Options, tick func(Summary)) (Summary, error) {
+	return s.scan(ctx, opts, scanHooks{tick: tick})
+}
+
+// ScanTree collects request and group populations alongside the root in one walk.
+func (s *Source) ScanTree(ctx context.Context, opts Options) (*Tree, error) {
+	if s.spent {
+		return nil, ErrSpent
+	}
+	tree, err := newTree(opts)
+	if err != nil {
+		return nil, err
+	}
+	tree.Summary, err = s.scan(ctx, tree.options, scanHooks{collect: tree.collect})
+	return tree, err
+}
+
+func (s *Source) scan(ctx context.Context, opts Options, hooks scanHooks) (Summary, error) {
 	if s.spent {
 		return Summary{}, ErrSpent
 	}
@@ -140,7 +157,7 @@ func (s *Source) Scan(ctx context.Context, opts Options, tick func(Summary)) (Su
 
 	s.spent = true
 
-	return Scan(ctx, s.Reader, opts, tick)
+	return scan(ctx, s.Reader, opts, hooks)
 }
 
 // BytesRead returns how many bytes of the log the reader has taken so far. The

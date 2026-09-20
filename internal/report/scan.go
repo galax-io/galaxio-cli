@@ -83,6 +83,18 @@ type Tally struct {
 // from a run that recorded nothing. [Source.Scan] holds that precondition for
 // the open runs this package hands out; a caller holding a bare reader owns it.
 func Scan(ctx context.Context, rd simlog.RunReader, opts Options, tick func(Summary)) (Summary, error) {
+	return scan(ctx, rd, opts, scanHooks{tick: tick})
+}
+
+// scanHooks keeps the shared traversal private. collect runs synchronously after
+// the summary consumes each item; it must not mutate the item or retain borrowed
+// parser storage. A collector needing names beyond the call must copy them.
+type scanHooks struct {
+	tick    func(Summary)
+	collect func(*model.Item) error
+}
+
+func scan(ctx context.Context, rd simlog.RunReader, opts Options, hooks scanHooks) (Summary, error) {
 	opts, err := opts.Normalize()
 	if err != nil {
 		return Summary{}, err
@@ -92,8 +104,8 @@ func Scan(ctx context.Context, rd simlog.RunReader, opts Options, tick func(Summ
 
 	for n := 0; ; n++ {
 		if n%cancelCheckInterval == 0 {
-			if tick != nil {
-				tick(s)
+			if hooks.tick != nil {
+				hooks.tick(s)
 			}
 
 			if err := ctx.Err(); err != nil {
@@ -116,6 +128,11 @@ func Scan(ctx context.Context, rd simlog.RunReader, opts Options, tick func(Summ
 		}
 
 		s.add(&item)
+		if hooks.collect != nil {
+			if err := hooks.collect(&item); err != nil {
+				return s, fmt.Errorf("collect run item: %w", err)
+			}
+		}
 	}
 }
 
