@@ -1,6 +1,7 @@
 package legacy
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 	"time"
@@ -70,6 +71,22 @@ func TestRender(t *testing.T) {
 	} {
 		if _, exists := fields[name]; !exists {
 			t.Fatalf("global_stats.json is missing %q", name)
+		}
+	}
+	if len(fields) != 15 {
+		t.Fatalf("global_stats.json fields = %d, want 15", len(fields))
+	}
+
+	repeated, err := Render(testTree(t), products)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for product, document := range documents {
+		if !bytes.Equal(document, repeated[product]) {
+			t.Fatalf("repeated %s render differs", product)
+		}
+		if len(document) == 0 || document[len(document)-1] != '\n' {
+			t.Fatalf("%s has no trailing newline", product)
 		}
 	}
 

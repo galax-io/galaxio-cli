@@ -18,6 +18,8 @@ type legacyRequestCounts struct {
 type legacyStatsFile struct {
 	Name             string              `json:"name"`
 	NumberOfRequests legacyRequestCounts `json:"numberOfRequests"`
+	MinResponseTime  legacyRequestCounts `json:"minResponseTime"`
+	MaxResponseTime  legacyRequestCounts `json:"maxResponseTime"`
 }
 
 type legacyTreeFile struct {
@@ -224,5 +226,90 @@ func TestReportExportPreservesDecodedNames(t *testing.T) {
 	visit(&root)
 	if !found {
 		t.Fatalf("decoded request name %q was not preserved", name)
+	}
+}
+
+func TestReportExportReproducible(t *testing.T) {
+	dir := writeRun(t, corpusLog(t, "3.15.1"))
+	args := []string{
+		"report", "gatling", dir, "-o", "stats,global_stats",
+		"--percentiles", "25,50,75,99", "--bounds", "5,1000",
+	}
+	code, stdout, stderr := runCLI(args...)
+	if code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("first export = %d, %q, %q", code, stdout, stderr)
+	}
+
+	jsDir := filepath.Join(dir, "js")
+	first := make(map[string][]byte, 2)
+	for _, name := range []string{"stats.json", "global_stats.json"} {
+		data, err := os.ReadFile(filepath.Join(jsDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		first[name] = data
+	}
+
+	args = []string{
+		"report", "gatling", dir, "-o", "global_stats,stats,global_stats", "--overwrite",
+		"--percentiles", "25,50,75,99", "--bounds", "5,1000",
+	}
+	code, stdout, stderr = runCLI(args...)
+	if code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("repeated export = %d, %q, %q", code, stdout, stderr)
+	}
+	for name, want := range first {
+		got, err := os.ReadFile(filepath.Join(jsDir, name))
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("repeated %s differs: %v", name, err)
+		}
+	}
+	entries, err := os.ReadDir(jsDir)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("js inventory = %v, %v; want two selected files", entries, err)
+	}
+
+	statsOnlyDir := writeRun(t, corpusLog(t, "3.12.0"))
+	code, stdout, stderr = runCLI("report", "gatling", statsOnlyDir, "-o", "stats")
+	if code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("stats-only export = %d, %q, %q", code, stdout, stderr)
+	}
+	entries, err = os.ReadDir(filepath.Join(statsOnlyDir, "js"))
+	if err != nil || len(entries) != 1 || entries[0].Name() != "stats.json" {
+		t.Fatalf("stats-only inventory = %v, %v", entries, err)
+	}
+}
+
+func TestReportExportEmptyOutcomeColumns(t *testing.T) {
+	tests := []struct {
+		name    string
+		outcome string
+		ok, ko  int
+	}{
+		{name: "no failures", outcome: "OK", ok: 1},
+		{name: "no successes", outcome: "KO", ko: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log := []byte("RUN\tsim\tsim\t1000\t \t3.12.0\n" +
+				"REQUEST\t\trequest\t1000\t1010\t" + tt.outcome + "\t \n")
+			dir := writeRun(t, log)
+			code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "global_stats")
+			if code != exitOK || stdout != "" || stderr != "" {
+				t.Fatalf("export = %d, %q, %q", code, stdout, stderr)
+			}
+
+			global := readJSONFile[legacyStatsFile](t, filepath.Join(dir, "js", "global_stats.json"))
+			if global.NumberOfRequests != (legacyRequestCounts{Total: 1, OK: tt.ok, KO: tt.ko}) {
+				t.Fatalf("counts = %+v", global.NumberOfRequests)
+			}
+			if tt.ok == 0 && (global.MinResponseTime.OK != 0 || global.MaxResponseTime.OK != 0) {
+				t.Fatalf("empty OK timings = %+v / %+v", global.MinResponseTime, global.MaxResponseTime)
+			}
+			if tt.ko == 0 && (global.MinResponseTime.KO != 0 || global.MaxResponseTime.KO != 0) {
+				t.Fatalf("empty KO timings = %+v / %+v", global.MinResponseTime, global.MaxResponseTime)
+			}
+		})
 	}
 }
