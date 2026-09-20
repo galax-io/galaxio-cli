@@ -171,8 +171,9 @@ const reportKeyWidth = 11
 // reportOptions is what runReport needs: the tool the user named, the path they
 // gave, the root flags that shape the output, and where to write.
 type reportOptions struct {
-	Tool   string
-	Output string
+	Tool      string
+	Output    string
+	Overwrite bool
 
 	// Path is the path the user gave and PathSet says whether they gave one at
 	// all. Both are needed because an argument that is present and empty names
@@ -211,6 +212,7 @@ type reportOutput struct {
 
 func newReportCommand() *cobra.Command {
 	var output reportFormatFlag
+	var overwrite bool
 
 	percentiles := newRanksFlag()
 	bounds := newBoundsFlag()
@@ -242,14 +244,15 @@ searched, taking the run lastRun.txt names or else the most recently modified.
 Tools: %s
 
 Use -o stats or -o global_stats to write js/stats.json or js/global_stats.json
-under the selected run; -o stats,global_stats writes both. Export requires four
-distinct percentile ranks. The yml product remains reserved.`, strings.Join(reportTools, ", ")),
+under the selected run; -o stats,global_stats writes both. Use --overwrite to
+replace selected files. Export requires four distinct percentile ranks.
+The yml product remains reserved.`, strings.Join(reportTools, ", ")),
 		// wrapUsageArgs gives this the type the exit code is read from, as it
 		// does for every other validator in the tree.
 		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				if cmd.Flags().Changed("output") {
+				if cmd.Flags().Changed("output") || cmd.Flags().Changed("overwrite") {
 					return UsageError{Err: errors.New("report export requires a tool")}
 				}
 				return cmd.Help()
@@ -258,6 +261,7 @@ distinct percentile ranks. The yml product remains reserved.`, strings.Join(repo
 			opts := reportOptions{
 				Tool:        args[0],
 				Output:      output.value,
+				Overwrite:   overwrite,
 				Percentiles: percentiles.ranks,
 				Bounds:      bounds.bands,
 				Quiet:       isQuiet(cmd),
@@ -277,6 +281,7 @@ distinct percentile ranks. The yml product remains reserved.`, strings.Join(repo
 	}
 
 	cmd.Flags().VarP(&output, "output", "o", "report product(s), comma-separated: stats, global_stats (yml reserved)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "replace selected export files; requires -o")
 	cmd.Flags().Var(percentiles, "percentiles", "percentile ranks to report, comma-separated, each above 0 and at most 100")
 	cmd.Flags().Var(bounds, "bounds", "the two boundaries of the response-time bands, in whole milliseconds")
 
@@ -375,6 +380,9 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		if len(options.Percentiles) != 4 {
 			return reportOutput{}, UsageError{Err: errors.New("report export requires four distinct percentile ranks")}
 		}
+	}
+	if len(products) == 0 && opts.Overwrite {
+		return reportOutput{}, UsageError{Err: errors.New("--overwrite requires -o")}
 	}
 	loc, err := report.Locate(opts.Path)
 	if err != nil {
@@ -476,7 +484,7 @@ func runReportExport(ctx context.Context, opts reportOptions, out reportOutput, 
 	if err != nil {
 		return out, RuntimeError{Err: fmt.Errorf("%s: %w", out.Location.Log, err)}
 	}
-	if err := legacy.Publish(out.Location.Dir, documents, false); err != nil {
+	if err := legacy.Publish(out.Location.Dir, documents, opts.Overwrite); err != nil {
 		return out, RuntimeError{Err: err}
 	}
 	return out, nil

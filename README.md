@@ -374,11 +374,13 @@ columns wraps the block and may keep remains of it.
 selected run. Either product can also be selected alone. Successful export is silent.
 Export requires four distinct percentile ranks after sorting and
 deduplication; their values are the deterministic t-digest estimates described above.
+Existing files are refused unless `--overwrite` is supplied; it replaces only the selected
+products. `--overwrite` requires `-o`.
 
 ```sh
 galaxio report gatling target/gatling/mysim-20260906044741110 -o global_stats
 galaxio report gatling target/gatling/mysim-20260906044741110 -o stats
-galaxio report gatling target/gatling/mysim-20260906044741110 -o stats,global_stats
+galaxio report gatling target/gatling/mysim-20260906044741110 -o stats,global_stats --overwrite
 ```
 
 `yml` remains reserved. Unknown or unavailable products and empty list entries

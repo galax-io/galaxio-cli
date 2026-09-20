@@ -93,6 +93,64 @@ func TestReportExportCorpus(t *testing.T) {
 	}
 }
 
+func TestReportExportSelectionAndOverwrite(t *testing.T) {
+	dir := writeRun(t, corpusLog(t, "3.15.1"))
+	path := filepath.Join(dir, "js", "global_stats.json")
+
+	if code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "global_stats"); code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("first export = %d, %q, %q", code, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "js", "stats.json")); !os.IsNotExist(err) {
+		t.Fatalf("unselected stats.json exists: %v", err)
+	}
+
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "global_stats"); code != exitRuntime || stdout != "" || !strings.Contains(stderr, path) {
+		t.Fatalf("collision = %d, %q, %q", code, stdout, stderr)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatal("collision changed the existing file")
+	}
+
+	if code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "global_stats", "--overwrite"); code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("overwrite = %d, %q, %q", code, stdout, stderr)
+	}
+
+	statsPath := filepath.Join(dir, "js", "stats.json")
+	sentinel := []byte("unselected")
+	if err := os.WriteFile(statsPath, sentinel, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "global_stats", "--overwrite"); code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("selected-only overwrite = %d, %q, %q", code, stdout, stderr)
+	}
+	got, err := os.ReadFile(statsPath)
+	if err != nil || !reflect.DeepEqual(got, sentinel) {
+		t.Fatalf("unselected stats.json = %q, %v", got, err)
+	}
+
+	preflightDir := writeRun(t, corpusLog(t, "3.15.1"))
+	preflightJS := filepath.Join(preflightDir, "js")
+	if err := os.Mkdir(preflightJS, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	preflightGlobal := filepath.Join(preflightJS, "global_stats.json")
+	if err := os.WriteFile(preflightGlobal, sentinel, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := runCLI("report", "gatling", preflightDir, "-o", "stats,global_stats")
+	if code != exitRuntime || stdout != "" || !strings.Contains(stderr, preflightGlobal) {
+		t.Fatalf("combined preflight = %d, %q, %q", code, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(preflightJS, "stats.json")); !os.IsNotExist(err) {
+		t.Fatalf("combined preflight created stats.json: %v", err)
+	}
+}
+
 func TestReportExportValidation(t *testing.T) {
 	dir := writeRun(t, corpusLog(t, "3.15.1"))
 	tests := []struct {
@@ -102,6 +160,7 @@ func TestReportExportValidation(t *testing.T) {
 	}{
 		{name: "unknown", args: []string{"-o", "json"}, want: "unknown report format"},
 		{name: "reserved yml", args: []string{"-o", "yml"}, want: "not available yet"},
+		{name: "overwrite without output", args: []string{"--overwrite"}, want: "requires -o"},
 		{name: "wrong percentile count", args: []string{"-o", "stats", "--percentiles", "50,95"}, want: "four distinct percentile ranks"},
 	}
 
@@ -111,6 +170,31 @@ func TestReportExportValidation(t *testing.T) {
 			code, stdout, stderr := runCLI(args...)
 			if code != exitUsage || stdout != "" || !strings.Contains(stderr, tt.want) {
 				t.Fatalf("validation = %d, %q, %q; want %q", code, stdout, stderr, tt.want)
+			}
+		})
+	}
+}
+
+func TestReportExportFailurePublishesNothing(t *testing.T) {
+	tests := []struct {
+		name string
+		log  []byte
+	}{
+		{name: "damaged", log: damagedTextLog(t)},
+		{name: "truncated", log: corpusLog(t, "3.15.1")[:2000]},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := writeRun(t, tt.log)
+			code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "stats,global_stats")
+			if code != exitRuntime || stdout != "" || stderr == "" {
+				t.Fatalf("failed export = %d, %q, %q", code, stdout, stderr)
+			}
+			for _, name := range []string{"stats.json", "global_stats.json"} {
+				if _, err := os.Stat(filepath.Join(dir, "js", name)); !os.IsNotExist(err) {
+					t.Fatalf("failed export published %s: %v", name, err)
+				}
 			}
 		})
 	}
