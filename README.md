@@ -228,8 +228,7 @@ for the selected identities and rejected alternatives.
 ### Read a finished run
 
 `galaxio report <tool> [PATH]` reads a finished run once, describes it, and summarises it as
-a whole. It writes no file and prints no row for a single request or group: those, and
-every form a program reads, arrive with the reserved `-o` products of later releases.
+a whole. Without `-o` it writes no file and prints no row for a single request or group.
 
 ```sh
 galaxio report gatling                               # the latest run under target/gatling
@@ -371,15 +370,16 @@ by the same test as colour, and never with `--quiet`; standard output and the ex
 the same with and without it. No terminal mode is changed, so a terminal narrower than 80
 columns wraps the block and may keep remains of it.
 
-**`-o`.** Reserved for report formats later releases produce: `stats` and `global_stats`
-(Gatling's own `stats.json` and `global_stats.json`) and `yml` (the OpenNFR YAML report).
-Every name in the list is checked, and any value exits 2: a known name naming the release
-that delivers it, or saying it is postponed where no release is set yet, and an unknown one
-listing the names that exist. The value is refused as the flag is parsed, so `--help` does
-not get past it either. There is no `-o json` and no `-o text`: the first machine-readable
-output this command publishes will be Gatling's own `stats.json`, in Gatling's schema and
-with Gatling's numbers — with its percentiles equal to Gatling 3.11's, so a run recorded by
-3.13.0 or later will carry percentiles its own report did not print, for the reason above.
+**`-o global_stats`.** Writes `js/global_stats.json` under the selected run. Successful
+export is silent. Export requires four distinct percentile ranks after sorting and
+deduplication; their values are the deterministic t-digest estimates described above.
+
+```sh
+galaxio report gatling target/gatling/mysim-20260906044741110 -o global_stats
+```
+
+`stats` and `yml` remain reserved. Unknown or unavailable products and empty list entries
+exit 2 before reading a run. There is no `-o json` or `-o text`.
 
 **Exit codes.** `0` when the run was read to the end and summarised; `1` for a runtime
 failure — no run under the directory, a path that cannot be read, a log that is not a
@@ -391,7 +391,7 @@ rate `-`, because no rate can be computed; a run that holds no request at all re
 `0 requests` and exits 0), or a run holding requests whose outcome the source lost (the
 summary is printed, and its outcomes do not add up to its requests); `2` for a usage error —
 an unsupported tool, an empty or third argument, an unknown flag, a bad `--percentiles` or
-`--bounds`, or any `-o`, each rejected while the flag is parsed and so before any help. An
+`--bounds`, or an invalid `-o` product list, each rejected while the flag is parsed and so before any help. An
 interrupt cancels the read and exits 1 naming the log it stopped in. The two exits for a run
 that spans no time and for lost outcomes were `0` before this release; no Gatling log is
 known to produce either. Requests with no recorded end are counted, take part in no timing
