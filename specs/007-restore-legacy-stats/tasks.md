@@ -96,13 +96,14 @@ test infrastructure.
 
 - [x] T009 Fix partial writes with `--overwrite`, preserve existing files on write failure and add a real file-size-limit regression in `internal/report/legacy/publish.go` and `internal/report/legacy/publish_test.go`
 - [x] T010 Compare complete CLI exports with original Gatling 3.11.5/3.12.0 `stats.json` and `global_stats.json` recordings in `cmd/galaxio/report_export_test.go` and `internal/report/testdata/corpus/gatling/`
+- [x] T011 Replace the empty-string availability sentinel in `cmd/galaxio/report.go` and normalize recorded `stats.json` indentation without changing its data
 
 ## Dependencies and execution order
 
 ```text
 T001 → T002 → T003 → T004 → T005 → T006 → T007 → T008
                                                    ↓
-                                                T009 → T010
+                                                T009 → T010 → T011
 ```
 
 - T002 is the shared one-pass foundation.

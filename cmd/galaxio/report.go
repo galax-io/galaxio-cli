@@ -28,12 +28,6 @@ import (
 // the accepted name and the reported one cannot drift apart.
 var reportTools = []string{gatling.Tool}
 
-// reportFormat is a name -o may take and why it cannot be produced yet.
-type reportFormat struct {
-	name    string
-	pending string
-}
-
 // reportFormatFlag is the -o value, checked as it is parsed.
 //
 // Checking here is what puts -o before everything else, which is the whole
@@ -151,11 +145,11 @@ func (f *boundsFlag) Set(value string) error {
 }
 
 // reportFormats is what -o may name, in the order a usage error lists them.
-// An empty pending reason means the product is available.
-var reportFormats = []reportFormat{
-	{"stats", ""},
-	{"global_stats", ""},
-	{"yml", "the OpenNFR YAML report is postponed"},
+var reportFormats = []string{"stats", "global_stats", "yml"}
+
+// pendingReportFormats explains the known formats that are not available yet.
+var pendingReportFormats = map[string]string{
+	"yml": "the OpenNFR YAML report is postponed",
 }
 
 // timeLayout renders an instant the way the report prints it: to the
@@ -288,18 +282,6 @@ The yml product remains reserved.`, strings.Join(reportTools, ", ")),
 	return cmd
 }
 
-// pendingFor returns why a report format cannot be produced yet, and whether
-// the name is one this command knows at all.
-func pendingFor(name string) (string, bool) {
-	for _, f := range reportFormats {
-		if f.name == name {
-			return f.pending, true
-		}
-	}
-
-	return "", false
-}
-
 // validateReportFormats rejects an entire -o list containing unavailable names.
 //
 // An unknown name outranks a reserved one: it is a typo, and the milestone that
@@ -316,18 +298,13 @@ func validateReportFormats(list string) error {
 		name = strings.TrimSpace(name)
 		names[i] = name
 
-		if _, ok := pendingFor(name); !ok {
-			known := make([]string, len(reportFormats))
-			for j, f := range reportFormats {
-				known[j] = f.name
-			}
-
-			return fmt.Errorf("unknown report format %q: known formats: %s", name, strings.Join(known, ", "))
+		if !slices.Contains(reportFormats, name) {
+			return fmt.Errorf("unknown report format %q: known formats: %s", name, strings.Join(reportFormats, ", "))
 		}
 	}
 
 	for _, name := range names {
-		if pending, _ := pendingFor(name); pending != "" {
+		if pending, unavailable := pendingReportFormats[name]; unavailable {
 			return fmt.Errorf("report format %q is not available yet: %s", name, pending)
 		}
 	}
