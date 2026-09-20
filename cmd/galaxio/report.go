@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/galax-io/galaxio-cli/internal/report"
+	"github.com/galax-io/galaxio-cli/internal/report/legacy"
 	"github.com/galax-io/parsec/gatling"
 	"github.com/galax-io/parsec/gatling/run"
 	"github.com/galax-io/parsec/model"
@@ -150,12 +151,10 @@ func (f *boundsFlag) Set(value string) error {
 }
 
 // reportFormats is what -o may name, in the order a usage error lists them.
-// Every one is reserved: the command writes no machine-readable format yet, and
-// the first it publishes will be Gatling's own stats.json. An entry leaves this
-// table when its milestone implements it.
+// An empty pending reason means the product is available.
 var reportFormats = []reportFormat{
 	{"stats", "it arrives with milestone v0.15.0 Legacy stats.json"},
-	{"global_stats", "it arrives with milestone v0.15.0 Legacy stats.json"},
+	{"global_stats", ""},
 	{"yml", "the OpenNFR YAML report is postponed"},
 }
 
@@ -171,11 +170,9 @@ const reportKeyWidth = 11
 
 // reportOptions is what runReport needs: the tool the user named, the path they
 // gave, the root flags that shape the output, and where to write.
-//
-// It carries no -o value: every name the flag accepts is reserved, so the flag
-// is answered as it is parsed and no format reaches the work.
 type reportOptions struct {
-	Tool string
+	Tool   string
+	Output string
 
 	// Path is the path the user gave and PathSet says whether they gave one at
 	// all. Both are needed because an argument that is present and empty names
@@ -236,7 +233,7 @@ successful responses took under 800 ms, from 800 up to 1200 ms, and 1200 ms or
 more — or at the boundaries --bounds names — and how many requests failed. Times
 are in milliseconds. Percentiles are t-digest estimates, the numbers Gatling
 3.11 gives for the same log. Nothing is shown for a single request or group, and
-the command writes no file.
+without -o the command writes no file.
 
 PATH is a run directory, its simulation.log, or a results root holding run
 directories. Without it the Maven and sbt results root target/gatling is
@@ -244,22 +241,23 @@ searched, taking the run lastRun.txt names or else the most recently modified.
 
 Tools: %s
 
-The report formats -o can name are reserved for later releases: stats and
-global_stats (Gatling's own stats.json and global_stats.json) and yml (the
-OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
+Use -o global_stats to write js/global_stats.json under the selected run.
+Export requires four distinct percentile ranks. The stats and yml products
+remain reserved.`, strings.Join(reportTools, ", ")),
 		// wrapUsageArgs gives this the type the exit code is read from, as it
 		// does for every other validator in the tree.
 		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// -o needs no check here: every name it accepts is reserved and the
-			// flag refused the value as it was parsed, before this or the help
-			// a bare invocation prints.
 			if len(args) == 0 {
+				if cmd.Flags().Changed("output") {
+					return UsageError{Err: errors.New("report export requires a tool")}
+				}
 				return cmd.Help()
 			}
 
 			opts := reportOptions{
 				Tool:        args[0],
+				Output:      output.value,
 				Percentiles: percentiles.ranks,
 				Bounds:      bounds.bands,
 				Quiet:       isQuiet(cmd),
@@ -278,7 +276,7 @@ OpenNFR YAML report).`, strings.Join(reportTools, ", ")),
 		},
 	}
 
-	cmd.Flags().VarP(&output, "output", "o", "report format(s) to produce, comma-separated: stats, global_stats, yml (reserved for later releases)")
+	cmd.Flags().VarP(&output, "output", "o", "report product: global_stats (stats and yml reserved)")
 	cmd.Flags().Var(percentiles, "percentiles", "percentile ranks to report, comma-separated, each above 0 and at most 100")
 	cmd.Flags().Var(bounds, "bounds", "the two boundaries of the response-time bands, in whole milliseconds")
 
@@ -297,9 +295,7 @@ func pendingFor(name string) (string, bool) {
 	return "", false
 }
 
-// validateReportFormats rejects the whole -o list. Every known name is reserved,
-// so any value fails, and a script that asks for stats today must fail loudly
-// rather than receive something else.
+// validateReportFormats rejects an entire -o list containing unavailable names.
 //
 // An unknown name outranks a reserved one: it is a typo, and the milestone that
 // will deliver the rest of the list does not matter until it is fixed. An empty
@@ -325,15 +321,16 @@ func validateReportFormats(list string) error {
 		}
 	}
 
-	// Every name is known, and every known name is reserved, so the list fails
-	// on the first of them.
-	pending, _ := pendingFor(names[0])
-
-	return fmt.Errorf("report format %q is not available yet: %s", names[0], pending)
+	for _, name := range names {
+		if pending, _ := pendingFor(name); pending != "" {
+			return fmt.Errorf("report format %q is not available yet: %s", name, pending)
+		}
+	}
+	return nil
 }
 
-// runReport locates, opens and reads one run. An unsupported tool or any -o
-// value is a UsageError; everything that fails while reading a valid invocation
+// runReport locates, opens and reads one run. An unsupported tool or invalid
+// option is a UsageError; everything that fails while reading a valid invocation
 // is a RuntimeError whose message names the path, directory or version at fault.
 func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	if !slices.Contains(reportTools, opts.Tool) {
@@ -366,7 +363,19 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	if err != nil {
 		return reportOutput{}, UsageError{Err: err}
 	}
-
+	var products []legacy.Product
+	if opts.Output != "" {
+		if err := validateReportFormats(opts.Output); err != nil {
+			return reportOutput{}, UsageError{Err: err}
+		}
+		products, err = legacy.Select(opts.Output)
+		if err != nil {
+			return reportOutput{}, UsageError{Err: err}
+		}
+		if len(options.Percentiles) != 4 {
+			return reportOutput{}, UsageError{Err: errors.New("report export requires four distinct percentile ranks")}
+		}
+	}
 	loc, err := report.Locate(opts.Path)
 	if err != nil {
 		return reportOutput{}, RuntimeError{Err: err}
@@ -376,9 +385,11 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 	if err != nil {
 		return reportOutput{}, RuntimeError{Err: err}
 	}
-	defer func() { _ = src.Close() }()
-
 	out := reportOutput{Location: loc, Run: src.Reader.Run(), Format: src.Format}
+	if len(products) != 0 {
+		return runReportExport(ctx, opts, out, src, options, products)
+	}
+	defer func() { _ = src.Close() }()
 
 	// A version newer than any recording is read, and the warning travels in
 	// the run description too. It is printed even under --quiet because it is
@@ -448,6 +459,26 @@ func runReport(ctx context.Context, opts reportOptions) (reportOutput, error) {
 		return out, RuntimeError{Err: failed}
 	}
 
+	return out, nil
+}
+
+// runReportExport reads the run once, renders the selected legacy files, and
+// writes them without producing human output.
+func runReportExport(ctx context.Context, opts reportOptions, out reportOutput, src *report.Source, options report.Options, products []legacy.Product) (reportOutput, error) {
+	collected, scanErr := src.ScanTree(ctx, options)
+	if collected != nil {
+		out.Summary = collected.Summary
+	}
+	if err := errors.Join(scanErr, src.Close()); err != nil {
+		return out, RuntimeError{Err: fmt.Errorf("%s: %w", out.Location.Log, err)}
+	}
+	documents, err := legacy.Render(collected, products)
+	if err != nil {
+		return out, RuntimeError{Err: fmt.Errorf("%s: %w", out.Location.Log, err)}
+	}
+	if err := legacy.Publish(out.Location.Dir, documents, false); err != nil {
+		return out, RuntimeError{Err: err}
+	}
 	return out, nil
 }
 

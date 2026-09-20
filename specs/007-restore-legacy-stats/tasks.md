@@ -39,7 +39,7 @@ success.
 entry with `-o global_stats`; decode the legacy schema and compare whole-run counts.
 
 - [x] T003 [US1] Implement product selection, the 15-field legacy statistics document and complete-file publication with unit tests in `internal/report/legacy/legacy.go`, `internal/report/legacy/publish.go` and adjacent `*_test.go` files
-- [ ] T004 [US1] Activate `-o global_stats`, four-rank validation, silent export and corpus command tests in `cmd/galaxio/report.go` and `cmd/galaxio/report_export_test.go`
+- [x] T004 [US1] Activate `-o global_stats`, four-rank validation, silent export and corpus command tests in `cmd/galaxio/report.go` and `cmd/galaxio/report_export_test.go`
 
 **Checkpoint**: The global product works independently and no-output invocations retain the
 existing human report.
