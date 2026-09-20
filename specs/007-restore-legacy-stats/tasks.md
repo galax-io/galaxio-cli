@@ -95,12 +95,14 @@ test infrastructure.
 ## Review follow-up
 
 - [x] T009 Fix partial writes with `--overwrite`, preserve existing files on write failure and add a real file-size-limit regression in `internal/report/legacy/publish.go` and `internal/report/legacy/publish_test.go`
-- [ ] T010 Compare complete CLI exports with original Gatling 3.11.5/3.12.0 `stats.json` and `global_stats.json` recordings in `cmd/galaxio/report_export_test.go` and `internal/report/testdata/corpus/gatling/`
+- [x] T010 Compare complete CLI exports with original Gatling 3.11.5/3.12.0 `stats.json` and `global_stats.json` recordings in `cmd/galaxio/report_export_test.go` and `internal/report/testdata/corpus/gatling/`
 
 ## Dependencies and execution order
 
 ```text
 T001 → T002 → T003 → T004 → T005 → T006 → T007 → T008
+                                                   ↓
+                                                T009 → T010
 ```
 
 - T002 is the shared one-pass foundation.
@@ -109,6 +111,7 @@ T001 → T002 → T003 → T004 → T005 → T006 → T007 → T008
 - T006 hardens publication after both products exist.
 - T007 verifies cross-product reproducibility.
 - T008 records the final repository gates.
+- T009/T010 address review findings without expanding the runtime scope.
 
 ## Parallel opportunities
 
@@ -123,8 +126,9 @@ CLI regressions touch different test files and can be prepared in parallel.
 |---|---|
 | FR-001–FR-003, SC-001 | T003–T005 |
 | FR-004–FR-011, SC-002–SC-003, SC-005 | T002–T005, T007 |
-| FR-012–FR-014, FR-018, SC-004 | T006 |
+| FR-012–FR-014, FR-018, SC-004 | T006, T009 |
 | FR-015–FR-017, SC-006–SC-007 | T002, T004, T007 |
+| FR-011, SC-002 | T005, T007, T010 |
 | FR-019–FR-020 | T004–T008 |
 
 ## Implementation strategy

@@ -37,3 +37,6 @@ required for this validation.
   and an existing file was truncated to 1024 bytes. After the fix, create, overwrite-absent
   and overwrite-existing cases pass with no leftover files and the original preserved.
   `go test -race ./internal/report/legacy -run '^TestPublish' -count=1` passes.
+- T010: `TestReportExportMatchesGatling` compares every decoded field, identifier and tree
+  node in both products against the original Gatling 3.11.5 and 3.12.0 recordings. All four
+  comparisons pass; only JSON whitespace and object-key order are ignored.
