@@ -1146,11 +1146,11 @@ func TestReportFailsOnAnIncompleteSummary(t *testing.T) {
 		}
 	})
 
-	t.Run("-o is refused with the new flags present", func(t *testing.T) {
+	t.Run("export requires four percentile ranks", func(t *testing.T) {
 		t.Parallel()
 
 		code, stdout, stderr := runCLI("report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--percentiles", "90", "--bounds", "5,1000", "-o", "stats")
-		if code != exitUsage || stdout != "" || !strings.Contains(stderr, `report format "stats" is not available yet`) {
+		if code != exitUsage || stdout != "" || !strings.Contains(stderr, "four distinct percentile ranks") {
 			t.Errorf("exit %d, stdout %q, stderr %q; want exit 2 refusing -o", code, stdout, stderr)
 		}
 	})

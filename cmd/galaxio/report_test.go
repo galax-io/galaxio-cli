@@ -179,10 +179,10 @@ func TestReportRejectsReportFormatsBeforeHelp(t *testing.T) {
 	t.Parallel()
 
 	tests := [][]string{
-		{"report", "--help", "-o", "stats"},
-		{"report", "-h", "-o", "stats"},
+		{"report", "--help", "-o", "yml"},
+		{"report", "-h", "-o", "yml"},
 		{"report", "--help", "-o", "bogus"},
-		{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--help", "-o", "stats"},
+		{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--help", "-o", "yml"},
 	}
 
 	for _, args := range tests {
@@ -570,13 +570,12 @@ func TestReportRejectsReportFormats(t *testing.T) {
 		output   string
 		expected string
 	}{
-		{output: "stats", expected: `report format "stats" is not available yet: it arrives with milestone v0.15.0 Legacy stats.json`},
-		{output: "stats,global_stats", expected: `report format "stats" is not available yet: it arrives with milestone v0.15.0 Legacy stats.json`},
+		{output: "stats,yml", expected: `report format "yml" is not available yet: the OpenNFR YAML report is postponed`},
 		{output: "yml", expected: `report format "yml" is not available yet: the OpenNFR YAML report is postponed`},
 		{output: "json", expected: `unknown report format "json": known formats: stats, global_stats, yml`},
 		{output: "text", expected: `unknown report format "text": known formats: stats, global_stats, yml`},
 		// An unknown name anywhere in the list outranks a reserved one.
-		{output: "stats,bogus", expected: `unknown report format "bogus": known formats: stats, global_stats, yml`},
+		{output: "yml,bogus", expected: `unknown report format "bogus": known formats: stats, global_stats, yml`},
 		// An explicitly empty -o names no format, and must not take a different
 		// branch from -o " ".
 		{output: "", expected: `unknown report format "": known formats: stats, global_stats, yml`},

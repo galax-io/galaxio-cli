@@ -153,7 +153,7 @@ func (f *boundsFlag) Set(value string) error {
 // reportFormats is what -o may name, in the order a usage error lists them.
 // An empty pending reason means the product is available.
 var reportFormats = []reportFormat{
-	{"stats", "it arrives with milestone v0.15.0 Legacy stats.json"},
+	{"stats", ""},
 	{"global_stats", ""},
 	{"yml", "the OpenNFR YAML report is postponed"},
 }
@@ -241,9 +241,9 @@ searched, taking the run lastRun.txt names or else the most recently modified.
 
 Tools: %s
 
-Use -o global_stats to write js/global_stats.json under the selected run.
-Export requires four distinct percentile ranks. The stats and yml products
-remain reserved.`, strings.Join(reportTools, ", ")),
+Use -o stats or -o global_stats to write js/stats.json or js/global_stats.json
+under the selected run; -o stats,global_stats writes both. Export requires four
+distinct percentile ranks. The yml product remains reserved.`, strings.Join(reportTools, ", ")),
 		// wrapUsageArgs gives this the type the exit code is read from, as it
 		// does for every other validator in the tree.
 		Args: cobra.MaximumNArgs(2),
@@ -276,7 +276,7 @@ remain reserved.`, strings.Join(reportTools, ", ")),
 		},
 	}
 
-	cmd.Flags().VarP(&output, "output", "o", "report product: global_stats (stats and yml reserved)")
+	cmd.Flags().VarP(&output, "output", "o", "report product(s), comma-separated: stats, global_stats (yml reserved)")
 	cmd.Flags().Var(percentiles, "percentiles", "percentile ranks to report, comma-separated, each above 0 and at most 100")
 	cmd.Flags().Var(bounds, "bounds", "the two boundaries of the response-time bands, in whole milliseconds")
 

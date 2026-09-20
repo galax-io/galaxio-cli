@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/galax-io/galaxio-cli/internal/report"
+	"github.com/galax-io/parsec/model"
 )
 
 // Product identifies one file under a run's js directory.
@@ -85,24 +87,34 @@ type statistics struct {
 	MeanNumberOfRequestsPerSecond floatValues   `json:"meanNumberOfRequestsPerSecond"`
 }
 
+type treeNode struct {
+	Type          string                `json:"type"`
+	Name          string                `json:"name"`
+	Path          string                `json:"path"`
+	PathFormatted string                `json:"pathFormatted"`
+	Stats         statistics            `json:"stats"`
+	Contents      *map[string]*treeNode `json:"contents,omitempty"`
+}
+
 // Render creates the selected JSON documents from one completed scan.
 func Render(source *report.Tree, products []Product) (map[Product][]byte, error) {
 	if source == nil {
 		return nil, errors.New("legacy export requires a completed scan")
 	}
 
-	view, err := source.Summary.Export()
+	root, err := buildTree(source)
 	if err != nil {
 		return nil, err
 	}
-	global := makeStatistics("All Requests", view)
 
 	documents := make(map[Product][]byte, len(products))
 	for _, product := range products {
 		var value any
 		switch product {
+		case Stats:
+			value = root
 		case GlobalStats:
-			value = global
+			value = root.Stats
 		default:
 			return nil, fmt.Errorf("invalid legacy product %q", product)
 		}
@@ -115,6 +127,81 @@ func Render(source *report.Tree, products []Product) (map[Product][]byte, error)
 	}
 
 	return documents, nil
+}
+
+func buildTree(source *report.Tree) (*treeNode, error) {
+	rootView, err := source.Summary.Export()
+	if err != nil {
+		return nil, err
+	}
+
+	rootContents := make(map[string]*treeNode)
+	root := &treeNode{
+		Type:          "GROUP",
+		Name:          "All Requests",
+		PathFormatted: identifier("", "group_"),
+		Stats:         makeStatistics("All Requests", rootView),
+		Contents:      &rootContents,
+	}
+	nodes := map[model.Position]*treeNode{{}: root}
+
+	for _, sourceNode := range source.Nodes {
+		if sourceNode == nil {
+			return nil, errors.New("legacy export contains a nil node")
+		}
+		parent := nodes[sourceNode.Parent]
+		if parent == nil || parent.Contents == nil {
+			return nil, fmt.Errorf("legacy export is missing parent for %s", sourceNode.Position)
+		}
+
+		groups := sourceNode.Position.Groups()
+		name := sourceNode.Position.Name()
+		prefix := "req_"
+		typeName := "REQUEST"
+		segments := append([]string{}, groups...)
+		var contents *map[string]*treeNode
+		if sourceNode.Position.Kind() == model.PositionGroup {
+			prefix = "group_"
+			typeName = "GROUP"
+			if len(groups) > 0 {
+				name = groups[len(groups)-1]
+			}
+			children := make(map[string]*treeNode)
+			contents = &children
+		} else {
+			segments = append(segments, name)
+		}
+		path := strings.Join(segments, " / ")
+		view, err := sourceNode.Export(source.Summary.Tally.Bounds)
+		if err != nil {
+			return nil, err
+		}
+		child := &treeNode{
+			Type:          typeName,
+			Name:          name,
+			Path:          path,
+			PathFormatted: identifier(path, prefix),
+			Stats:         makeStatistics(name, view),
+			Contents:      contents,
+		}
+		key := uniqueKey(*parent.Contents, identifier(name, prefix))
+		(*parent.Contents)[key] = child
+		nodes[sourceNode.Position] = child
+	}
+
+	return root, nil
+}
+
+func uniqueKey(contents map[string]*treeNode, key string) string {
+	if _, exists := contents[key]; !exists {
+		return key
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := key + "-" + strconv.Itoa(suffix)
+		if _, exists := contents[candidate]; !exists {
+			return candidate
+		}
+	}
 }
 
 func marshal(value any) ([]byte, error) {
@@ -177,4 +264,28 @@ func makeStatistics(name string, view report.ExportStats) statistics {
 			KO:    view.Columns[2].Rate,
 		},
 	}
+}
+
+func identifier(value, prefix string) string {
+	trimmed := strings.TrimFunc(value, func(r rune) bool { return r <= 0x20 })
+	if trimmed == "" {
+		trimmed = "missing_name"
+	}
+
+	clean := make([]rune, 0, 15)
+	for _, r := range strings.ToLower(trimmed) {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+			r = '-'
+		}
+		clean = append(clean, r)
+		if len(clean) == 15 {
+			break
+		}
+	}
+
+	var hash uint32
+	for _, unit := range utf16.Encode([]rune(trimmed)) {
+		hash = hash*31 + uint32(unit)
+	}
+	return prefix + string(clean) + "-" + strconv.FormatInt(int64(int32(hash)), 10)
 }

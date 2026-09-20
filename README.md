@@ -370,15 +370,18 @@ by the same test as colour, and never with `--quiet`; standard output and the ex
 the same with and without it. No terminal mode is changed, so a terminal narrower than 80
 columns wraps the block and may keep remains of it.
 
-**`-o global_stats`.** Writes `js/global_stats.json` under the selected run. Successful
-export is silent. Export requires four distinct percentile ranks after sorting and
+**`-o stats,global_stats`.** Writes `js/stats.json` and `js/global_stats.json` under the
+selected run. Either product can also be selected alone. Successful export is silent.
+Export requires four distinct percentile ranks after sorting and
 deduplication; their values are the deterministic t-digest estimates described above.
 
 ```sh
 galaxio report gatling target/gatling/mysim-20260906044741110 -o global_stats
+galaxio report gatling target/gatling/mysim-20260906044741110 -o stats
+galaxio report gatling target/gatling/mysim-20260906044741110 -o stats,global_stats
 ```
 
-`stats` and `yml` remain reserved. Unknown or unavailable products and empty list entries
+`yml` remains reserved. Unknown or unavailable products and empty list entries
 exit 2 before reading a run. There is no `-o json` or `-o text`.
 
 **Exit codes.** `0` when the run was read to the end and summarised; `1` for a runtime

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,13 @@ type legacyRequestCounts struct {
 type legacyStatsFile struct {
 	Name             string              `json:"name"`
 	NumberOfRequests legacyRequestCounts `json:"numberOfRequests"`
+}
+
+type legacyTreeFile struct {
+	Type     string                     `json:"type"`
+	Name     string                     `json:"name"`
+	Stats    json.RawMessage            `json:"stats"`
+	Contents map[string]*legacyTreeFile `json:"contents"`
 }
 
 func readJSONFile[T any](t *testing.T, path string) T {
@@ -50,15 +58,36 @@ func TestReportExportCorpus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.version, func(t *testing.T) {
 			dir := writeRun(t, corpusLog(t, tt.version))
-			code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "global_stats")
+			code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "stats,global_stats")
 			if code != exitOK || stdout != "" || stderr != "" {
 				t.Fatalf("export = %d, stdout %q, stderr %q", code, stdout, stderr)
 			}
 
-			global := readJSONFile[legacyStatsFile](t, filepath.Join(dir, "js", "global_stats.json"))
+			globalPath := filepath.Join(dir, "js", "global_stats.json")
+			global := readJSONFile[legacyStatsFile](t, globalPath)
 			wantCounts := legacyRequestCounts{Total: tt.total, OK: tt.ok, KO: tt.ko}
 			if global.Name != "All Requests" || global.NumberOfRequests != wantCounts {
 				t.Fatalf("global stats = %+v, want name All Requests and %+v", global, wantCounts)
+			}
+
+			root := readJSONFile[legacyTreeFile](t, filepath.Join(dir, "js", "stats.json"))
+			if root.Type != "GROUP" || root.Name != "All Requests" || len(root.Contents) == 0 {
+				t.Fatalf("tree root = %+v", root)
+			}
+
+			var rootStats, globalStats any
+			if err := json.Unmarshal(root.Stats, &rootStats); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(globalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(data, &globalStats); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(rootStats, globalStats) {
+				t.Fatal("stats.json root statistics differ from global_stats.json")
 			}
 		})
 	}
@@ -72,9 +101,8 @@ func TestReportExportValidation(t *testing.T) {
 		want string
 	}{
 		{name: "unknown", args: []string{"-o", "json"}, want: "unknown report format"},
-		{name: "reserved stats", args: []string{"-o", "stats"}, want: "not available yet"},
 		{name: "reserved yml", args: []string{"-o", "yml"}, want: "not available yet"},
-		{name: "wrong percentile count", args: []string{"-o", "global_stats", "--percentiles", "50,95"}, want: "four distinct percentile ranks"},
+		{name: "wrong percentile count", args: []string{"-o", "stats", "--percentiles", "50,95"}, want: "four distinct percentile ranks"},
 	}
 
 	for _, tt := range tests {
@@ -85,5 +113,32 @@ func TestReportExportValidation(t *testing.T) {
 				t.Fatalf("validation = %d, %q, %q; want %q", code, stdout, stderr, tt.want)
 			}
 		})
+	}
+}
+
+func TestReportExportPreservesDecodedNames(t *testing.T) {
+	name := `say "hi" \\ 雪`
+	log := []byte("RUN\tsim\tsim\t1000\t \t3.12.0\n" +
+		"REQUEST\t\t" + name + "\t1000\t1010\tOK\t \n")
+	dir := writeRun(t, log)
+	code, stdout, stderr := runCLI("report", "gatling", dir, "-o", "stats")
+	if code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("export = %d, %q, %q", code, stdout, stderr)
+	}
+
+	root := readJSONFile[legacyTreeFile](t, filepath.Join(dir, "js", "stats.json"))
+	found := false
+	var visit func(*legacyTreeFile)
+	visit = func(node *legacyTreeFile) {
+		if node.Name == name {
+			found = true
+		}
+		for _, child := range node.Contents {
+			visit(child)
+		}
+	}
+	visit(&root)
+	if !found {
+		t.Fatalf("decoded request name %q was not preserved", name)
 	}
 }
