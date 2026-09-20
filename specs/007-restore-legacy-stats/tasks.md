@@ -54,7 +54,7 @@ products in one invocation.
 **Independent Test**: Export nested and repeated positions with Unicode, quotes and
 backslashes; decode the tree and compare its root statistics with `global_stats.json`.
 
-- [ ] T005 [US2] Render the legacy group/request hierarchy, stable collision-safe identifiers, original decoded names and combined product selection with tests in `internal/report/legacy/legacy.go`, `internal/report/legacy/legacy_test.go` and `cmd/galaxio/report_export_test.go`
+- [x] T005 [US2] Render the legacy group/request hierarchy, stable collision-safe identifiers, original decoded names and combined product selection with tests in `internal/report/legacy/legacy.go`, `internal/report/legacy/legacy_test.go` and `cmd/galaxio/report_export_test.go`
 
 **Checkpoint**: `stats`, `global_stats` and their combined selection are independently
 usable; distinct positions are not merged by display name.

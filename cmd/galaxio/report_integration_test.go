@@ -196,7 +196,7 @@ func TestReportIntegrationExitCodes(t *testing.T) {
 		{name: "a run that reads", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1")}, code: 0},
 		{name: "no run under the directory", args: []string{"report", "gatling", t.TempDir()}, code: 1},
 		{name: "an unsupported tool", args: []string{"report", "jmeter"}, code: 2},
-		{name: "a reserved report format", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "-o", "stats"}, code: 2},
+		{name: "a reserved report format", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "-o", "yml"}, code: 2},
 		{name: "a bad --percentiles", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--percentiles", "0"}, code: 2},
 		{name: "a bad --bounds", args: []string{"report", "gatling", filepath.Join(reportCorpus, "3.15.1"), "--bounds", "1200,800"}, code: 2},
 		{name: "a log cut short", args: []string{"report", "gatling", cutShort}, code: 1},

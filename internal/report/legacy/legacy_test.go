@@ -15,7 +15,8 @@ func testTree(t *testing.T) *report.Tree {
 
 	items := []model.Item{
 		{Kind: model.ItemSample, Sample: model.Sample{
-			Name:     "ok",
+			Groups:   []string{"outer"},
+			Name:     `say "hi" \\ 雪`,
 			Start:    time.Unix(1, 0),
 			Duration: model.Some(10 * time.Millisecond),
 			Outcome:  model.OutcomeSuccess,
@@ -35,9 +36,9 @@ func testTree(t *testing.T) *report.Tree {
 	return tree
 }
 
-func TestRenderGlobalStats(t *testing.T) {
-	products, err := Select("global_stats, global_stats")
-	if err != nil || len(products) != 1 {
+func TestRender(t *testing.T) {
+	products, err := Select("stats, global_stats, stats")
+	if err != nil || len(products) != 2 {
 		t.Fatalf("Select = %v, %v", products, err)
 	}
 	documents, err := Render(testTree(t), products)
@@ -70,5 +71,29 @@ func TestRenderGlobalStats(t *testing.T) {
 		if _, exists := fields[name]; !exists {
 			t.Fatalf("global_stats.json is missing %q", name)
 		}
+	}
+
+	var root treeNode
+	if err := json.Unmarshal(documents[Stats], &root); err != nil {
+		t.Fatal(err)
+	}
+	if root.Type != "GROUP" || root.Contents == nil || len(*root.Contents) != 2 {
+		t.Fatalf("tree root = %+v", root)
+	}
+	found := false
+	var visit func(*treeNode)
+	visit = func(node *treeNode) {
+		if node.Name == `say "hi" \\ 雪` {
+			found = true
+		}
+		if node.Contents != nil {
+			for _, child := range *node.Contents {
+				visit(child)
+			}
+		}
+	}
+	visit(&root)
+	if !found {
+		t.Fatal("stats.json lost the decoded request name")
 	}
 }
