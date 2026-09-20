@@ -84,7 +84,7 @@ and no explanatory output or companion files.
 **Independent Test**: Repeat exports with default and custom ranks/bounds, empty outcomes and
 escaped names; compare decoded documents, root/global equality, file inventory and streams.
 
-- [ ] T007 [US4] Add repeatability, custom option, empty-outcome and selected-only inventory regressions in `cmd/galaxio/report_export_test.go` and `internal/report/legacy/legacy_test.go`
+- [x] T007 [US4] Add repeatability, custom option, empty-outcome and selected-only inventory regressions in `cmd/galaxio/report_export_test.go` and `internal/report/legacy/legacy_test.go`
 - [ ] T008 [US4] Document the final invocation and run formatting, tidy, vet, race/coverage, build, integration and shell-suite gates in `README.md` and `specs/007-restore-legacy-stats/validation/quality.md`
 
 **Checkpoint**: All four stories and every success criterion are covered without external
