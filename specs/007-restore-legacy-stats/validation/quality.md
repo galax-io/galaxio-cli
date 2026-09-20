@@ -29,3 +29,11 @@
 
 No Jenkins fixture, JVM oracle, Docker build or operating-system matrix was introduced or
 required for this validation.
+
+## Review follow-up (2026-09-20)
+
+- T009: `TestPublishWriteFailure` uses a child process with `ulimit -f 1` to force a real
+  partial write. Before the fix, both overwrite cases failed: a new truncated file remained,
+  and an existing file was truncated to 1024 bytes. After the fix, create, overwrite-absent
+  and overwrite-existing cases pass with no leftover files and the original preserved.
+  `go test -race ./internal/report/legacy -run '^TestPublish' -count=1` passes.

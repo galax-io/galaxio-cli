@@ -2,8 +2,10 @@ package legacy
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -42,6 +44,70 @@ func TestPublish(t *testing.T) {
 	updated, err := os.ReadFile(path)
 	if err != nil || !reflect.DeepEqual(updated, documents[Stats]) {
 		t.Fatalf("overwritten stats.json = %q, %v", updated, err)
+	}
+}
+
+func TestPublishWriteFailure(t *testing.T) {
+	if dir := os.Getenv("GALAXIO_TEST_LIMITED_PUBLISH_DIR"); dir != "" {
+		documents := map[Product][]byte{Stats: []byte(strings.Repeat("x", 4096))}
+		err := Publish(dir, documents, os.Getenv("GALAXIO_TEST_OVERWRITE") == "true")
+		if err == nil || !strings.Contains(err.Error(), "stats.json") {
+			t.Fatalf("Publish error = %v, want write failure naming stats.json", err)
+		}
+		os.Exit(0) // Do not write the child test runner's coverage report under this limit.
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("requires POSIX file-size limits")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("requires bash for an isolated file-size limit")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name      string
+		overwrite string
+		existing  bool
+	}{
+		{name: "create", overwrite: "false"},
+		{name: "overwrite absent", overwrite: "true"},
+		{name: "overwrite existing", overwrite: "true", existing: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "js", "stats.json")
+			if tt.existing {
+				if err := Publish(dir, map[Product][]byte{Stats: []byte("original")}, false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Limit only the child process; a real partial write must not expose a broken output.
+			cmd := exec.CommandContext(t.Context(), bash, "-c",
+				`trap '' XFSZ; ulimit -f 1 || exit 1; exec "$1" -test.run '^TestPublishWriteFailure$'`, "--", executable)
+			cmd.Env = append(os.Environ(), "GALAXIO_TEST_LIMITED_PUBLISH_DIR="+dir, "GALAXIO_TEST_OVERWRITE="+tt.overwrite)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("limited writer: %v\n%s", err, output)
+			}
+			if tt.existing {
+				data, err := os.ReadFile(path)
+				if err != nil || string(data) != "original" {
+					t.Fatalf("failed overwrite changed original: %d bytes, %v", len(data), err)
+				}
+			} else if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("failed write left a partial output: %v", err)
+			}
+			files, err := os.ReadDir(filepath.Dir(path))
+			wantFiles := 0
+			if tt.existing {
+				wantFiles = 1
+			}
+			if err != nil || len(files) != wantFiles {
+				t.Fatalf("files after failure = %v, %v", files, err)
+			}
+		})
 	}
 }
 
