@@ -1,10 +1,10 @@
 # Gatling corpus recordings
 
-Copied unchanged from `github.com/galax-io/parsec` **v0.1.0**, `testdata/corpus/gatling/`
-(MIT licence; notice below). Each `simulation.log` is exactly what Gatling wrote; a
-recording is captured once and is never edited or re-made. The logs, the `lastRun.txt`
-marker and the figures Gatling itself recorded for the runs (below) are copied; the HTML
-reports and parsec's own golden files are not.
+Copied from `github.com/galax-io/parsec` **v0.1.0**, `testdata/corpus/gatling/` (MIT
+licence; notice below). Each `simulation.log` is exactly what Gatling wrote; a recording is
+captured once and is never edited or re-made. The recorded JSON data is unchanged, while
+the two `stats.json` fixtures are normalized to four-space indentation for readability.
+The HTML reports and parsec's own golden files are not copied.
 
 | Entry | Format | Recorded | Requests (console summary) | Groups | User events | Errors |
 |---|---|---|---|---|---|---|
@@ -24,16 +24,16 @@ The 3.11.5 and 3.12.0 runs were made by an earlier version of parsec's probe sim
 simulation otherwise: one request outside any group, the rest under `outer` and
 `outer / inner, with comma`; six virtual users; one run-level error per user.
 
-`.gitattributes` marks every `simulation.log`, `stats.json`, `global_stats.json`, `console.txt` and
-`etalon.tsv` as `-text` so no checkout rewrites the binary logs' bytes, the text logs' line
-endings or the recorded figures.
+`.gitattributes` marks every `simulation.log`, `stats.json`, `global_stats.json`,
+`console.txt` and `etalon.tsv` as `-text` so no checkout rewrites the binary logs' bytes,
+the text logs' line endings or the recorded figures.
 
 ## What Gatling recorded
 
 The figures Gatling computed for a run are what the report summary is tested against
-(galaxio-cli#51). Each file is Gatling's own output, copied byte for byte from the same
-parsec release, and is read by tests only. Export tests write to temporary run directories,
-never to these recordings.
+(galaxio-cli#51). Each file contains Gatling's own data from the same parsec release and is
+read by tests only; the two `stats.json` files differ only in indentation. Export tests
+write to temporary run directories, never to these recordings.
 
 | File | Run | What it holds |
 |---|---|---|

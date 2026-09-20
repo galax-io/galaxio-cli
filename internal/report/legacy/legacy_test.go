@@ -85,6 +85,9 @@ func TestRender(t *testing.T) {
 		if !bytes.Equal(document, repeated[product]) {
 			t.Fatalf("repeated %s render differs", product)
 		}
+		if !bytes.HasPrefix(document, []byte("{\n    \"")) {
+			t.Fatalf("%s is not indented with four spaces", product)
+		}
 		if len(document) == 0 || document[len(document)-1] != '\n' {
 			t.Fatalf("%s has no trailing newline", product)
 		}
