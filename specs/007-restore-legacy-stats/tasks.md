@@ -92,6 +92,11 @@ test infrastructure.
 
 ---
 
+## Review follow-up
+
+- [x] T009 Fix partial writes with `--overwrite`, preserve existing files on write failure and add a real file-size-limit regression in `internal/report/legacy/publish.go` and `internal/report/legacy/publish_test.go`
+- [ ] T010 Compare complete CLI exports with original Gatling 3.11.5/3.12.0 `stats.json` and `global_stats.json` recordings in `cmd/galaxio/report_export_test.go` and `internal/report/testdata/corpus/gatling/`
+
 ## Dependencies and execution order
 
 ```text

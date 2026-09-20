@@ -46,11 +46,9 @@ func Publish(runDir string, documents map[Product][]byte, overwrite bool) error 
 
 	for _, product := range products {
 		path := filepath.Join(jsDir, product.Filename())
-		var err error
-		if overwrite {
-			err = os.WriteFile(path, documents[product], 0o644)
-		} else {
-			err = createFile(path, documents[product])
+		err := createFile(path, documents[product])
+		if overwrite && errors.Is(err, fs.ErrExist) {
+			err = replaceFile(path, documents[product])
 		}
 		if err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
@@ -85,7 +83,35 @@ func createFile(path string, data []byte) error {
 	}
 	err = errors.Join(writeErr, file.Close())
 	if err != nil {
-		_ = os.Remove(path)
+		err = errors.Join(err, os.Remove(path))
 	}
 	return err
+}
+
+// replaceFile keeps the original intact until the replacement is completely written.
+func replaceFile(path string, data []byte) (err error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("refuse to replace non-file %s", path)
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.Remove(file.Name()))
+		}
+	}()
+	written, writeErr := file.Write(data)
+	if writeErr == nil && written != len(data) {
+		writeErr = io.ErrShortWrite
+	}
+	if err = errors.Join(writeErr, file.Chmod(info.Mode().Perm()), file.Close()); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
