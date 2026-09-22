@@ -9,3 +9,6 @@ spec:
   type: tool
   lifecycle: production
   owner: galaxio
+  dependsOn:
+    - component:default/parsec
+    - component:default/galaxio-template-registry
