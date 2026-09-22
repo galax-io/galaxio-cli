@@ -1,0 +1,11 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: galaxio-cli
+  description: CLI for Gatling performance testing workflows that scaffolds load-test projects and generates scripts from API specs
+  annotations:
+    github.com/project-slug: galax-io/galaxio-cli
+spec:
+  type: tool
+  lifecycle: production
+  owner: galaxio
