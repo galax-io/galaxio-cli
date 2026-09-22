@@ -18,6 +18,7 @@ specifications.
 - `template init` — scaffold a ready-to-compile Gatling project from a template
 - `template list` — discover available templates from any registry
 - `generate swagger / har / postman` — generate Gatling scripts from an existing API spec
+- `report` — read a finished Gatling run, describe it, and summarise it
 - `doctor` — validate CLI configuration and registry access
 - `update` — self-update from GitHub Releases
 
@@ -39,7 +40,7 @@ specifications.
 
 ### Option 1 — `go install` (all platforms)
 
-Requires Go 1.24 or later on your `PATH`.
+Requires Go 1.27.1 or later on your `PATH` (matching `go.mod`'s hard-enforced minimum).
 
 ```sh
 go install github.com/galax-io/galaxio-cli/cmd/galaxio@latest
@@ -59,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/i
 Pin a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/install.sh | GALAXIO_VERSION=0.1.1 sh
+curl -fsSL https://raw.githubusercontent.com/galax-io/galaxio-cli/main/scripts/install.sh | GALAXIO_VERSION=<version> sh
 ```
 
 The installer writes to `$HOME/.local/bin` by default. Override with
@@ -88,7 +89,7 @@ The badges at the top show the current Docker Hub tag, the latest release
 utility size, and the compressed Docker image size.
 
 ```sh
-docker pull galaxioteam/galaxio:0.1.1
+docker pull galaxioteam/galaxio:<version>
 docker pull galaxioteam/galaxio:0.1
 docker pull galaxioteam/galaxio:latest
 docker run --rm galaxioteam/galaxio --help
@@ -199,7 +200,7 @@ Update `galaxio` from GitHub Releases:
 ```sh
 galaxio update
 galaxio update --dry-run
-galaxio update --version 0.1.1
+galaxio update --version <version>
 ```
 
 Generate shell completions:
