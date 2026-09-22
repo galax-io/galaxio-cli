@@ -12,3 +12,4 @@ spec:
   dependsOn:
     - component:default/parsec
     - component:default/galaxio-template-registry
+    - component:default/spec-kit-galaxio-bootstrap
