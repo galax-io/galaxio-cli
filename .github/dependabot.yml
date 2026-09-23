@@ -4,7 +4,7 @@ multi-ecosystem-groups:
   go-runtime:
     schedule:
       interval: weekly
-      day: monday
+      day: friday
       time: "04:00"
       timezone: Etc/UTC
     commit-message:
@@ -34,7 +34,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-      day: monday
+      day: friday
       time: "04:15"
       timezone: Etc/UTC
     open-pull-requests-limit: 5
