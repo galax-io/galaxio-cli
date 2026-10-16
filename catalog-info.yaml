@@ -5,6 +5,12 @@ metadata:
   description: CLI for Gatling performance testing workflows that scaffolds load-test projects and generates scripts from API specs
   annotations:
     github.com/project-slug: galax-io/galaxio-cli
+    galaxio.io/uses.parsec: "api: report decodes results through parsec"
+    galaxio.io/uses.galaxio-template-registry: "contract: default registry: reads its manifest format"
+    galaxio.io/uses.templates-gatling: "template: renders the gatling pack"
+    galaxio.io/plans.backend: "contract: pushes results of a finished run to the platform"
+    galaxio.io/plans.opennfr: "contract: nfr-check of a finished run against a RequirementSet"
+    galaxio.io/uses.spec-kit-galaxio-bootstrap: "process: created from the template, takes process updates via copier update"
 spec:
   type: tool
   lifecycle: production
@@ -13,3 +19,4 @@ spec:
     - component:default/parsec
     - component:default/galaxio-template-registry
     - component:default/spec-kit-galaxio-bootstrap
+    - component:default/templates-gatling
