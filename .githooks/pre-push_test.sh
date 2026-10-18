@@ -71,19 +71,6 @@ check "a ready tag is published" \
 check "an unready tag is refused" \
   "1|1" unready "refs/tags/v1.2.3 $sha refs/tags/v1.2.3 $zero"
 
-# The documented emergency bypass applies to both local release guards. The
-# hook inherits the environment of `LINKAGE_OFF=1 git push …`.
-: > "$tmp/log"
-( cd "$repo" && LINKAGE_OFF=1 CHECKER_LOG="$tmp/log" CHECKER_VERDICT=unready \
-    bash "$hook" origin https://example.invalid/r.git \
-    <<< "refs/tags/v1.2.3 $sha refs/tags/v1.2.3 $zero" >/dev/null 2>&1 )
-got="$?|$(wc -l < "$tmp/log" | tr -d ' ')"
-if [ "$got" = "0|0" ]; then
-  ok "LINKAGE_OFF bypasses the local tag hook"
-else
-  bad "LINKAGE_OFF bypasses the local tag hook" "want rc|calls = 0|0, got $got"
-fi
-
 check "a branch push is not a release, and asks nothing" \
   "0|0" unready "refs/heads/main $sha refs/heads/main $sha"
 
@@ -129,6 +116,20 @@ if grep -qx -- "--for-tag v1.2.3" "$tmp/log"; then
   ok "the checker is asked about the tag being pushed"
 else
   bad "the checker is asked about the tag being pushed" "asked: $(cat "$tmp/log")"
+fi
+
+# LINKAGE_OFF=1 bypasses the gate entirely, before the checker is ever asked —
+# the same escape hatch linkage-guard.sh already gives an in-session release.
+: > "$tmp/log"
+( cd "$repo" && CHECKER_LOG="$tmp/log" CHECKER_VERDICT=unready LINKAGE_OFF=1 \
+    bash "$hook" origin https://example.invalid/r.git \
+    <<< "refs/tags/v1.2.3 $sha refs/tags/v1.2.3 $zero" >/dev/null 2>&1 )
+rc=$?
+calls=$(wc -l < "$tmp/log" | tr -d ' ')
+if [ "$rc" = 0 ] && [ "$calls" = 0 ]; then
+  ok "LINKAGE_OFF=1 bypasses the gate without consulting the checker"
+else
+  bad "LINKAGE_OFF=1 bypasses the gate without consulting the checker" "rc=$rc calls=$calls"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

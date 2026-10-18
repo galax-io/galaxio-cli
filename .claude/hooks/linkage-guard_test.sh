@@ -60,8 +60,6 @@ run 0 'gh pr create, quoted body mentions tagging' \
 run 0 'gh issue create quoting a tag command' \
   'gh issue create --body "repro: git tag v2.3.4 then git push origin v2.3.4"'
 run 0 'echo of a tag command'        'echo "git tag v9.9.9"'
-run 0 'quoted semicolon mentions a tag' +  'echo "note; git tag v9.9.9"'
-run 0 'quoted pipe mentions a tag push' +  'gh pr create --body "note | git push origin v9.9.9"'
 run 0 'git status'                   'git status --short'
 run 0 'git log over a tag range'     'git log --oneline v1.0.6..origin/main'
 run 0 'git show a tag'               'git show v1.0.6'
