@@ -12,6 +12,8 @@
 #   bash setup-speckit.sh            # additive: install what's missing, skip existing
 #   bash setup-speckit.sh --force    # reinstall extensions over existing (DANGER:
 #                                     # overwrites customized files; presets have no --force)
+#   SPECKIT_DEEP_MODEL=… SPECKIT_LIGHT_MODEL=… bash setup-speckit.sh
+#                                     # override the per-tier skill models (default opus/sonnet)
 
 set -euo pipefail
 
@@ -104,6 +106,34 @@ echo
 echo "==> Presets (--from github archive)"
 run_preset claude-ask-questions  claude-ask-questions \
   --from "$(gh_zip 0xrafasec/spec-kit-preset-claude-ask-questions v1.0.0)"
+
+echo
+echo "==> Model tiers (pin skills to the model their work needs)"
+# Deep: research, specs, plans, verification. Light: task generation and
+# mechanical bookkeeping. Unpinned skills (implement, bug-fix, ...) inherit the
+# session model and dispatch tiered sub-agents per task (see AGENTS.md).
+# Re-running is idempotent: an existing top-level `model:` line is replaced.
+DEEP_MODEL="${SPECKIT_DEEP_MODEL:-opus}"
+LIGHT_MODEL="${SPECKIT_LIGHT_MODEL:-sonnet}"
+DEEP_SKILLS=(specify clarify plan analyze checklist constitution converge bug-assess
+  harness-explore harness-verify spectest-gaps spectest-plan)
+LIGHT_SKILLS=(tasks taskstoissues agent-context-update git-commit git-feature git-initialize
+  git-remote git-validate changelog-diff changelog-generate changelog-notify changelog-release
+  worktrees-create worktrees-list worktrees-clean harness-init harness-status harness-report
+  spectest-coverage)
+
+pin_model() {   # skill-suffix  model
+  local file=".claude/skills/speckit-$1/SKILL.md"
+  [[ -f "$file" ]] || return 0
+  awk -v model="$2" '
+    NR == 1 && $0 == "---" { print; front = 1; next }
+    front && /^model:/     { next }
+    front && $0 == "---"   { print "model: " model; print; front = 0; next }
+    { print }' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+for skill in "${DEEP_SKILLS[@]}";  do pin_model "$skill" "$DEEP_MODEL";  done
+for skill in "${LIGHT_SKILLS[@]}"; do pin_model "$skill" "$LIGHT_MODEL"; done
+echo "  ✓  deep=$DEEP_MODEL (${#DEEP_SKILLS[@]} skills), light=$LIGHT_MODEL (${#LIGHT_SKILLS[@]} skills)"
 
 echo
 if [[ ${#FAILED[@]} -gt 0 ]]; then
