@@ -108,6 +108,8 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Check issue, PR and milestone linkage
+        env:
+          BACKLOG_READ_TOKEN: ${{ secrets.BACKLOG_READ_TOKEN }}
         run: scripts/check-linkage.sh --pr "$PR_NUMBER"
 
   integration:
