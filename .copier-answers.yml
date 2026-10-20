@@ -1,7 +1,7 @@
 # Changes here will be overwritten by `copier update` — NEVER EDIT MANUALLY.
 # This file records the answers used to scaffold the project so the template
 # can be re-applied later.  Keep it committed.
-_commit: v0.8.1
+_commit: v0.8.2
 _src_path: gh:galax-io/spec-kit-galaxio-bootstrap
 architecture: 'Each command is a thin cobra wrapper over a runX(ctx, opts) (XOutput,
     error) function; human output goes to stdout and diagnostics to stderr; every
