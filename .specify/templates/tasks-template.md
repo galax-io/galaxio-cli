@@ -9,11 +9,9 @@ description: "Task list template for feature implementation"
 
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Test tasks are REQUIRED. Include the unit, command, integration, regression, and golden coverage needed by the feature specification and Constitution Principle III.
+**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
-
-**Delivery**: Keep every task in one milestone PR. Each task maps to exactly one green commit, and every commit maps to one task. A validation-only task commits its checkbox and recorded evidence.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -82,9 +80,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1 (REQUIRED — Constitution Principle III)
+### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
 
-> **NOTE: Tests land with the change they cover and are never optional. Write them FIRST, ensure they FAIL before implementation. Command-level tests drive `execute()` through `runCLI` and assert exit code, stdout and stderr; a bug fix carries a regression test that fails without it.**
+> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
 - [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
@@ -108,7 +106,7 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2 (REQUIRED — Constitution Principle III)
+### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
 
 - [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
@@ -130,7 +128,7 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3 (REQUIRED — Constitution Principle III)
+### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
 
 - [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
@@ -181,7 +179,7 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Within Each User Story
 
-- Tests MUST be written and FAIL before implementation
+- Tests (if included) MUST be written and FAIL before implementation
 - Models before services
 - Services before endpoints
 - Core implementation before integration
@@ -201,7 +199,7 @@ Examples of foundational tasks (adjust based on your project):
 ## Parallel Example: User Story 1
 
 ```bash
-# Launch all tests for User Story 1 together:
+# Launch all tests for User Story 1 together (if tests requested):
 Task: "Contract test for [endpoint] in tests/contract/test_[name].py"
 Task: "Integration test for [user journey] in tests/integration/test_[name].py"
 
@@ -249,6 +247,6 @@ With multiple developers:
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
 - Verify tests fail before implementing
-- Commit after each task; never combine tasks into a logical-group commit
+- Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence

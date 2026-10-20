@@ -28,9 +28,7 @@ hooks:
     condition: null
   - extension: worktrees
     command: speckit.worktrees.create
-    # before_specify already checks out this branch in the primary tree.
-    # Worktrees remain available explicitly for branches not checked out there.
-    enabled: false
+    enabled: true
     optional: false
     priority: 10
     prompt: Execute speckit.worktrees.create?
