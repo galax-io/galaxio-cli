@@ -45,6 +45,8 @@ jobs:
       - name: Verify milestone linkage
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The backlog is private: its features are read with this token, as in linkage.yml (read-only, Issues and Metadata).
+          BACKLOG_READ_TOKEN: ${{ secrets.BACKLOG_READ_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: scripts/check-linkage.sh --for-tag "$TAG"
