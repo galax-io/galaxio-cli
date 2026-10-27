@@ -58,7 +58,7 @@ Every piece of work is tied to a milestone. No exceptions unless explicitly told
 
 - **Every PR** must be assigned to the active milestone before merging. No milestone = do not merge.
 - **Issues are for important tasks**, not technical ones. A PR that completes one writes `Closes owner/repo#N` (the issue closes when the PR lands on `main`); one PR of several writes `Part of owner/repo#N`. A linked issue carries the PR's milestone. A technical PR (sync, pins, docs, CI) needs no issue: its commit already records it.
-- **Spec work** (`specs/BCKLG-<N>-*/`) belongs to the milestone that owns the spec. Link the spec PR to the milestone immediately when creating it.
+- **Spec work** (`specs/BCKLG-<N>-*/`) belongs to the milestone that owns the spec and travels in the feature's backlog PR together with its work, never in a PR of its own. Link that PR to the milestone immediately when creating it.
 - **Active milestone** = the lowest-numbered open milestone that matches the current spec/plan. Check `gh api repos/galax-io/galaxio-cli/milestones` if unsure.
 
 ## Feature milestones (ALWAYS)
@@ -83,7 +83,7 @@ One label scheme for every repository of the organization: `scripts/labels.json`
 - **At most one each:** `severity:*` (`critical`, `high`, `medium`, `low`: the impact, not the order of work), `status:*` (`needs-triage`, `needs-info`, `needs-feature`, `ready-for-agent`, `ready-for-human`, `blocked`), `tier:*`.
 - **Any number:** `area:*` (topics shared by every repository), `module:*` (parts of one repository, declared in the scheme), `source:external`, `source:audit`.
 - **Not labels.** The order of work is the milestone: no `priority:*`. The feature is the `Part of` link: no `feature:*`. A rejected or duplicate issue is closed with that reason and a comment: no `wontfix`, `invalid`, `duplicate`.
-- **The engine's labels** `sdlc:*` live in the backlog: the maintainer sets `sdlc:run`; only the engine sets `sdlc:gate`, `sdlc:done` and `sdlc:failed`.
+- **The engine's labels** `sdlc:*` live in the backlog: only the engine sets `sdlc:gate`, `sdlc:done` and `sdlc:failed`. The label of a run's workflow, `workflow:<pipeline name>`, is the maintainer's to set, at most one on an intent; the engine never sets or removes it.
 - **A new label is a change to the scheme**, a PR to `scripts/labels.json`, not a label made in one repository. `scripts/sync-labels.sh` applies the scheme; `--check` lists what breaks it.
 
 ## Task number (ALWAYS)
@@ -98,7 +98,7 @@ A task of the backlog has one number across the organization: `BCKLG-<N>`, where
 
 ## Commits & PRs
 
-- **Spec-first.** `specs/BCKLG-<N>-<feature>/` artifacts → `docs(speckit): add BCKLG-<N>-<feature> spec/plan/tasks` commit BEFORE any `feat`/`fix`. Never folded into implementation.
+- **Spec-first.** `specs/BCKLG-<N>-<feature>/` artifacts → `docs(speckit): add BCKLG-<N>-<feature> spec/plan/tasks` as the first commit of the backlog PR that carries the feature's work, BEFORE any `feat`/`fix`. Never folded into an implementation commit, never a spec-only PR; that PR merges together with the feature's PRs in the other repositories (backlog constitution, Principle II).
 - **1 issue = 1 commit.** Each tracked GitHub issue maps to one semantic commit (`feat(scope): … (#NNN)`), green on its own (`go build ./... && go test ./...`). Docs, tweaks, and out-of-scope improvements go in separate PRs — never mixed with issue commits.
 - **Intent, not path.** No add-then-remove within a PR. Squash churn before review.
 - **1 concern per PR.** Feature ≠ docs/README. Stack dependent PRs; update with `--force-with-lease`.
