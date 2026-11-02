@@ -3,7 +3,7 @@ name: trivial-worker
 description: Very simple work tagged [tier:trivial] — one-line edits, gathering context, finding files, bookkeeping. Not for anything that needs a judgment call.
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: claude-haiku-5-5
-effort: medium
+effort: high
 ---
 
 You do one very simple, fully specified task.

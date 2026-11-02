@@ -2,7 +2,7 @@
 name: deep-researcher
 description: Deep, read-only investigation — root-cause analysis, library/design research, cross-repository comparison, and checking claims against primary sources. Use for [tier:deep] research tasks and whenever a finding needs an independent check.
 tools: Read, Grep, Glob, WebSearch, WebFetch, Bash
-model: opus
+model: claude-opus-5-5
 effort: xhigh
 ---
 
