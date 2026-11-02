@@ -65,11 +65,11 @@ Every piece of work is tied to a milestone. No exceptions unless explicitly told
 
 A feature is an issue in `galax-io/galaxio-sdlc-backlog`. It belongs to exactly one backlog milestone whose description has the line `Release: business`. Backlog milestones without that line (the backlog's own tooling and documents) are not releases and follow "Milestones" above.
 
-- **Feature issue.** Lists the work in every repository it touches as a checklist, one line per issue or PR: `- [ ] galax-io/<repo>#<N> → <repo milestone>`. A line is checked when that work is merged and the repository milestone it names has been released, so its tag exists.
-- **Repository work.** Every issue and PR of a feature carries the version milestone of its own repository and writes `Part of galax-io/galaxio-sdlc-backlog#<feature>`. A repository ships its own version when its milestone is complete, as under "Release Process". `scripts/check-linkage.sh` skips the same-milestone rule for a link to a feature; the PR still needs its own milestone.
+- **Feature issue.** Lists the work in every repository it touches as a checklist, one line per issue or PR: `- [ ] galax-io/<repo>#<N> → <theme milestone>`. A line is checked when that work is merged; the release of the business milestone checks that the repository has shipped that theme, so its tag exists.
+- **Repository work.** Every issue and PR of a feature carries its repository's theme milestone and writes `Part of galax-io/galaxio-sdlc-backlog#<feature>`. A theme milestone has the title of the feature's business milestone (`M1.0.2b — debug проходит implement автономно`) and is created in the repository when the theme's first work reaches it. It is not a version: no milestone is named after a version. The version is a tag, chosen when the repository ships the theme, as under "Release Process". `scripts/check-linkage.sh` skips the same-milestone rule for a link to a feature; the PR still needs its own milestone.
 - **Every PR links a feature.** No PR of a product repository merges without `Part of galax-io/galaxio-sdlc-backlog#<feature>` (or a closing link to a feature); `scripts/check-linkage.sh --pr` fails it. A bot's PR (a bot author, or a `dependabot/` or `update/` branch) and the backlog's own PRs are exempt. The backlog is private, so the CI job reads it with `BACKLOG_READ_TOKEN`, a read-only token for that repository (Issues and Metadata) set as an organization secret; without it the gate fails and says it cannot read the backlog. A technical PR with no feature of its own may skip this check with the maintainer's agreement: a line `No feature: <why, and who agreed>` of its own in its description, at least ten characters long, which the gate prints in its log. A milestone gets no standing feature of its own any more; the ones that exist stay until their release.
 - **Work enters through the backlog.** A bug, an audit finding or a request is not worked on until it belongs to a feature: grouped into one or given one. An issue from outside stays in its repository, which is public, and carries the label `status:needs-feature` until it is linked to a feature in the backlog.
-- **Feature done.** A feature issue is closed only when every line of its checklist is checked.
+- **Feature done.** The feature's documents PR in the backlog (its spec, plan, tasks and everything else the task leaves there) writes `Closes galax-io/galaxio-sdlc-backlog#<feature>` and is merged last, once every other line of the checklist is checked: its merge closes the feature, and GitHub shows it in the feature's Development. The work's PRs in the other repositories write `Part of`.
 - **Release.** When every feature of a business milestone is closed, close the milestone and publish a GitHub Release in `galax-io/galaxio-sdlc-backlog` that lists each feature with the repository versions that carry it. Name the release and its tag by the milestone's id, the title up to its first em dash, lowercased (`M1 — first run` → `m1`).
 - **Published releases are not edited.** A revert after the release is a new feature in the next business milestone.
 - **Never** close a business milestone with an open feature, release a feature whose repository version is not tagged, or leave a repository version out of the release text.
@@ -91,9 +91,9 @@ One label scheme for every repository of the organization: `scripts/labels.json`
 A task of the backlog has one number across the organization: `BCKLG-<N>`, where `<N>` is its issue number in `galax-io/galaxio-sdlc-backlog`. It is the only number a spec gets, and it names the task wherever `#N` alone would be read as an issue or PR of another repository.
 
 - **Spec.** Its directory is `specs/BCKLG-<N>-<name>/`, `<N>` its main task. Its `spec.md`, `plan.md` and `tasks.md` carry the line `**Задачи**: BCKLG-<N>[, BCKLG-<M>…]` under the title, or `**Tasks**: …` in a repository whose files are English only, read alike: every task it carries, the main one first. A task has one spec: before writing one, find the spec whose tasks line names the task, check it against the task as its issue says now, and update it rather than write another. A spec directory from before the number keeps its name.
-- **Branch.** A spec branch made by hand is `spec/BCKLG-<N>-<name>`; the engine's run is `BCKLG-<N>-<time>`, on the branch `sdlc/BCKLG-<N>-<time>`.
+- **Branch.** A task's documents branch in the backlog is `spec/BCKLG-<N>-<name>`, whether made by hand or by the engine, which works on it and opens no other branch in the backlog; the engine's run is `BCKLG-<N>-<time>`, and its branches in the code repositories are `sdlc/BCKLG-<N>-<time>`.
 - **Commit.** A commit that does a task's work carries the trailer `Refs: BCKLG-<N>`; its subject stays a Conventional Commit.
-- **PR.** Its body carries the line `Refs: BCKLG-<N>` beside `Part of galax-io/galaxio-sdlc-backlog#<N>`.
+- **PR.** Its body carries the line `Refs: BCKLG-<N>` beside `Part of galax-io/galaxio-sdlc-backlog#<N>`, or beside `Closes galax-io/galaxio-sdlc-backlog#<N>` in the task's documents PR.
 - **Checked.** `scripts/check-linkage.sh --pr` fails a PR of a feature without its number, a spec directory it adds that is not named by a task, and a spec, plan or tasks without the tasks line; `--specs` checks every spec of a checkout.
 
 ## Commits & PRs
@@ -101,7 +101,7 @@ A task of the backlog has one number across the organization: `BCKLG-<N>`, where
 - **Spec-first.** `specs/BCKLG-<N>-<feature>/` artifacts → `docs(speckit): add BCKLG-<N>-<feature> spec/plan/tasks` as the first commit of the backlog PR that carries the feature's work, BEFORE any `feat`/`fix`. Never folded into an implementation commit, never a spec-only PR; that PR merges together with the feature's PRs in the other repositories (backlog constitution, Principle II).
 - **1 issue = 1 commit.** Each tracked GitHub issue maps to one semantic commit (`feat(scope): … (#NNN)`), green on its own (`go build ./... && go test ./...`). Docs, tweaks, and out-of-scope improvements go in separate PRs — never mixed with issue commits.
 - **Intent, not path.** No add-then-remove within a PR. Squash churn before review.
-- **1 concern per PR.** Feature ≠ docs/README. Stack dependent PRs; update with `--force-with-lease`.
+- **One PR per repository part of a feature, a commit per concern.** What its checks find on the way (a dependency, a setting, a rule's findings) is a commit of that PR, not a PR of its own; docs and README that are not the feature's are another PR. Stack a second PR only when the first cannot merge without it; update with `--force-with-lease`.
 - **Idiomatic code.** Follow the language's idioms and the conventions already in the codebase; no control-flow-by-exception, no dead/duplicated code.
 
 ## Agents & Models (ALWAYS)
@@ -111,16 +111,17 @@ Route work by the reasoning it needs, not by habit; parallelize only where agent
 | Tier | Claude (effort) | Codex (effort) | Work |
 |---|---|---|---|
 | deep | `claude-opus-5-5` (xhigh) | `gpt-6.1-sol` (xhigh) | complex code, review and verification (every critic), research, root-cause analysis, specs/plans, architecture |
-| light | `claude-sonnet-5-5` (high) | `gpt-6.1-sol` (high) | simpler work a plan already spells out: task/issue generation, mechanical infra (CI config, version pins, renames, doc fixes) |
-| trivial | `claude-haiku-5-5` (medium) | `gpt-6-luna` (medium) | very simple edits, gathering context, finding files, bookkeeping |
-| exceptional | — | `gpt-6-astra` (xhigh) | only when the maintainer names it for a task; no agent and not the engine chooses it |
+| light | `claude-sonnet-5-5` (high) | `gpt-6.1-terra` (high) | simpler work a plan already spells out: task/issue generation, mechanical infra (CI config, version pins, renames, doc fixes) |
+| trivial | `claude-haiku-5-5` (high) | `gpt-6-luna` (high) | very simple edits, gathering context, finding files, bookkeeping |
+| exceptional | `claude-fable-5-1` (medium) | `gpt-6-astra` (xhigh) | only when the maintainer names the chosen model for a task; no automatic selection or vendor fallback |
 
 - **Newest only.**
   - When a newer model of a class appears, this table and every pin of it move to it in the same change: `.claude/settings.json`, `.claude/agents/`, `setup-speckit.sh` (in spec-kit-galaxio-bootstrap), and any code that routes models.
   - Luna and Astra stay at 6 because Codex refuses `gpt-6.1-luna` and `gpt-6.1-astra` to a ChatGPT account.
-  - `gpt-6.1-sol` needs Codex CLI 0.162 or later.
-  - Claude Code's own aliases and its background model are pinned to the table in `.claude/settings.json` (`env`: `ANTHROPIC_DEFAULT_OPUS_MODEL`, `…_SONNET_MODEL`, `…_HAIKU_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`). Without that pin its `haiku` alias means an older Haiku.
-- **Codex has no middle model.** Light work runs Sol on high effort, one less than deep; Luna is for trivial work only.
+  - `gpt-6.1-sol` needs Codex CLI 0.162 or later; `gpt-6.1-terra` needs 0.159 or later.
+  - Claude Code's own aliases and its background model are pinned to the table in `.claude/settings.json` (`env`: `ANTHROPIC_DEFAULT_FABLE_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `…_SONNET_MODEL`, `…_HAIKU_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`). Without that pin its `haiku` alias means an older Haiku.
+- **Codex models by tier.** Deep work runs Sol on xhigh effort, light work runs Terra on high effort, and trivial work runs Luna on high effort. A stage keeps its tier through a vendor fallback; task labels do not switch the model inside its executor session.
+- **Exceptional is explicit.** Fable and Astra run only on their own vendor's harness, with no cross-vendor fallback. Token cost keeps them opt-in: the maintainer names the model on the chosen stage, never as defaultModel. The engine runs Fable at medium; interactive Claude Code uses `claude --model claude-fable-5-1 --effort medium`. Raising effort needs an explicit instruction.
 - **Reviews are deep.** Every critic and reviewer runs at the deep tier, on the other vendor than the work it judges.
 - **Research is adversarial.** Deep research gets a second opinion from the other vendor (`deep-researcher` does this via `codex exec --sandbox read-only`). A claim only one model supports is unverified, not a fact.
 - **Every task carries its tier.** `tasks.md` lines add `[tier:deep]`, `[tier:light]` or `[tier:trivial]` next to `[P]`, and issues carry the matching `tier:*` label where the project labels them. When unsure, it is deep.
@@ -138,6 +139,8 @@ Route work by the reasoning it needs, not by habit; parallelize only where agent
 ## Release Process (MANDATORY)
 
 Trunk-based with release branches. Trunk is `main`; `release/*` branches are cut from `main` for stabilization. Pushing a `vX.Y.Z` tag on `main` or a `release/*` branch triggers the release workflow (Go module proxy (tag-based)) and creates a GitHub Release (git-cliff).
+
+Work goes in the theme milestone. When the theme's work in this repository is done, choose the next version by what it contains, tag it as below, write the line `Released: vX.Y.Z` in the milestone's description and close the milestone.
 
 ### Minor/Major release (e.g. 1.2.0, 2.0.0)
 
@@ -160,7 +163,7 @@ Trunk-based with release branches. Trunk is `main`; `release/*` branches are cut
 - **Branch name must match tag version**: `release/1.2.0` → `v1.2.0`, `v1.2.1`, etc.
 - **Never delete a release tag** after the registry deployment starts — creates stuck deployments
 - **Never reuse a version number** — most package registries reject duplicates permanently
-- **Before tagging**: every PR merged since the previous tag must be assigned to the milestone; every issue in the milestone whose fix is on `main` must be closed
+- **Before tagging**: every PR merged since the previous tag must be assigned to a milestone; every issue in the theme's milestone whose fix is on `main` must be closed
 
 <!-- The issue↔PR↔milestone contract above is enforced mechanically by         -->
 <!-- scripts/check-linkage.sh, run from two places:                             -->

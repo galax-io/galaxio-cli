@@ -2,7 +2,7 @@
 name: infra-worker
 description: Mechanical repository changes tagged [tier:light] — CI/workflow tweaks, version pins, config keys, renames, README/doc corrections, template syncs. Not for design decisions or behavior changes.
 tools: Read, Edit, Write, Grep, Glob, Bash
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 ---
 
