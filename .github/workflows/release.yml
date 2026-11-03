@@ -42,15 +42,6 @@ jobs:
           echo "refusing $TAG: tag must be on main or $release_branch" >&2
           exit 1
 
-      - name: Verify milestone linkage
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The backlog is private: its features are read with this token, as in linkage.yml (read-only, Issues and Metadata).
-          BACKLOG_READ_TOKEN: ${{ secrets.BACKLOG_READ_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-        run: scripts/check-linkage.sh --for-tag "$TAG"
-
       - name: Refuse an existing GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

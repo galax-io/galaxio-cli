@@ -48,7 +48,7 @@ job_needs() {
 check 'CI does not create releases' lacks "$CI" 'goreleaser|git tag|git push origin.*refs/tags|^[[:space:]]*release:'
 check 'tag workflow exists' test -f "$RELEASE"
 check 'release workflow is triggered by semantic version tags' contains "$RELEASE" "tags:[[:space:]]*\[['\"]v\*\.\*\.\*['\"]\]"
-check 'release validates the tag milestone before publishing' contains "$RELEASE" 'scripts/check-linkage\.sh --for-tag'
+check 'release does not require a version-named milestone' lacks "$RELEASE" 'check-linkage\.sh --for-tag'
 check 'release verifies the tagged source' contains "$RELEASE" 'go test -race -coverprofile=coverage\.out ./\.\.\.'
 check 'release verifies integration tests' contains "$RELEASE" 'go test -tags=integration -race -count=1 ./\.\.\.'
 check 'release publishes GitHub assets after the guards' contains "$RELEASE" 'goreleaser/goreleaser-action'
