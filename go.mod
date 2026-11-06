@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/caio/go-tdigest/v5 v5.0.0
 	github.com/galax-io/parsec v0.1.0
-	github.com/pb33f/libopenapi v0.41.2
+	github.com/pb33f/libopenapi v0.41.6
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )
