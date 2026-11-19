@@ -14,10 +14,13 @@ permissions:
   contents: read
 
 jobs:
-  # In a workflow of its own: the token that reads the private backlog must never meet third-party
-  # build code. Always a fresh GitHub-hosted VM; nothing is installed, gh and jq come with it.
+  # In a workflow of its own: the token that reads the private backlog never shares a job with
+  # third-party build code. On the organisation's own runners where the repository sets CI_RUNNER,
+  # which clean each instance before each job and after it, so no build's leftovers meet the token
+  # (galaxio-infra, docs/ci-runner.md, "Cleanup after each job"); else a GitHub-hosted VM. Nothing is
+  # installed: gh and jq come with either.
   linkage:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read

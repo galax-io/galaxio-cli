@@ -68,16 +68,19 @@ case "$cmd" in
     case "$path" in
       "repos/$REPO/milestones?state=open&per_page=100")
         echo '[{"number":8,"title":"v0.8.0"}]' | jq -r "${expr:-.}" ;;
-      "repos/$REPO/milestones?state=all&per_page=100")   # milestones.json when a case sets its own
-        if [ -f "$fx/milestones.json" ]; then cat "$fx/milestones.json"
-        else echo '[{"number":7,"title":"v0.7.0"},{"number":8,"title":"v0.8.0"}]'; fi ;;
+      "repos/$REPO/milestones?state=all&per_page=100")   # milestones.json (and milestones-2.json, page 2) when a case sets its own
+        if [ -f "$fx/milestones-2.json" ]; then pages=$(jq -sc . "$fx/milestones.json" "$fx/milestones-2.json")
+        elif [ -f "$fx/milestones.json" ]; then pages=$(jq -sc . "$fx/milestones.json")
+        else pages='[[{"number":7,"title":"v0.7.0"},{"number":8,"title":"v0.8.0"}]]'; fi
+        if [ "$paginate" = 1 ]; then echo "$pages"     # --paginate --slurp: an array of every page
+        else jq -c '.[0]' <<<"$pages"; fi ;;           # one call: the first page only
       "repos/$REPO")
         echo '{"default_branch":"main"}' | jq -r "${expr:-.}" ;;
       "repos/$BACKLOG_REPO")
         backlog_denied && not_found
         echo '{"private":true}' ;;
       "repos/$REPO/milestones/"[0-9]*)
-        if [ -f "$fx/milestones.json" ]; then jq -c --argjson n "${path##*/}" '.[] | select(.number == $n) | {title, state: "open"}' "$fx/milestones.json"
+        if [ -f "$fx/milestones.json" ]; then jq -sc --argjson n "${path##*/}" 'add | .[] | select(.number == $n) | {title, state: (.state // "open")}' "$fx"/milestones*.json
         else echo '{"title":"v0.8.0","state":"open"}'; fi ;;
       "repos/$REPO/issues?milestone="[0-9]*"&state=all&per_page=100")
         [ "$paginate" = 1 ] || unexpected "$all"
@@ -141,6 +144,13 @@ add_pr() { # number, state, closing link or "", [body] — a PR in v0.8.0
 milestones_are() { # number:title ... — the milestones of this case, in place of v0.7.0 and v0.8.0
   printf '%s\n' "$@" | jq -R 'split(":") | {number: (.[0] | tonumber), title: (.[1:] | join(":"))}' | jq -sc . > "$fx/milestones.json"
 }
+ms_set() { # number, field, value — a field of one milestone of this case (after milestones_are)
+  jq -c --argjson n "$1" --arg k "$2" --arg v "$3" 'map(if .number == $n then .[$k] = $v else . end)' "$fx/milestones.json" > "$fx/milestones.new" \
+    && mv "$fx/milestones.new" "$fx/milestones.json"
+}
+released_in() { # number, description — the description of a milestone, where a line "Released: vX.Y.Z[, …]" names its tags
+  ms_set "$1" description "$2"
+}
 run() { # the script's arguments; sets $out and $rc. The cases above 26 test the other rules, so the
         # requirement of a feature link is off for them; cases 26 and up use run_strict.
   out="$(PATH="$bin:$PATH" REPO="$REPO" BACKLOG_REPO="$BACKLOG" FEATURE_LINK=optional FIXTURES="$fx" bash "$script" "$@" 2>&1)"; rc=$?
@@ -196,6 +206,7 @@ check "for-tag: merged and closed technical PRs do not block the tag" $([ "$rc" 
 check "for-tag: the patch maps to its minor's milestone" $(has 'Milestone: #8  v0.8.0' && echo 0 || echo 1) "out=$out"
 check "for-tag: the milestone is tag-ready" $(has 'Milestone #8 is tag-ready.' && echo 0 || echo 1) "out=$out"
 check "for-tag: the script made only the calls the stub knows" $(only_known_calls && echo 0 || echo 1) "$(cat "$fx/unexpected.log" 2>&1)"
+check "FR-003: it says the milestone was found by its title, as its minor's, since no milestone says Released:" $(has 'Found by:  its title, the milestone of its minor v0.8.0 (no milestone says "Released: v0.8.1")' && echo 0 || echo 1) "out=$out"
 
 # 4b. for-tag: a patch tag is checked against the milestone of its own version when one exists, and only
 #     otherwise against its minor's — the minor's open issue must not hold back a patch
@@ -208,6 +219,7 @@ run --for-tag v0.8.1
 check "for-tag: the milestone of the patch's own version is the one checked" $(has 'Milestone: #9  v0.8.1 — patch' && echo 0 || echo 1) "out=$out"
 check "for-tag: the minor's open issue does not block the patch" $([ "$rc" -eq 0 ] && echo 0 || echo 1) "rc=$rc out=$out"
 check "for-tag: the script made only the calls the stub knows" $(only_known_calls && echo 0 || echo 1) "$(cat "$fx/unexpected.log" 2>&1)"
+check "FR-003: it says the milestone was found by its title, as its own version's, since no milestone says Released:" $(has 'Found by:  its title, the milestone of its own version (no milestone says "Released: v0.8.1")' && echo 0 || echo 1) "out=$out"
 
 new_case tag-own-milestone-exact
 milestones_are '8:v0.8.0' '9:v0.8.2'
@@ -235,6 +247,127 @@ milestones_are '8:v0.8.0'
 run --for-tag v0.9.1
 check "for-tag: no milestone of the version or its minor is an error" $([ "$rc" -eq 2 ] && echo 0 || echo 1) "rc=$rc out=$out"
 check "for-tag: it names both titles it looked for" $(has "no milestone 'v0.9.1' or 'v0.9.0…'" && echo 0 || echo 1) "out=$out"
+check "FR-005: it says no milestone names the tag in Released:, and to write that line before the tag" $(has 'no milestone says "Released: v0.9.1" in its description' && has 'write "Released: v0.9.1" in the description of the theme milestone this tag ships, before the tag' && echo 0 || echo 1) "out=$out"
+
+new_case tag-bad-version
+run --for-tag v0.9
+check "FR-007: --for-tag still takes only vX.Y.Z" $([ "$rc" -eq 2 ] && has 'error: --for-tag needs vX.Y.Z' && echo 0 || echo 1) "rc=$rc out=$out"
+
+new_case help
+run --help
+for_tag_help=$(sed -n '/--for-tag vX\.Y\.Z/,/check-linkage\.sh \[milestone\]/p' <<<"$out")   # the lines of --for-tag
+check "FR-007: --help says --for-tag looks first for the milestone whose description says Released: with the tag" $([ "$rc" -eq 0 ] && awk '/Released: vX\.Y\.Z/ && !r { r = NR } /vX\.Y\.0/ && !m { m = NR } END { exit !(r && m && r < m) }' <<<"$for_tag_help" && echo 0 || echo 1) "rc=$rc help=$for_tag_help"
+
+# 4c. for-tag (backlog#387): the tag is checked against the theme milestone whose description names it on a
+#     line "Released: vX.Y.Z[, vX.Y.Z]", ahead of any milestone titled by a version. v0.8.0 (#8) still holds
+#     an open issue, so a check of the minor's milestone in its place fails the case.
+THEME='M1.0.2b — debug'
+theme_case() { # name — v0.8.0 (#8, an open issue) and the theme milestone #12, which ships v0.8.0 and v0.8.1
+  new_case "$1"
+  milestones_are '8:v0.8.0' "12:$THEME"
+  released_in 12 $'Theme of the run.\r\nReleased: v0.8.0, v0.8.1\r\n'
+  printf '{"number":1,"state":"open"}\n' > "$fx/items-8.ndjson"
+}
+theme_case tag-released
+add_pr 2 MERGED ""
+add_issue 3 closed
+run --for-tag v0.8.1
+check "FR-002: a tag named in Released: of a theme milestone is checked against it, and passes when it is ready" $([ "$rc" -eq 0 ] && has 'Milestone #12 is tag-ready.' && only_known_calls && echo 0 || echo 1) "rc=$rc out=$out $(cat "$fx/unexpected.log" 2>&1)"
+check "FR-003: the output names the theme milestone it checked" $(has "Milestone: #12  $THEME  (open)" && echo 0 || echo 1) "out=$out"
+check "FR-003: the line under it says it was found by the Released: line" $([ "$(grep -A1 '^Milestone:' <<<"$out" | sed -n 2p)" = 'Found by:  "Released: v0.8.1" in its description' ] && echo 0 || echo 1) "out=$out"
+run --for-tag 0.8.1
+check "FR-001: a tag without v finds \"Released: v0.8.1\"" $([ "$rc" -eq 0 ] && has "Milestone: #12  $THEME" && echo 0 || echo 1) "rc=$rc out=$out"
+run --for-tag v0.8.0
+check "FR-001: the first tag of a Released: list is named by it too, ahead of the milestone titled v0.8.0" $([ "$rc" -eq 0 ] && has "Milestone: #12  $THEME" && has 'Found by:  "Released: v0.8.0" in its description' && echo 0 || echo 1) "rc=$rc out=$out"
+
+theme_case tag-released-open-pr
+add_pr 2 OPEN ""
+add_issue 3 closed
+run --for-tag v0.8.1
+check "FR-002: an open PR in the theme milestone refuses the tag" $([ "$rc" -eq 1 ] && has "Milestone: #12  $THEME" && has 'PR #2 is OPEN — merge or close it before tagging' && echo 0 || echo 1) "rc=$rc out=$out"
+
+theme_case tag-released-open-issue
+add_pr 2 MERGED ""
+add_issue 3 open
+run --for-tag v0.8.1
+check "FR-002: an open issue in the theme milestone refuses the tag" $([ "$rc" -eq 1 ] && has "Milestone: #12  $THEME" && has 'issue #3 is open — must be closed before tagging' && echo 0 || echo 1) "rc=$rc out=$out"
+
+theme_case tag-released-closed-linked
+add_issue 3 closed
+issue_in "$REPO" 3 "$THEME"
+add_pr 2 CLOSED "$REPO#3"
+run --for-tag v0.8.1
+check "FR-002: a closed, unmerged PR that links an issue of the theme milestone refuses the tag" $([ "$rc" -eq 1 ] && has "Milestone: #12  $THEME" && has 'PR #2 is CLOSED — must be MERGED before tagging' && has 'FAIL: 1 error(s)' && echo 0 || echo 1) "rc=$rc out=$out"
+
+theme_case tag-released-closed
+ms_set 12 state closed
+add_pr 2 OPEN ""
+run --for-tag v0.8.1
+check "FR-001: a closed theme milestone that names the tag is found too, and its open PR still refuses the tag" $([ "$rc" -eq 1 ] && has "Milestone: #12  $THEME  (closed)" && has 'PR #2 is OPEN' && echo 0 || echo 1) "rc=$rc out=$out"
+
+new_case tag-released-first
+milestones_are '9:v0.8.1 — patch' "12:$THEME"
+released_in 12 'Released: v0.8.1'
+printf '{"number":4,"state":"open"}\n' > "$fx/items-9.ndjson"   # the version's milestone holds an open issue
+add_pr 2 MERGED ""
+run --for-tag v0.8.1
+check "FR-001: the milestone that names the tag in Released: wins over the one titled by its version" $([ "$rc" -eq 0 ] && has "Milestone: #12  $THEME" && echo 0 || echo 1) "rc=$rc out=$out"
+
+new_case tag-released-exact
+milestones_are '8:v0.8.0' "12:$THEME" '13:M1.0.3 — next' '14:M1.0.4 — notes'
+released_in 12 $'Theme of the run.\r\n  released:  0.7.9,0.8.1 , v0.9.0 \r\nDue: autumn'   # the tag in the middle of the list
+released_in 13 'Released: v0.8.10, v0.8.1-rc'
+released_in 14 'Notes: Released: v0.8.1'
+printf '{"number":1,"state":"open"}\n' > "$fx/items-8.ndjson"
+add_pr 2 MERGED ""
+run --for-tag v0.8.1
+check "FR-001: \"released:\" in lower case, with spaces, CRLF and no v names the tag; v0.8.10, v0.8.1-rc and Released: inside a line do not" $([ "$rc" -eq 0 ] && has "Milestone: #12  $THEME" && echo 0 || echo 1) "rc=$rc out=$out"
+run --for-tag 0.8.1
+check "FR-001: the tag without v finds the same milestone" $([ "$rc" -eq 0 ] && has "Milestone: #12  $THEME" && echo 0 || echo 1) "rc=$rc out=$out"
+
+new_case tag-released-twice
+milestones_are '8:v0.8.0' "12:$THEME" '13:M1.0.3 — next'
+released_in 12 'Released: v0.8.1'
+released_in 13 'Released: v0.8.0, v0.8.1'
+add_pr 2 MERGED ""
+run --for-tag v0.8.1
+check "FR-006: a tag named in Released: of two milestones is an error" $([ "$rc" -eq 2 ] && has 'is named by "Released:" in more than one milestone' && echo 0 || echo 1) "rc=$rc out=$out"
+check "FR-006: it names each of them by number and title" $(has "#12 $THEME" && has '#13 M1.0.3 — next' && echo 0 || echo 1) "out=$out"
+check "FR-006: and checks neither, nor any other" $(! has 'Milestone:' && ! grep -qF 'issues?milestone=' "$fx/ghcalls.log" && echo 0 || echo 1) "out=$out $(cat "$fx/ghcalls.log" 2>&1)"
+
+new_case tag-released-other
+milestones_are '8:v0.8.0' '9:v0.8.1 — patch' "12:$THEME"
+released_in 12 'Released: v0.8.0'
+add_pr 2 MERGED ""
+run --for-tag v0.8.1
+check "FR-004: when Released: names other tags only, the milestone is found by its title, and the output says so" $([ "$rc" -eq 0 ] && has 'Milestone: #9  v0.8.1 — patch' && has 'Found by:  its title, the milestone of its own version (no milestone says "Released: v0.8.1")' && echo 0 || echo 1) "rc=$rc out=$out"
+
+new_case tag-released-none
+milestones_are '8:v0.8.0' "12:$THEME" '13:M1.0.3 — next'
+released_in 12 'Released: v0.8.1'
+released_in 13 ''
+run --for-tag v0.9.1
+check "FR-005: a tag no milestone names, and no milestone of its version, is an error that says what to do" $([ "$rc" -eq 2 ] && has 'no milestone says "Released: v0.9.1" in its description' && has "no milestone 'v0.9.1' or 'v0.9.0…'" && has 'write "Released: v0.9.1" in the description of the theme milestone this tag ships, before the tag' && echo 0 || echo 1) "rc=$rc out=$out"
+
+# GitHub lists 100 milestones a page and closed theme milestones only accumulate: the one that names the tag
+# may be on page 2, while v0.8.0 (#8, an open issue) is on page 1
+new_case tag-released-page-two
+milestones_are '8:v0.8.0'
+printf '[{"number":12,"title":"%s","description":"Released: v0.8.1"}]\n' "$THEME" > "$fx/milestones-2.json"
+printf '{"number":1,"state":"open"}\n' > "$fx/items-8.ndjson"
+add_pr 2 MERGED ""
+run --for-tag v0.8.1
+check "FR-001: the milestone that names the tag on the second page of milestones is the one checked" $([ "$rc" -eq 0 ] && has "Milestone: #12  $THEME" && only_known_calls && echo 0 || echo 1) "rc=$rc out=$out $(cat "$fx/unexpected.log" 2>&1)"
+
+# --tag and the audit check the milestone they are given, whatever a Released: line says
+new_case tag-given
+milestones_are '8:v0.8.0' "12:$THEME"
+released_in 12 'Released: v0.8.0'
+add_pr 2 MERGED ""
+run --tag 8
+check "FR-007: --tag checks the milestone it is given, with no Found by: line of --for-tag" $([ "$rc" -eq 0 ] && has 'Milestone: #8  v0.8.0' && has 'Mode:      tag-readiness' && ! has 'Found by:' && echo 0 || echo 1) "rc=$rc out=$out"
+run 8
+check "FR-007: an audit checks the milestone it is given, with no Found by: line either" $([ "$rc" -eq 0 ] && has 'Milestone: #8  v0.8.0' && ! has 'Mode:' && ! has 'Found by:' && echo 0 || echo 1) "rc=$rc out=$out"
 
 # 5. tag: a PR that links an issue must be merged, not just closed
 new_case tag-closed-linked
@@ -657,6 +790,27 @@ check "specs: a directory not named by its task" $(has '✗ specs/62-review-deba
 check "specs: a file without the line" $(has '✗ specs/BCKLG-334-gate-review-cost/tasks.md has no line «**Задачи**: BCKLG-334» (in English «**Tasks**: BCKLG-334») under its title' && echo 0 || echo 1) "out=$out"
 check "specs: a directory without spec.md" $(has '✗ specs/BCKLG-9-draft has no spec.md' && echo 0 || echo 1) "out=$out"
 check "specs: a task two specs carry" $(has '✗ BCKLG-62 is carried by 2 specs: specs/BCKLG-334-gate-review-cost specs/BCKLG-62-again — a task may have one' && echo 0 || echo 1) "out=$out"
+
+# 41. in spec-kit-galaxio-bootstrap, the one repository whose scripts/ hold build-speckit-kit.sh (the template
+#     ships neither it nor adopt.sh), the template ships this script and this suite byte for byte (its
+#     constitution, Principle V), and its Release Process says to write the Released: line this script reads
+#     before the tag. A copy anywhere else, a Copier template of its own included, skips this.
+in_order() { # line, phrase... — succeeds when the line holds every phrase, each after the one before it
+  local rest="$1" p; shift
+  for p in "$@"; do
+    case "$rest" in *"$p"*) rest="${rest#*"$p"}" ;; *) return 1 ;; esac
+  done
+}
+if [ -f "$here/build-speckit-kit.sh" ]; then
+  for f in check-linkage.sh check-linkage_test.sh; do
+    check "FR-009: template/scripts/$f is scripts/$f byte for byte" $(cmp -s "$here/$f" "$here/../template/scripts/$f" && echo 0 || echo 1) "cmp scripts/$f template/scripts/$f"
+  done
+  for f in AGENTS.md template/AGENTS.md.jinja templates/AGENTS.md; do
+    line=$(sed -n '/^## Release Process/,/^### /p' "$here/../$f" | grep -F 'Released: vX.Y.Z')
+    # the order of a release: the line, the tag, the release, the milestone closed; then the check that reads the line
+    check "FR-008: the Release Process of $f writes Released: vX.Y.Z before the tag and names the check that reads it" $([ "$(wc -l <<<"$line")" -eq 1 ] && in_order "$line" 'Released: vX.Y.Z' 'tag it' 'the release is out' 'close the milestone' 'check-linkage.sh --for-tag' 'finds by it the milestone' && echo 0 || echo 1) "$f: $line"
+  done
+fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
