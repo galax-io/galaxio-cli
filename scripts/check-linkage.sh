@@ -38,8 +38,10 @@ What each entity owes (this script enforces it):
 
 Usage:
   scripts/check-linkage.sh --pr <N>          # GATE one PR: milestone + any linked issue in the same milestone
-  scripts/check-linkage.sh --for-tag vX.Y.Z  # GATE a release: tag-readiness of that version's milestone
-                                             # (a patch with no milestone of its own: its minor's, vX.Y.0)
+  scripts/check-linkage.sh --for-tag vX.Y.Z  # GATE a release: tag-readiness of the theme milestone it ships,
+                                             # the one whose description has a line "Released: vX.Y.Z"
+                                             # (written before the tag); with none, the milestone titled by
+                                             # that version, else by its minor's, vX.Y.0
   scripts/check-linkage.sh [milestone]       # audit a milestone (default: lowest-numbered open)
   scripts/check-linkage.sh --tag [ms]        # also assert tag-readiness (issues closed, linked PRs merged, none open)
   scripts/check-linkage.sh --specs [dir]     # every spec of a checkout (default specs/): named by its task,
@@ -299,17 +301,40 @@ if [ -n "$PR_NUM" ]; then
   printf 'FAIL: PR #%s is malformed — fix the above before merge.\n' "$PR_NUM"; exit 1
 fi
 
-# Map a release version (vX.Y.Z) to its milestone, then assert tag-readiness on it. A milestone of the
-# version itself ("v1.23.1", or "v1.23.1 — title") is the one; a patch with none falls back to its minor's
-# (v1.23.0 -> "v1.23.0 …"). A tag without the leading v ("2.2.2") finds milestones with or without it.
+# Map a release tag (vX.Y.Z) to the milestone it ships, then assert tag-readiness on it (backlog#387). The
+# one is the theme milestone, open or closed, whose description has a line "Released: vX.Y.Z[, vX.Y.Z]"
+# naming the tag, written before the tag; a tag two milestones name is an error. With none, a milestone of
+# the version itself ("v1.23.1", or "v1.23.1 — title"), else its minor's (v1.23.0 -> "v1.23.0 …"). The
+# leading v does not matter: "2.2.2" finds "Released: v2.2.2" and milestones titled with or without it.
+FOUND_BY=""
 if [ -n "$FOR_TAG" ]; then
-  v="${FOR_TAG#v}"; minor="${v%.*}.0"
-  MS=$(gh api "repos/$REPO/milestones?state=all&per_page=100" \
-        | jq -r --arg v "$v" --arg minor "$minor" '
+  v="${FOR_TAG#v}"; minor="${v%.*}.0"; minor_tag="${FOR_TAG%%[0-9]*}$minor"
+  all=$(gh api --paginate --slurp "repos/$REPO/milestones?state=all&per_page=100" | jq 'add // []')   # every page: closed themes pile up
+  named=$(jq -r --arg v "$v" '.[]
+            | select(any((.description // "") | gsub("\r"; "") | split("\n")[]
+                | select(test("^[ \t]*[Rr]eleased:")) | sub("^[ \t]*[Rr]eleased:"; "") | split(",")[]
+                | sub("^[ \t]+"; "") | sub("[ \t]+$"; "") | ltrimstr("v"); . == $v))
+            | "#\(.number) \(.title)"' <<<"$all")
+  case "$named" in
+    *$'\n'*)
+      echo "error: tag $FOR_TAG is named by \"Released:\" in more than one milestone: ${named//$'\n'/, } — a tag ships one theme milestone: keep it in one description" >&2; exit 2 ;;
+    ?*)
+      MS="${named%% *}"; MS="${MS#\#}"
+      FOUND_BY="\"Released: $FOR_TAG\" in its description" ;;
+    *)
+      MS=$(jq -r --arg v "$v" --arg minor "$minor" '
             map(. + {t: (.title | ltrimstr("v"))}) as $all
-            | (($all | map(select(.t == $v or (.t | startswith($v + " "))))[0])
-               // ($all | map(select(.t | startswith($minor)))[0])).number // empty')
-  [ -n "$MS" ] || { echo "error: no milestone '$FOR_TAG' or '${FOR_TAG%%[0-9]*}${minor}…' (title starting with it) for tag $FOR_TAG" >&2; exit 2; }
+            | ($all | map(select(.t == $v or (.t | startswith($v + " "))))[0] | select(.) | "\(.number) own")
+              // ($all | map(select(.t | startswith($minor)))[0] | select(.) | "\(.number) minor")
+              // empty' <<<"$all")
+      [ -n "$MS" ] || { echo "error: no milestone says \"Released: $FOR_TAG\" in its description, and no milestone '$FOR_TAG' or '${minor_tag}…' (title starting with it) for tag $FOR_TAG — write \"Released: $FOR_TAG\" in the description of the theme milestone this tag ships, before the tag" >&2; exit 2; }
+      case "$MS" in
+        *own) FOUND_BY="its title, the milestone of its own version" ;;
+        *)    FOUND_BY="its title, the milestone of its minor $minor_tag" ;;
+      esac
+      FOUND_BY="$FOUND_BY (no milestone says \"Released: $FOR_TAG\")"
+      MS="${MS% *}" ;;
+  esac
   TAG_MODE=1
 fi
 
@@ -331,6 +356,7 @@ ok()   { printf '  ✓ %s\n' "$1"; }
 
 printf 'Repo:      %s\n' "$REPO"
 printf 'Milestone: #%s  %s  (%s)\n' "$MS" "$ms_title" "$ms_state"
+[ -n "$FOUND_BY" ] && printf 'Found by:  %s\n' "$FOUND_BY"
 [ "$TAG_MODE" = 1 ] && printf 'Mode:      tag-readiness\n'
 printf '\n'
 
