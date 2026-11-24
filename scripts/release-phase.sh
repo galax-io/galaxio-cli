@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 #
 # release-phase.sh — the phases `open`, `prepare` and `publish` of .github/workflows/release-build.yml
-# (BCKLG-1030). One release has one branch, release/<id>, in the repository; the branch is the
-# content of the release.
+# (BCKLG-1030). A release of the backlog has one branch in the repository, named by the repository's
+# version in it: release/X.Y.0 for vX.Y.0. The branch is the content of that version.
 #
-#   open     the branch release/<id> from origin/main; an existing branch is left as it is.
+#   open     the branch release/X.Y.0 from origin/main; an existing branch is left as it is; a version
+#            that is tagged already is refused.
 #   prepare  the branch is rebased onto origin/main (pushed with --force-with-lease), the checks of the
 #            repository run on it, the result says what it holds. A conflict changes nothing. No tag.
-#            A green prepare marks the head it checked in refs/release-prepared/<id>.
+#            A green prepare marks the head it checked in refs/release-prepared/X.Y.0.
 #   publish  only when that mark is the head of the branch and origin/main is an ancestor of it:
 #            main is fast-forwarded to the branch, the version is tagged on main, a GitHub Release is
 #            made, the branch and the mark are deleted. With no branch (an urgent release) the version
 #            is tagged on the current main. A version that is already tagged on main changes nothing.
 #
-# Usage: release-phase.sh <open|prepare|publish> --release <id> [--version vX.Y.0] [--result <file>]
+# Usage: release-phase.sh <open|prepare|publish> --release <id> --version vX.Y.0 [--result <file>]
 #
-# --release  ^[a-z0-9.]+$      --version  ^v[0-9]+\.[0-9]+\.0$ (required by publish)
+# --release  ^[a-z0-9.]+$, the id of the backlog's release (for the result)
+# --version  ^v[0-9]+\.[0-9]+\.0$, required by every phase: it names the branch
 # --result   where the JSON result is written (default release-result.json)
 # RELEASE_CHECKS  the checks to run on the branch; default: the `# lint` and `# test` lines of the
 #                 Commands block of AGENTS.md.
@@ -38,13 +40,12 @@ done
 
 case "$phase" in open|prepare|publish) ;; *) echo "release-phase: the phase is open, prepare or publish" >&2; exit 2 ;; esac
 [[ "$release" =~ ^[a-z0-9.]+$ ]] || { echo "release-phase: --release must match ^[a-z0-9.]+\$" >&2; exit 2; }
-if [ -n "$version" ] && [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.0$ ]]; then
-  echo "release-phase: --version must match ^v[0-9]+\\.[0-9]+\\.0\$" >&2; exit 2
+if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.0$ ]]; then
+  echo "release-phase: --version vX.Y.0 is required; it names the branch release/X.Y.0" >&2; exit 2
 fi
-[ "$phase" = publish ] && [ -z "$version" ] && { echo "release-phase: publish needs --version" >&2; exit 2; }
 
-branch="release/$release"
-mark="refs/release-prepared/$release"
+branch="release/${version#v}"
+mark="refs/release-prepared/${version#v}"
 repo="${GITHUB_REPOSITORY:-$(basename "$(git remote get-url origin 2>/dev/null || echo unknown)" .git)}"
 
 included='[]'; ci='null'; conflict='[]'; tag='null'
@@ -71,6 +72,7 @@ pr_numbers() { # the PRs of the branch: (#N) of the subjects of the commits main
 
 case "$phase" in
   open)
+    [ -z "$(remote_sha "refs/tags/$version")" ] || refuse "$version is tagged already; open the next version"
     if has_branch; then
       echo "release-phase: $branch exists, nothing to do"
     else
