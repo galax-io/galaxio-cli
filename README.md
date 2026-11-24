@@ -582,22 +582,9 @@ go test ./...
 
 ## Contributing
 
-Two guards protect release tags. Both call `scripts/check-linkage.sh`, which holds the
-issue ↔ PR ↔ milestone rules; the same script runs on every pull request as the `linkage`
-CI job.
-
-- **Enable the release-tag hook once per clone.** Without it `.githooks/pre-push` never
-  runs. The `linkage` CI job validates a PR before it reaches `main`; this is the local
-  fast failure for an exceptional manual tag.
-
-  ```sh
-  git config core.hooksPath .githooks
-  ```
-
-- **Skipping the guard deliberately.** A release step that must proceed while its
-  milestone is still being closed is run as `LINKAGE_OFF=1 <command>`. That is the only
-  sanctioned bypass: a command is never rephrased to get past the guard. A block names the
-  version and the rule that failed, so fix the milestone rather than the wording.
+A pull request of a feature goes into the release branch of its release, `release/<id>`; a change with no
+feature goes into `main` (`AGENTS.md`, "Feature milestones"). Release tags are set only by the release workflow,
+`release-build.yml`, which the backlog's release build starts.
 
 ## License
 
