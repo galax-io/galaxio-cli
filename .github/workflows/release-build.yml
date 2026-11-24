@@ -1,10 +1,11 @@
 name: release-build
 
-# The release workflow of the repository (BCKLG-1030): one branch release/<id> per release, and
+# The release workflow of the repository (BCKLG-1030): one branch release/X.Y.0 per version of the
+# repository, one version per release of the backlog, and
 # three phases that scripts/release-phase.sh runs, started by the maintainer or by the release build
 # of galaxio-sdlc-backlog under the maintainer's account (never by an agent or a stage):
 #
-#   open     release/<release> from main
+#   open     release/X.Y.0 from main, for the version `version`
 #   prepare  rebase of the branch onto main, the checks of the repository (the `# lint` and `# test`
 #            lines of AGENTS.md) on it, no tag
 #   publish  after a green prepare of that very head: fast-forward of main, the tag `version` on main,
@@ -26,9 +27,9 @@ on:
         type: string
         required: true
       version:
-        description: "Version of the repository, vX.Y.0; required by publish"
+        description: "Version of the repository in this release, vX.Y.0; it names the branch release/X.Y.0"
         type: string
-        required: false
+        required: true
 
 concurrency:
   group: release-${{ inputs.release }}
