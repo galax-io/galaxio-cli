@@ -50,29 +50,26 @@ Standard-library testing, no assertion library; table-driven subtests; golden fi
 
 **Ask first:** new deps or upgrades, changing public API signatures / observable behavior / serialized formats, editing another repo, release/publish workflow changes.
 
-**Never:** force-push or commit to `main`, merge commits in PR branches (rebase only), commit broken code, opportunistic refactors outside scope, mock external systems where a real integration path exists.
+**Never:** force-push or commit to `main`, merge commits in PR branches (rebase only), commit broken code, opportunistic refactors outside scope, mock external systems where a real integration path exists. The ban on force-push and merge commits binds the PR branches and `main`; a release branch `release/<id>` is rewritten with `--force-with-lease` by the `prepare` phase of the release workflow, and by nothing else.
 
 ## Milestones (ALWAYS)
 
-Every piece of work is tied to a milestone. No exceptions unless explicitly told otherwise.
+A product repository has no milestones: a release is a business milestone of `galax-io/galaxio-sdlc-backlog` (see "Feature milestones"), and a PR here carries none.
 
-- **Every PR** must be assigned to the active milestone before merging. No milestone = do not merge.
-- **Issues are for important tasks**, not technical ones. A PR that completes one writes `Closes owner/repo#N` (the issue closes when the PR lands on `main`); one PR of several writes `Part of owner/repo#N`. A linked issue carries the PR's milestone. A technical PR (sync, pins, docs, CI) needs no issue: its commit already records it.
-- **Spec work** (`specs/BCKLG-<N>-*/`) belongs to the milestone that owns the spec and travels in the feature's backlog PR together with its work, never in a PR of its own. Link that PR to the milestone immediately when creating it.
-- **Active milestone** = the lowest-numbered open milestone that matches the current spec/plan. Check `gh api repos/galax-io/galaxio-cli/milestones` if unsure.
+- **Issues are for important tasks**, not technical ones. A PR that completes one writes `Closes owner/repo#N` (the issue closes when the PR lands on `main`); one PR of several writes `Part of owner/repo#N`. A technical PR (sync, pins, docs, CI) needs no issue: its commit already records it.
+- **Spec work** (`specs/BCKLG-<N>-*/`) lives in the backlog and travels in the feature's backlog PR together with its work, never in a PR of its own.
 
 ## Feature milestones (ALWAYS)
 
-A feature is an issue in `galax-io/galaxio-sdlc-backlog`. It belongs to exactly one backlog milestone whose description has the line `Release: business`. Backlog milestones without that line (the backlog's own tooling and documents) are not releases and follow "Milestones" above.
+A feature is an issue in `galax-io/galaxio-sdlc-backlog`. It belongs to exactly one backlog milestone whose description has the line `Release: business`: that milestone is its release.
 
-- **Feature issue.** Lists the work in every repository it touches as a checklist, one line per issue or PR: `- [ ] galax-io/<repo>#<N> → <theme milestone>`. A line is checked when that work is merged; the release of the business milestone checks that the repository has shipped that theme, so its tag exists.
-- **Repository work.** Every issue and PR of a feature carries its repository's theme milestone and writes `Part of galax-io/galaxio-sdlc-backlog#<feature>`. A theme milestone has the title of the feature's business milestone (`M1 — first run`) and is created in the repository when the theme's first work reaches it. It is not a version: no milestone is named after a version. The version is a tag, chosen when the repository ships the theme, as under "Release Process". `scripts/check-linkage.sh` skips the same-milestone rule for a link to a feature; the PR still needs its own milestone.
-- **Every PR links a feature.** No PR of a product repository merges without `Part of galax-io/galaxio-sdlc-backlog#<feature>` (or a closing link to a feature); `scripts/check-linkage.sh --pr` fails it. A bot's PR (a bot author, or a `dependabot/` or `update/` branch) and the backlog's own PRs are exempt. The backlog is private, so the CI job reads it with `BACKLOG_READ_TOKEN`, a read-only token for that repository (Issues and Metadata). It is set as an organization secret, which public repositories read, and as a secret of its own in each private repository that runs the gate, because on the free plan an organization secret does not reach a private one (the backlog's `scripts/set-backlog-token.sh` sets those); without it the gate fails and says it cannot read the backlog. A technical PR with no feature of its own may skip this check with the maintainer's agreement: a line `No feature: <why, and who agreed>` of its own in its description, at least ten characters long, which the gate prints in its log. A milestone gets no standing feature of its own any more; the ones that exist stay until their release.
-- **Work enters through the backlog.** A bug, an audit finding or a request is not worked on until it belongs to a feature: grouped into one or given one. An issue from outside stays in its repository, which is public, and carries the label `status:needs-feature` until it is linked to a feature in the backlog.
-- **Feature done.** The feature's documents PR in the backlog (its spec, plan, tasks and everything else the task leaves there) writes `Closes galax-io/galaxio-sdlc-backlog#<feature>` and is merged last, once every other line of the checklist is checked: its merge closes the feature, and GitHub shows it in the feature's Development. The work's PRs in the other repositories write `Part of`.
-- **Release.** When every feature of a business milestone is closed, close the milestone and publish a GitHub Release in `galax-io/galaxio-sdlc-backlog` that lists each feature with the repository versions that carry it. Name the release and its tag by the milestone's id, the title up to its first em dash, lowercased (`M1 — first run` → `m1`).
-- **Published releases are not edited.** A revert after the release is a new feature in the next business milestone.
-- **Never** close a business milestone with an open feature, release a feature whose repository version is not tagged, or leave a repository version out of the release text.
+- **Release branch.** A release has one branch `release/<id>` in each repository where it has work; `<id>` is the milestone's title up to its first em dash, lowercased (`M1.0.9 — first run` → `m1.0.9`). The maintainer makes it with the phase `open` of `.github/workflows/release-build.yml`. Several release branches may be open at once; the branch is the content of its release.
+- **Where a PR goes.** The PR of a feature is opened into the release branch of its feature's release, so a release holds only the changes of its own features, and writes `Part of galax-io/galaxio-sdlc-backlog#<feature>`. A PR with no feature (a bot, CI, documents) and urgent work are opened into `main`. The link records the PR in the feature; it does not decide what a release holds.
+- **Work enters through the backlog.** A bug, an audit finding or a request is not worked on until it belongs to a feature: grouped into one or given one. An issue from outside stays in its repository and carries the label `status:needs-feature` until it is linked to a feature in the backlog.
+- **Release.** The backlog's `scripts/release-build.sh <release>` runs the phase `prepare` in every repository of the release: the branch is rebased onto `main` and this repository's checks run on it. Only when every repository is green does it run `publish` everywhere: `main` is fast-forwarded to the branch, the tag is set on `main`, the GitHub Release is made and the branch is deleted. A red check or a rebase conflict in one repository publishes nothing anywhere. The version is the next minor, `vX.Y.0`, counted by the build; a repository with no PR in its branch gets none.
+- **Urgent release.** Urgent work is a PR into `main`; `scripts/release-build.sh --urgent <release>` publishes from `main`, with no release branch.
+- **Feature done.** The feature's documents PR in the backlog writes `Closes galax-io/galaxio-sdlc-backlog#<feature>` and is merged last; the work's PRs here write `Part of`.
+- **Published releases are not edited.** A fix after the release is the next release or an urgent one; no patch versions are made on a release branch, and a tag is never moved.
 
 ## Labels (ALWAYS)
 
@@ -94,7 +91,7 @@ A task of the backlog has one number across the organization: `BCKLG-<N>`, where
 - **Branch.** A task's documents branch in the backlog is `spec/BCKLG-<N>-<name>`, whether made by hand or by the engine, which works on it and opens no other branch in the backlog; the engine's run is `BCKLG-<N>-<time>`, and its branches in the code repositories are `sdlc/BCKLG-<N>-<time>`.
 - **Commit.** A commit that does a task's work carries the trailer `Refs: BCKLG-<N>`; its subject stays a Conventional Commit.
 - **PR.** Its body carries the line `Refs: BCKLG-<N>` beside `Part of galax-io/galaxio-sdlc-backlog#<N>`, or beside `Closes galax-io/galaxio-sdlc-backlog#<N>` in the task's documents PR.
-- **Checked.** `scripts/check-linkage.sh --pr` fails a PR of a feature without its number, a spec directory it adds that is not named by a task, and a spec, plan or tasks without the tasks line; `--specs` checks every spec of a checkout.
+- **Checked.** The backlog's `scripts/check-linkage.sh --specs` checks every spec there.
 
 ## Commits & PRs
 
@@ -139,38 +136,8 @@ Route work by the reasoning it needs, not by habit; parallelize only where agent
 
 ## Release Process (MANDATORY)
 
-Trunk-based with release branches. Trunk is `main`; `release/*` branches are cut from `main` for stabilization. Pushing a `vX.Y.Z` tag on `main` or a `release/*` branch triggers the release workflow (Go module proxy (tag-based)) and creates a GitHub Release (git-cliff).
+Releases are cut by the backlog, never by hand here (see "Feature milestones"): the phases `open`, `prepare` and `publish` of `.github/workflows/release-build.yml` run `scripts/release-phase.sh`, and only the maintainer or the backlog's `scripts/release-build.sh` starts them. The tag `vX.Y.0` that `publish` sets on `main` triggers the release workflow (Go module proxy (tag-based)) and creates a GitHub Release (git-cliff).
 
-Work goes in the theme milestone. When the theme's work in this repository is done, choose the next version by what it contains, write the line `Released: vX.Y.Z` in the theme milestone's description, then tag it as below; the tag publishes the release, and once the release is out, close the milestone. The line comes before the tag: the check before a tag (`scripts/check-linkage.sh --for-tag`, run by the pre-push hook, and by the release workflow where it calls it) finds by it the milestone the tag ships, and refuses the tag while that milestone holds an open PR or issue.
-
-### Minor/Major release (e.g. 1.2.0, 2.0.0)
-
-1. `git checkout -b release/X.Y.0 main` — cut release branch from `main`
-2. `git push -u origin release/X.Y.0`
-3. `git tag vX.Y.0` on the release branch
-4. `git push origin vX.Y.0` — triggers release workflow
-
-### Patch release (e.g. 1.2.1)
-
-1. Fix lands on `main` first (via PR as usual)
-2. `git cherry-pick <fix-sha>` onto `release/X.Y.0`
-3. `git tag vX.Y.1` on the release branch
-4. `git push origin vX.Y.1` — triggers release workflow
-
-### Rules
-
-- **Every minor version gets its own `release/X.Y.0` branch** — no exceptions
-- **Tags ONLY on `release/*` branches or `main`** — `release.yml` validates this
-- **Branch name must match tag version**: `release/1.2.0` → `v1.2.0`, `v1.2.1`, etc.
-- **Never delete a release tag** after the registry deployment starts — creates stuck deployments
-- **Never reuse a version number** — most package registries reject duplicates permanently
-- **Before tagging**: every PR merged since the previous tag must be assigned to a milestone; every issue in the theme's milestone whose fix is on `main` must be closed
-
-<!-- The issue↔PR↔milestone contract above is enforced mechanically by         -->
-<!-- scripts/check-linkage.sh, run from two places:                             -->
-<!--   .claude/hooks/linkage-guard.sh  in-session, before the command runs      -->
-<!--     (LINKAGE_OFF=1 bypasses it for a deliberate release)                   -->
-<!--   .githooks/pre-push               on any push, from any client            -->
-<!--     enable once per clone: git config core.hooksPath .githooks             -->
-<!-- Both are fast local failures and both can be skipped. Nothing checks       -->
-<!-- server-side unless the release workflow runs check-linkage.sh --for-tag.   -->
+- **No tag by hand.** A version is tagged only by the phase `publish`, on `main`, and only after a green `prepare` of that very head.
+- **Never delete or move a release tag**, and never reuse a version number: most package registries reject duplicates permanently.
+- **A release branch** `release/<id>` is rewritten only by `prepare` (a rebase onto `main`, pushed with `--force-with-lease`) and deleted by `publish`.

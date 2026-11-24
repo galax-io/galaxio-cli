@@ -87,31 +87,6 @@ jobs:
             bash "$t"
           done
 
-  linkage:
-    name: linkage
-    runs-on: ubuntu-latest
-    # Main receives only green PRs; the tag-triggered workflow performs the
-    # release-range audit separately. These explicit reads are required because
-    # a job-level permissions block clears scopes not named here.
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      REPO: ${{ github.repository }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Check issue, PR and milestone linkage
-        env:
-          BACKLOG_READ_TOKEN: ${{ secrets.BACKLOG_READ_TOKEN }}
-        run: scripts/check-linkage.sh --pr "$PR_NUMBER"
-
   integration:
     name: integration tests
     runs-on: ubuntu-latest
