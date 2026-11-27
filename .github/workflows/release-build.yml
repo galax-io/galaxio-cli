@@ -1,16 +1,16 @@
 name: release-build
 
-# The release workflow of the repository (BCKLG-1030): one branch release/X.Y.0 per version of the
-# repository, one version per release of the backlog, and
-# three phases that scripts/release-phase.sh runs, started by the maintainer or by the release build
-# of galaxio-sdlc-backlog under the maintainer's account (never by an agent or a stage):
+# The release workflow of the repository (BCKLG-1038, trunk-based): all work is on main; a minor
+# version vX.Y.0 cuts release/X.Y.0 from main, and its patches vX.Y.Z are tagged on that branch after
+# the fix is cherry-picked from main. The branch is never merged back. Two phases that
+# scripts/release-phase.sh runs, started by the maintainer or by the release build of
+# galaxio-sdlc-backlog under the maintainer's account (never by an agent or a stage):
 #
-#   open     release/X.Y.0 from main, for the version `version`
-#   prepare  rebase of the branch onto main, the checks of the repository (the `# lint` and `# test`
-#            lines of AGENTS.md) on it, no tag
-#   publish  after a green prepare of that very head: fast-forward of main, the tag `version` on main,
-#            the GitHub Release, the branch deleted. With no branch (an urgent release) the tag is set
-#            on the current main.
+#   prepare  vX.Y.0: release/X.Y.0 cut from main when it does not exist; a patch needs the branch.
+#            The checks of the repository (the `# lint` and `# test` lines of AGENTS.md) run on its
+#            head; no tag, main untouched
+#   publish  after a green prepare of that very head: the tag `version` on it and the GitHub Release;
+#            the branch stays, main untouched
 #
 # The outcome is the artifact `release-result` (JSON). A repository whose checks need a toolchain
 # installs it in a step of its own before `release-phase`.
@@ -18,16 +18,16 @@ on:
   workflow_dispatch:
     inputs:
       phase:
-        description: "open, prepare or publish"
+        description: "prepare or publish"
         type: choice
         required: true
-        options: [open, prepare, publish]
+        options: [prepare, publish]
       release:
         description: "Id of the release (the milestone's title up to its first em dash, lowercased), e.g. m1.0.9"
         type: string
         required: true
       version:
-        description: "Version of the repository in this release, vX.Y.0; it names the branch release/X.Y.0"
+        description: "Version of the repository, vX.Y.Z; it names the branch release/X.Y.0"
         type: string
         required: true
 
@@ -48,12 +48,12 @@ jobs:
           ref: main
           fetch-depth: 0
           fetch-tags: true
-          # The phases push the branch, main and the tag with this token.
+          # The phases push the release branch, its mark and the tag with this token.
           persist-credentials: true
 
       - name: release-phase
         # Inputs reach the script as environment, never inside the command: the script checks them
-        # (release ^[a-z0-9.]+$, version ^v[0-9]+\.[0-9]+\.0$) before it writes anything.
+        # (release ^[a-z0-9.]+$, version ^v[0-9]+\.[0-9]+\.[0-9]+$) before it writes anything.
         run: |
           args=(--release "$RELEASE" --result "$RUNNER_TEMP/release-result.json")
           if [ -n "$VERSION" ]; then args+=(--version "$VERSION"); fi
